@@ -1,25 +1,40 @@
 import { Model, Types } from 'mongoose'
-import { TUserRole, TUserStatus } from './user.constant'
+import { TRegisterWith, TUserRole, TUserStatus } from './user.constant'
+
+type IAvailability  = {
+  day: string
+  from: string
+  to: string
+}
 
 export interface TUser {
   _id: Types.ObjectId
   id: string
-  name: string
+  firstName: string
+  lastName: string
   email: string
+  dob: string
+  bio: string
   password: string
   fcmToken: string
   photoUrl?: string
+  coverPhoto?: string
   contractNumber?: string
-  address: string
-  country: string
-  city: string
-  locationUrl: string
-  location: {
-    type: 'Point'
-    coordinates: [number, number] // [longitude, latitude]
+  timeZone: string
+  priceRange: string
+  interests: string[]
+  learningStyles: string[]
+  expertise: string
+  languages: string[]
+  skills: string[]
+  education: {
+    degree: string
+    certification: string[]
+    phd: string
   }
+  availability: IAvailability[]
   role: TUserRole
-  registerWith: string
+  registerWith: TRegisterWith
   needsPasswordChange: boolean
   passwordChangedAt?: Date
   verification: {
@@ -27,8 +42,11 @@ export interface TUser {
     expiresAt: Date
     status: boolean
   }
+  points: number
+  level: number
+  avgRating: number
+  ratingCount: number
   status: TUserStatus
-  packageExpiry?: Date
   expireAt: Date
   isNotify: boolean
   isDeleted: boolean

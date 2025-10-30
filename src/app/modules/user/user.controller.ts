@@ -5,7 +5,6 @@ import { UserService } from './user.service'
 import { Request, Response } from 'express'
 import { uploadToS3 } from '../../utils/s3'
 import { otpServices } from '../otp/otp.service'
-import { USER_ROLE } from './user.constant'
 
 const registerUser = catchAsync(async (req, res) => {
   const result = await UserService.registerUserIntoDB(req?.body)

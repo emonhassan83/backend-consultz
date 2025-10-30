@@ -8,7 +8,7 @@ export const REGISTER_WITH = {
   google: 'google',
   apple: 'apple',
   credentials: 'credentials',
-}
+} as const
 
 export const USER_STATUS = {
   pending: 'pending',
@@ -22,6 +22,7 @@ export const registerWith = [
   REGISTER_WITH.credentials,
 ]
 
+export type TRegisterWith = keyof typeof USER_ROLE
 export type TUserRole = keyof typeof USER_ROLE
 export type TUserStatus = keyof typeof USER_STATUS
 
