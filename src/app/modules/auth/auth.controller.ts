@@ -48,8 +48,8 @@ const registerWithGoogle = catchAsync(async (req, res) => {
   })
 })
 
-const registerWithApple = catchAsync(async (req, res) => {
-  const result = await AuthServices.registerWithApple(req.body)
+const registerWithLinkedin = catchAsync(async (req, res) => {
+  const result = await AuthServices.registerWithLinkedin(req.body)
   const { refreshToken } = result
 
   const cookieOptions: any = {
@@ -120,7 +120,7 @@ const resetPassword = catchAsync(async (req, res) => {
 export const AuthControllers = {
   loginUser,
   registerWithGoogle,
-  registerWithApple,
+  registerWithLinkedin,
   changePassword,
   refreshToken,
   forgetPassword,

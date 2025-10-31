@@ -20,14 +20,14 @@ router.post(
 )
 
 router.post(
-  '/apple',
-  validateRequest(AuthValidation.appleZodValidationSchema),
-  AuthControllers.registerWithApple,
+  '/linkedin',
+  validateRequest(AuthValidation.linkedinZodValidationSchema),
+  AuthControllers.registerWithLinkedin,
 )
 
 router.post(
   '/change-password',
-  auth(USER_ROLE.admin, USER_ROLE.user),
+  auth(USER_ROLE.admin, USER_ROLE.consult, USER_ROLE.expert),
   validateRequest(AuthValidation.changePasswordValidationSchema),
   AuthControllers.changePassword,
 )

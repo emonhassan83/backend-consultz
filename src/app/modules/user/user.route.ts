@@ -30,15 +30,8 @@ router.patch(
   UserControllers.changeUserStatus,
 )
 
-router.patch(
-  '/update-location',
-  auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult),
-  zodValidationRequest(UserValidation.updateLocationValidationSchema),
-  UserControllers.updateLocation,
-)
-
 router.put(
-  '/update-my-profile',
+  '/update-profile',
   auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult),
   upload.single('image'),
   parseData(),
@@ -55,9 +48,9 @@ router.put(
 )
 
 router.delete(
-  '/:id',
-  auth(USER_ROLE.admin),
-  UserControllers.deleteAUser,
+  '/delete-profile',
+  auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult),
+  UserControllers.deleteMyProfile,
 )
 
 router.get(
@@ -66,15 +59,7 @@ router.get(
   UserControllers.getMyProfile,
 )
 
-router.get('/business', auth(USER_ROLE.admin), UserControllers.getAllBusiness)
-
 router.get('/', auth(USER_ROLE.admin), UserControllers.getAllUsers)
-
-router.get(
-  '/business/:id',
-  auth(USER_ROLE.admin),
-  UserControllers.getBusinessById,
-)
 
 router.get('/:id', auth(USER_ROLE.admin), UserControllers.getUserById)
 

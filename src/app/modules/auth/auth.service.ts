@@ -16,7 +16,6 @@ import { TAppleLoginPayload, TGoogleLoginPayload, TLoginUser } from './auth.inte
 import { generateOtp } from '../../utils/generateOtp'
 import moment from 'moment'
 import { REGISTER_WITH } from '../user/user.constant'
-import { TUser } from '../user/user.interface'
 
 const loginUser = async (payload: TLoginUser) => {
   //* checking if the user is exist
@@ -145,7 +144,7 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload ) => {
   return generateTokens(newUser)
 }
 
-const registerWithApple = async (payload: TAppleLoginPayload ) => {
+const registerWithLinkedin = async (payload: TAppleLoginPayload ) => {
   if (payload.role === 'admin') {
     throw new AppError(httpStatus.FORBIDDEN, 'You cannot directly assign admin role')
   }
@@ -167,7 +166,7 @@ const registerWithApple = async (payload: TAppleLoginPayload ) => {
   }
 
   if (user) {
-    if (user.registerWith !== REGISTER_WITH.apple) {
+    if (user.registerWith !== REGISTER_WITH.linkedin) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
         `This account is registered with ${user.registerWith}, please use that method.`
@@ -194,7 +193,7 @@ const registerWithApple = async (payload: TAppleLoginPayload ) => {
 
   const newUser = await User.create({
     ...updateData,
-    registerWith: REGISTER_WITH.apple,
+    registerWith: REGISTER_WITH.linkedin,
     verification: { otp: 0, expiresAt: new Date(), status: true },
     expireAt: null,
   })
@@ -322,7 +321,7 @@ const forgetPassword = async (payload: { email: string }) => {
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
         <div style="text-align: left; padding: 10px 20px;">
           <h2 style="color: #333;">Your One-Time OTP</h2>
-          <p style="color: #555; margin-top: 10px;">Dear ${user?.name},</p>
+          <p style="color: #555; margin-top: 10px;">Dear ${user?.firstName},</p>
           <p style="color: #555;">Use the following One-Time Password (OTP) to proceed with your request. This OTP is valid for a limited time.</p>
           <div style="text-align: center; margin: 20px 0;">
             <span style="padding: 10px 20px; font-size: 18px; font-weight: bold; border-radius: 5px; display: inline-block;">
@@ -415,7 +414,7 @@ const resetPassword = async (
 export const AuthServices = {
   loginUser,
   registerWithGoogle,
-  registerWithApple,
+  registerWithLinkedin,
   changePassword,
   refreshToken,
   forgetPassword,

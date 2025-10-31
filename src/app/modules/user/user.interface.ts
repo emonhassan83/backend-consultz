@@ -1,7 +1,7 @@
 import { Model, Types } from 'mongoose'
-import { TRegisterWith, TUserRole, TUserStatus } from './user.constant'
+import { TUserRole, TUserStatus } from './user.constant'
 
-type IAvailability  = {
+type TAvailability  = {
   day: string
   from: string
   to: string
@@ -32,9 +32,9 @@ export interface TUser {
     certification: string[]
     phd: string
   }
-  availability: IAvailability[]
+  availability: TAvailability[]
   role: TUserRole
-  registerWith: TRegisterWith
+  registerWith: string
   needsPasswordChange: boolean
   passwordChangedAt?: Date
   verification: {

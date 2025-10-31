@@ -9,14 +9,14 @@ import { otpServices } from '../otp/otp.service'
 const registerUser = catchAsync(async (req, res) => {
   const result = await UserService.registerUserIntoDB(req?.body)
   const sendOtp = await otpServices.resendOtp(result?.email)
-  const { _id, id, name, email, status } = result
+  const { _id, id, firstName, lastName, email, status } = result
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
     message: 'User registered successfully!',
     data: {
-      user: { _id, id, name, email, status },
+      user: { _id, id, firstName, lastName, email, status },
       otpToken: sendOtp,
     },
   })
@@ -40,28 +40,6 @@ const getUserById = catchAsync(async (req: Request, res: Response) => {
     statusCode: httpStatus.OK,
     success: true,
     message: 'User fetched successfully',
-    data: result,
-  })
-})
-
-const getAllBusiness = catchAsync(async (req, res) => {
-  const result = await UserService.getAllUsersFromDB(req.query)
-
-  sendResponse(res, {
-    success: true,
-    statusCode: 200,
-    message: 'Business profiles retrieved successfully!',
-    meta: result.meta,
-    data: result.result,
-  })
-})
-
-const getBusinessById = catchAsync(async (req: Request, res: Response) => {
-  const result = await UserService.geUserByIdFromDB(req.params.id)
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Business fetched successfully',
     data: result,
   })
 })
@@ -140,22 +118,8 @@ const updateMyProfile = catchAsync(async (req, res) => {
   })
 })
 
-const updateLocation = catchAsync(async (req, res) => {
-  const result = await UserService.updateLocationFromDB(
-    req?.user?._id,
-    req.body,
-  )
-
-  sendResponse(res, {
-    success: true,
-    statusCode: 200,
-    message: 'Location update successfully!',
-    data: result,
-  })
-})
-
-const deleteAUser = catchAsync(async (req, res) => {
-  const result = await UserService.deleteAUserFromDB(req.params.id)
+const deleteMyProfile = catchAsync(async (req, res) => {
+  const result = await UserService.deleteAUserFromDB(req?.user?._id)
 
   sendResponse(res, {
     success: true,
@@ -168,14 +132,11 @@ const deleteAUser = catchAsync(async (req, res) => {
 export const UserControllers = {
   registerUser,
   getAllUsers,
-  getAllBusiness,
   getUserById,
-  getBusinessById,
   getMyProfile,
   changeUserStatus,
   updateUserInfo,
   updateMyProfile,
   changeUserNotify,
-  updateLocation,
-  deleteAUser,
+  deleteMyProfile,
 }

@@ -6,7 +6,7 @@ export const USER_ROLE = {
 
 export const REGISTER_WITH = {
   google: 'google',
-  apple: 'apple',
+  linkedin: 'linkedin',
   credentials: 'credentials',
 } as const
 
@@ -18,11 +18,11 @@ export const USER_STATUS = {
 
 export const registerWith = [
   REGISTER_WITH.google,
-  REGISTER_WITH.apple,
+  REGISTER_WITH.linkedin,
   REGISTER_WITH.credentials,
 ]
 
-export type TRegisterWith = keyof typeof USER_ROLE
+export type TRegisterWith = keyof typeof REGISTER_WITH
 export type TUserRole = keyof typeof USER_ROLE
 export type TUserStatus = keyof typeof USER_STATUS
 
