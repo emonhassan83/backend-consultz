@@ -16,10 +16,10 @@ export const sendUserStatusNotifYToAdmin = async (
 
   if (status === 'active') {
     message = messages.userManagement.accountActivated;
-    description = `User ${user?.name} (ID: ${user?.id}) has been successfully activated.`;
+    description = `User ${user?.firstName} (ID: ${user?.id}) has been successfully activated.`;
   } else {
     message = messages.userManagement.accountDeactivated;
-    description = `User ${user?.name} (ID: ${user?.id}) has been blocked from accessing the system.`;
+    description = `User ${user?.firstName} (ID: ${user?.id}) has been blocked from accessing the system.`;
   }
 
   const notifyPayload = {

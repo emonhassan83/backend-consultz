@@ -3,6 +3,7 @@ import { UserRoutes } from '../modules/user/user.route'
 import { AuthRoutes } from '../modules/auth/auth.route'
 import { otpRoutes } from '../modules/otp/otp.route'
 import { NotificationRoutes } from '../modules/notification/notification.route'
+import { contentsRoutes } from '../modules/contents/contents.route'
 
 const router = Router()
 
@@ -22,7 +23,11 @@ const moduleRoutes = [
   {
     path: '/notifications',
     route: NotificationRoutes,
-  }
+  },
+  {
+    path: '/contents',
+    route: contentsRoutes,
+  },
 ]
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route))
