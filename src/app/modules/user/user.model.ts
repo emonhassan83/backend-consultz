@@ -10,16 +10,17 @@ import {
 } from './user.constant'
 import { generateCryptoString } from '../../utils/generateCryptoString'
 
-// Sub-schemas
+// 🎓 Education
 const EducationSchema = new Schema(
   {
     degree: { type: String, default: '' },
-    certification: { type: [String], default: [] },
+    certificate: { type: [String], default: [] },
     phd: { type: String, default: '' },
   },
   { _id: false }
 )
 
+// 📅 Availability
 const AvailabilitySchema = new Schema(
   {
     day: { type: String, required: true },
@@ -29,7 +30,26 @@ const AvailabilitySchema = new Schema(
   { _id: false }
 )
 
-// User schema
+// 🌐 Social Profile
+const SocialProfileSchema = new Schema(
+  {
+    type: { type: String, required: true },
+    url: { type: String, required: true },
+  },
+  { _id: false }
+)
+
+// ⏱ Session Duration
+const SessionDurationSchema = new Schema(
+  {
+    type: { type: String, required: true },
+    duration: { type: String, required: true },
+    isOffered: { type: Boolean, default: false },
+  },
+  { _id: false }
+)
+
+// ===== User Schema =====
 const userSchema = new Schema<TUser, UserModel>(
   {
     id: {
@@ -43,6 +63,7 @@ const userSchema = new Schema<TUser, UserModel>(
     password: { type: String, required: true },
 
     dob: { type: String, default: '' },
+    headline: { type: String, default: '' },
     bio: { type: String, default: '' },
     fcmToken: { type: String, default: null },
     photoUrl: { type: String, default: null },
@@ -56,8 +77,14 @@ const userSchema = new Schema<TUser, UserModel>(
     expertise: { type: String, default: '' },
     languages: { type: [String], default: [] },
     skills: { type: [String], default: [] },
+    advisingStyles: { type: [String], default: [] },
+
     education: { type: EducationSchema, default: {} },
     availability: { type: [AvailabilitySchema], default: [] },
+    socialProfiles: { type: [SocialProfileSchema], default: [] },
+    sessionDurations: { type: [SessionDurationSchema], default: [] },
+
+    hourlyRate: { type: Number, default: 0 },
 
     role: {
       type: String,
@@ -78,6 +105,8 @@ const userSchema = new Schema<TUser, UserModel>(
       status: { type: Boolean, default: false },
     },
 
+    following: { type: Number, default: 0 },
+    followers: { type: Number, default: 0 },
     points: { type: Number, default: 0 },
     level: { type: Number, default: 1 },
     avgRating: { type: Number, default: 0 },

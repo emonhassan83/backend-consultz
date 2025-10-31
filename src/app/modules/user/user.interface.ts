@@ -7,6 +7,17 @@ type TAvailability  = {
   to: string
 }
 
+type TSocialProfile = {
+  type: string
+  url: string
+}
+
+type TSessionDuration = {
+  type: string
+  duration: string
+  isOffered: boolean
+}
+
 export interface TUser {
   _id: Types.ObjectId
   id: string
@@ -14,6 +25,7 @@ export interface TUser {
   lastName: string
   email: string
   dob: string
+  headline: string
   bio: string
   password: string
   fcmToken: string
@@ -29,10 +41,14 @@ export interface TUser {
   skills: string[]
   education: {
     degree: string
-    certification: string[]
-    phd: string
+    certificate: string[]
+    phd: string 
   }
+  socialProfiles: TSocialProfile[]
+  hourlyRate: number
   availability: TAvailability[]
+  sessionDurations: TSessionDuration[]
+  advisingStyles: string[]
   role: TUserRole
   registerWith: string
   needsPasswordChange: boolean
@@ -42,6 +58,8 @@ export interface TUser {
     expiresAt: Date
     status: boolean
   }
+  following: number
+  followers: number
   points: number
   level: number
   avgRating: number

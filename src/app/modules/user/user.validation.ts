@@ -1,10 +1,10 @@
 import { z } from 'zod'
 import { USER_STATUS } from './user.constant'
 
-// Reusable sub-schemas
+// 🔹 Sub-schemas
 const EducationSchema = z.object({
   degree: z.string().optional(),
-  certification: z.array(z.string()).optional(),
+  certificate: z.array(z.string()).optional(),
   phd: z.string().optional(),
 })
 
@@ -14,29 +14,30 @@ const AvailabilitySchema = z.object({
   to: z.string({ required_error: 'To time is required!' }),
 })
 
+const SocialProfileSchema = z.object({
+  type: z.string({ required_error: 'Social profile type is required!' }),
+  url: z.string({ required_error: 'Social profile URL is required!' }),
+})
+
+const SessionDurationSchema = z.object({
+  type: z.string({ required_error: 'Session type is required!' }),
+  duration: z.string({ required_error: 'Duration is required!' }),
+  isOffered: z.boolean({ required_error: 'isOffered must be true or false' }),
+})
+
 // ✅ Create User Validation
 const createValidationSchema = z.object({
   body: z.object({
-    firstName: z.string({
-      required_error: 'First name is required!',
-    }),
-    lastName: z.string({
-      required_error: 'Last name is required!',
-    }),
+    firstName: z.string({ required_error: 'First name is required!' }),
+    lastName: z.string({ required_error: 'Last name is required!' }),
     email: z
-      .string({
-        required_error: 'Email is required!',
-      })
+      .string({ required_error: 'Email is required!' })
       .email('Invalid email address'),
     password: z
-      .string({
-        invalid_type_error: 'Password must be a string',
-      })
+      .string({ invalid_type_error: 'Password must be a string' })
       .min(6, { message: 'Password must be at least 6 characters' })
       .max(12, { message: 'Password cannot be more than 12 characters' }),
-    dob: z.string({
-      required_error: 'Date of birth is required!',
-    }),
+    dob: z.string({ required_error: 'Date of birth is required!' })
   }),
 })
 
@@ -61,6 +62,10 @@ const updateValidationSchema = z.object({
     skills: z.array(z.string()).optional(),
     education: EducationSchema.optional(),
     availability: z.array(AvailabilitySchema).optional(),
+    socialProfiles: z.array(SocialProfileSchema).optional(),
+    sessionDurations: z.array(SessionDurationSchema).optional(),
+    advisingStyles: z.array(z.string()).optional(),
+    hourlyRate: z.number().optional(),
     status: z
       .enum(Object.values(USER_STATUS) as [string, ...string[]])
       .optional(),
@@ -71,9 +76,7 @@ const updateValidationSchema = z.object({
 // ✅ Change Status Validation
 const changeStatusValidationSchema = z.object({
   body: z.object({
-    userId: z.string({
-      required_error: 'User ID is required!',
-    }),
+    userId: z.string({ required_error: 'User ID is required!' }),
     status: z.enum(Object.values(USER_STATUS) as [string, ...string[]], {
       required_error: 'User status is required!',
     }),
