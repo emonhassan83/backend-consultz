@@ -3,13 +3,11 @@ import AppError from '../../errors/AppError'
 import { TUser } from './user.interface'
 import { User } from './user.model'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { USER_ROLE, UserSearchableFields } from './user.constant'
+import { USER_ROLE } from './user.constant'
 import {
   sendUserStatusNotifYToAdmin,
   sendUserStatusNotifYToUser,
 } from './user.utils'
-import { Contents } from '../contents/contents.models'
-import { Shop } from '../shop/shop.model'
 
 const registerUserIntoDB = async (payload: TUser) => {
   if (payload.role === 'admin') {
@@ -17,19 +15,6 @@ const registerUserIntoDB = async (payload: TUser) => {
       httpStatus.FORBIDDEN,
       'You cannot directly assign admin role',
     )
-  }
-
-  // ✅ Check maxMembers capacity
-  const content = await Contents.findOne()
-  if (content?.maxMembers !== undefined) {
-    const activeUserCount = await User.countDocuments({ isDeleted: false })
-
-    if (activeUserCount >= content.maxMembers) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'Maximum membership limit reached. Please try again later or join the WaitList.',
-      )
-    }
   }
 
   const existingUser = await User.findOne({ email: payload.email })
@@ -97,26 +82,6 @@ const geUserByIdFromDB = async (id: string) => {
   }
 
   return user
-}
-
-const geBusinessByIdFromDB = async (id: string) => {
-  const user = await User.findById(id)
-  if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
-  }
-
-  const shop = await Shop.findOne({ author: user._id }).populate([
-    {
-      path: 'author',
-      select:
-        '_id id name email photoUrl address city country status createdAt',
-    },
-  ])
-  if (!shop) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Business profile not found!')
-  }
-
-  return shop
 }
 
 const changeUserStatusFromDB = async (payload: any) => {
@@ -253,7 +218,6 @@ export const UserService = {
   registerUserIntoDB,
   getAllUsersFromDB,
   geUserByIdFromDB,
-  geBusinessByIdFromDB,
   changeUserStatusFromDB,
   changeUserNotifyFromDB,
   updateUserInfoFromDB,
