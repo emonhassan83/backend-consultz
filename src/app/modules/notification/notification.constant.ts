@@ -11,23 +11,9 @@ export const messages = {
     accountDeactivated: 'User account deactivated.',
   },
 
-  deal: {
-    statusChanged: 'Deal status changed',
-    naerByDeal: 'NearBy deal added',
-  },
-
-  waitList: {
-    promoteUser: 'WaitList protome a user !',
-    maxMembersIncrease: 'WaitList max member Increase',
-  },
-
-  support: {
-    response: 'Your support message response',
-  },
-
-  subscription: {
-    newPlan: 'New subscription plan added.',
-    warningForPlan: "Alert for add new plan"
+    userFollow: {
+    followed: 'You have a new follower!',
+    unfollowed: 'Someone unfollowed you',
   },
 
   paymentManagement: {
