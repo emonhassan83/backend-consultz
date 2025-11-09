@@ -6,6 +6,7 @@ import { NotificationRoutes } from '../modules/notification/notification.route'
 import { contentsRoutes } from '../modules/contents/contents.route'
 import { ConnectionRoutes } from '../modules/connection/connection.route'
 import { BlockProfileRoutes } from '../modules/blockProfile/blockProfile.route'
+import { FeedRoutes } from '../modules/feed/feed.route'
 
 const router = Router()
 
@@ -29,6 +30,10 @@ const moduleRoutes = [
   {
     path: '/profile-block',
     route: BlockProfileRoutes,
+  },
+  {
+    path: '/feeds',
+    route: FeedRoutes,
   },
   {
     path: '/notifications',
