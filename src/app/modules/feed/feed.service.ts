@@ -6,7 +6,6 @@ import { Feed } from './feed.model'
 import { User } from '../user/user.model'
 import { ContentMetaService } from '../contentMeta/contentMeta.service'
 import { uploadToS3 } from '../../utils/s3'
-import { CONTENT_META_MODEL_TYPE } from '../contentMeta/contentMeta.interface'
 import { enrichFeedWithUserInfo } from './feed.utils'
 
 const modelMap = {
@@ -68,8 +67,7 @@ const createFeedIntoDB = async (
   // update to assign content and modelType meta content
   await ContentMetaService.updateAContentMetaFromDB(contentMeta?._id, {
     // @ts-ignore
-    content: feed?._id,
-    modelType: CONTENT_META_MODEL_TYPE.Feed,
+    content: feed?._id
   })
 
   return feed

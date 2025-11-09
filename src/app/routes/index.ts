@@ -7,6 +7,7 @@ import { contentsRoutes } from '../modules/contents/contents.route'
 import { ConnectionRoutes } from '../modules/connection/connection.route'
 import { BlockProfileRoutes } from '../modules/blockProfile/blockProfile.route'
 import { FeedRoutes } from '../modules/feed/feed.route'
+import { ContentMetaRoutes } from '../modules/contentMeta/contentMeta.route'
 
 const router = Router()
 
@@ -34,6 +35,10 @@ const moduleRoutes = [
   {
     path: '/feeds',
     route: FeedRoutes,
+  },
+  {
+    path: '/content-meta',
+    route: ContentMetaRoutes,
   },
   {
     path: '/notifications',
