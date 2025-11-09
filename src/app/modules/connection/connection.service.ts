@@ -16,11 +16,11 @@ const followUser = async (followerId: string, followingId: string) => {
     User.findById(followingId),
   ]);
 
-  if (!follower || follower.isDeleted || follower.status === 'blocked') {
+  if (!follower || follower.isDeleted) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Invalid follower user');
   }
 
-  if (!following || following.isDeleted || following.status === 'blocked') {
+  if (!following || following.isDeleted) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Invalid target user to follow');
   }
 
@@ -29,7 +29,6 @@ const followUser = async (followerId: string, followingId: string) => {
     follower: followerId,
     following: followingId,
   });
-
   if (alreadyFollowing) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Already following this user');
   }
@@ -40,7 +39,13 @@ const followUser = async (followerId: string, followingId: string) => {
     following: followingId,
   });
 
-  // 5. Notify the followed user
+  // 5. Update follower/following counts
+  await Promise.all([
+    User.findByIdAndUpdate(followerId, { $inc: { following: 1 } }),
+    User.findByIdAndUpdate(followingId, { $inc: { followers: 1 } }),
+  ]);
+
+  // 6. Notify the followed user
   await sendUserFollowNotify('follow', followerId, followingId);
 
   return follow;
@@ -52,7 +57,7 @@ const unfollowUser = async (followerId: string, followingId: string) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'You cannot unfollow yourself');
   }
 
-  // 2. Check if both users exist and are active
+  // 2. Check if both users exist
   const [follower, following] = await Promise.all([
     User.findById(followerId),
     User.findById(followingId),
@@ -63,10 +68,7 @@ const unfollowUser = async (followerId: string, followingId: string) => {
   }
 
   if (!following || following.isDeleted) {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      'Invalid target user to unfollow',
-    );
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid target user to unfollow');
   }
 
   // 3. Attempt to remove the follow relationship
@@ -74,12 +76,17 @@ const unfollowUser = async (followerId: string, followingId: string) => {
     follower: followerId,
     following: followingId,
   });
-
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'Not following this user');
   }
 
-  // 4. Notify the unfollowed user
+  // 4. Update follower/following counts
+  await Promise.all([
+    User.findByIdAndUpdate(followerId, { $inc: { following: -1 } }),
+    User.findByIdAndUpdate(followingId, { $inc: { followers: -1 } }),
+  ]);
+
+  // 5. Notify the unfollowed user
   await sendUserFollowNotify('unfollow', followerId, followingId);
 
   return result;
@@ -88,14 +95,13 @@ const unfollowUser = async (followerId: string, followingId: string) => {
 const getAllFollowers = async (userId: string) => {
   // 1. Check if the user exists and is active
   const user = await User.findById(userId);
-  if (!user || user.isDeleted || user.status === 'blocked') {
+  if (!user || user.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found or inactive');
   }
 
   // 2. Get followers
   const followers = await Follow.find({ following: userId }).populate([
-    { path: 'follower', select: 'name photoUrl' },
-    { path: 'following', select: 'name photoUrl' },
+    { path: 'follower', select: 'firstName lastName headline photoUrl' },
   ]);
 
   return followers;
@@ -110,51 +116,17 @@ const getAllFollowing = async (userId: string) => {
 
   // 2. Get following
   const following = await Follow.find({ follower: userId }).populate([
-    { path: 'follower', select: 'name photoUrl' },
-    { path: 'following', select: 'name photoUrl' },
+    { path: 'following', select: 'firstName lastName headline photoUrl' },
   ]);
 
   return following;
 };
 
-const getFollowCount = async (userId: string) => {
-  // 1. Validate user existence and status
-  const user = await User.findById(userId);
-
-  if (!user) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
-  }
-
-  if (user.isDeleted) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'User is deleted');
-  }
-
-  if (user.status === 'blocked') {
-    throw new AppError(httpStatus.FORBIDDEN, 'User is blocked');
-  }
-
-  // 2. Count followers and following
-  const [followingCount, followersCount] = await Promise.all([
-    Follow.countDocuments({ follower: userId }),
-    Follow.countDocuments({ following: userId }),
-  ]);
-
-  return { followingCount, followersCount };
-};
-
 const checkedFollowUser = async (viewerId: string, targetUserId: string) => {
-  // 1. Validate user existence and status
+  // 1. Check if the user exists and is active
   const user = await User.findById(targetUserId);
-  if (!user) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
-  }
-
-  if (user.isDeleted) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'User is deleted');
-  }
-
-  if (user.status === 'blocked') {
-    throw new AppError(httpStatus.FORBIDDEN, 'User is blocked');
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found or inactive');
   }
 
   // 2. Count followers and following of the target user
@@ -182,6 +154,5 @@ export const FollowService = {
   unfollowUser,
   getAllFollowers,
   getAllFollowing,
-  getFollowCount,
   checkedFollowUser,
 };

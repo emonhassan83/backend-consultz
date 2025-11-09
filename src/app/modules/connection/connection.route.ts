@@ -18,12 +18,6 @@ router.post(
 );
 
 router.get(
-  '/',
-  auth(USER_ROLE.consult, USER_ROLE.expert, USER_ROLE.admin),
-  FollowController.getFollowCount,
-);
-
-router.get(
   '/check-follow/:id',
   auth(USER_ROLE.consult, USER_ROLE.expert, USER_ROLE.admin),
   FollowController.checkedFollowUser,

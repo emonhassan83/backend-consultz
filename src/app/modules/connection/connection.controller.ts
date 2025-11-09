@@ -51,17 +51,6 @@ const getAllFollowing = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-const getFollowCount = catchAsync(async (req: Request, res: Response) => {
-  const result = await FollowService.getFollowCount(req.user.userId);
-
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Profile connection fetched successfully',
-    data: result,
-  });
-});
-
 const checkedFollowUser = catchAsync(async (req: Request, res: Response) => {
   const result = await FollowService.checkedFollowUser(
     req.user.userId,
@@ -81,6 +70,5 @@ export const FollowController = {
   unfollowUser,
   getAllFollowers,
   getAllFollowing,
-  getFollowCount,
   checkedFollowUser,
 };

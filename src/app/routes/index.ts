@@ -5,6 +5,7 @@ import { otpRoutes } from '../modules/otp/otp.route'
 import { NotificationRoutes } from '../modules/notification/notification.route'
 import { contentsRoutes } from '../modules/contents/contents.route'
 import { ConnectionRoutes } from '../modules/connection/connection.route'
+import { BlockProfileRoutes } from '../modules/blockProfile/blockProfile.route'
 
 const router = Router()
 
@@ -24,6 +25,10 @@ const moduleRoutes = [
   {
     path: '/connections',
     route: ConnectionRoutes,
+  },
+  {
+    path: '/profile-block',
+    route: BlockProfileRoutes,
   },
   {
     path: '/notifications',
