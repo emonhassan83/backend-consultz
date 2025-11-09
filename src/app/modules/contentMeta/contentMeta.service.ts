@@ -2,8 +2,6 @@ import httpStatus from 'http-status'
 import AppError from '../../errors/AppError'
 import { TContentMeta } from './contentMeta.interface'
 import { ContentMeta } from './contentMeta.model'
-import { User } from '../user/user.model'
-import { sendCarRatingLikeNotificationToAuthor } from './contentMeta.utils'
 
 const createContentMetaIntoDB = async (payload: TContentMeta) => {
   const contentMeta = await ContentMeta.create(payload)
