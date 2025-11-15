@@ -9,6 +9,7 @@ import { BlockProfileRoutes } from '../modules/blockProfile/blockProfile.route'
 import { FeedRoutes } from '../modules/feed/feed.route'
 import { ContentMetaRoutes } from '../modules/contentMeta/contentMeta.route'
 import { CommentsRoutes } from '../modules/comments/comments.route'
+import { ReplyRoutes } from '../modules/reply/reply.route'
 
 const router = Router()
 
@@ -44,6 +45,10 @@ const moduleRoutes = [
   {
     path: '/comments',
     route: CommentsRoutes,
+  },
+  {
+    path: '/reply',
+    route: ReplyRoutes,
   },
   {
     path: '/notifications',

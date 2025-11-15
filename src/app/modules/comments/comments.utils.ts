@@ -10,27 +10,16 @@ type TCommentNotificationPayload = {
     name: string
   }
   authorId: Types.ObjectId
-  modelType: any
 }
 
 export const sendCommentNotificationToAuthor = async (
   payload: TCommentNotificationPayload,
 ) => {
-  const { postId, commentBy, authorId, modelType } = payload
+  const { postId, commentBy, authorId} = payload
 
   // Determine the message from constants
-  let message = ''
-  let description = ''
-
-  if (modelType === modeType.Feed) {
-    message = messages.feedManagement.addComment
-    description = `${commentBy.name} commented on your feed post.`
-  } else if (modelType === modeType.Forum) {
-    message = messages.forumManagement.addComment
-    description = `${commentBy.name} replied to your forum post.`
-  } else {
-    throw new Error('Invalid model type for comment notification.')
-  }
+  let message = messages.comment.add
+  let description = `${commentBy.name} commented on your feed post.`
 
   // Send the notification
   await NotificationService.createNotificationIntoDB({
@@ -38,6 +27,6 @@ export const sendCommentNotificationToAuthor = async (
     reference: postId,
     message,
     description,
-    model_type: modelType,
+    modelType: modeType.Comment,
   })
 }
