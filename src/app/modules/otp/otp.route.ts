@@ -5,15 +5,27 @@ import { resentOtpValidations } from './otp.validation';
 const router = Router();
 
 router.post(
-  '/verify-otp',
+  '/verify-with-email',
   validateRequest(resentOtpValidations.verifyOtpZodSchema),
-  otpControllers.verifyOtp,
+  otpControllers.verifyWithEmail,
 );
 
 router.post(
-  '/resend-otp',
-  validateRequest(resentOtpValidations.resentOtpZodSchema),
-  otpControllers.resendOtp,
+  '/verify-with-email',
+  validateRequest(resentOtpValidations.verifyOtpZodSchema),
+  otpControllers.verifyWithEmail,
+);
+
+router.post(
+  '/send-otp-in-email',
+  validateRequest(resentOtpValidations.resentOtpInEmail),
+  otpControllers.sendOtpInEmail,
+);
+
+router.post(
+  '/send-otp-in-phone',
+  validateRequest(resentOtpValidations.resentOtpInPhone),
+  otpControllers.sendOtpInPhone,
 );
 
 export const otpRoutes = router;

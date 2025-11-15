@@ -4,9 +4,9 @@ import { otpServices } from './otp.service'
 import sendResponse from '../../utils/sendResponse'
 import { Request, Response } from 'express'
 
-const verifyOtp = catchAsync(async (req: Request, res: Response) => {
+const verifyWithEmail = catchAsync(async (req: Request, res: Response) => {
   const token = req?.headers?.authorization
-  const result = await otpServices.verifyOtp(token as string, req.body.otp)
+  const result = await otpServices.verifyWithEmail(token as string, req.body.otp)
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -16,8 +16,31 @@ const verifyOtp = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-const resendOtp = catchAsync(async (req: Request, res: Response) => {
-  const result = await otpServices.resendOtp(req.body.email)
+const verifyWithPhoneNumber = catchAsync(async (req: Request, res: Response) => {
+  const token = req?.headers?.authorization
+  const result = await otpServices.verifyWithEmail(token as string, req.body.otp)
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'OTP verified successfully',
+    data: result,
+  })
+})
+
+const sendOtpInEmail = catchAsync(async (req: Request, res: Response) => {
+  const result = await otpServices.sendOtpInEmail(req.body.email)
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'OTP sent successfully',
+    data: result,
+  })
+})
+
+const sendOtpInPhone = catchAsync(async (req: Request, res: Response) => {
+  const result = await otpServices.sendOtpInEmail(req.body.email)
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -28,6 +51,8 @@ const resendOtp = catchAsync(async (req: Request, res: Response) => {
 })
 
 export const otpControllers = {
-  verifyOtp,
-  resendOtp,
+  verifyWithEmail,
+  verifyWithPhoneNumber,
+  sendOtpInEmail,
+  sendOtpInPhone
 }

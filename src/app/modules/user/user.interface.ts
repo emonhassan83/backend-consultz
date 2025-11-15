@@ -18,6 +18,12 @@ type TSessionDuration = {
   isOffered: boolean
 }
 
+type TBankAccount = {
+  holderName: string
+  number: number
+  sortCode: string
+}
+
 export interface TUser {
   _id: Types.ObjectId
   id: string
@@ -31,7 +37,7 @@ export interface TUser {
   fcmToken: string
   photoUrl?: string
   coverPhoto?: string
-  contractNumber?: string
+  phoneNumber?: string
   timeZone: string
   priceRange: string
   interests: string[]
@@ -44,6 +50,7 @@ export interface TUser {
     certificate: string[]
     phd: string 
   }
+  bankDetails: TBankAccount
   socialProfiles: TSocialProfile[]
   hourlyRate: number
   availability: TAvailability[]

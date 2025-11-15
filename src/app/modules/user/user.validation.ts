@@ -25,6 +25,12 @@ const SessionDurationSchema = z.object({
   isOffered: z.boolean({ required_error: 'isOffered must be true or false' }),
 })
 
+const BankAccountSchema = z.object({
+  holderName: z.string().optional(),
+  number: z.number().optional(),
+  sortCode: z.string().optional(),
+})
+
 // ✅ Create User Validation
 const createValidationSchema = z.object({
   body: z.object({
@@ -35,9 +41,16 @@ const createValidationSchema = z.object({
       .email('Invalid email address'),
     password: z
       .string({ invalid_type_error: 'Password must be a string' })
-      .min(6, { message: 'Password must be at least 6 characters' })
-      .max(12, { message: 'Password cannot be more than 12 characters' }),
-    dob: z.string({ required_error: 'Date of birth is required!' })
+      .min(8, { message: 'Password must be at least 8 characters' })
+      .max(16, { message: 'Password cannot be more than 16 characters' }),
+    confirmPass: z
+      .string({ required_error: 'Confirm password is required' })
+      .min(8, { message: 'Confirm password must be at least 8 characters' })
+      .max(16, {
+        message: 'Confirm password cannot be more than 16 characters',
+      }),
+    dob: z.string({ required_error: 'Date of birth is required!' }),
+    phoneNumber: z.string({ required_error: 'Phone number is required!' }),
   }),
 })
 
@@ -47,7 +60,7 @@ const updateValidationSchema = z.object({
     firstName: z.string().optional(),
     lastName: z.string().optional(),
     email: z.string().email().optional(),
-    contractNumber: z.string().optional(),
+    phoneNumber: z.string().optional(),
     dob: z.string().optional(),
     bio: z.string().optional(),
     fcmToken: z.string().optional(),
@@ -66,9 +79,7 @@ const updateValidationSchema = z.object({
     sessionDurations: z.array(SessionDurationSchema).optional(),
     advisingStyles: z.array(z.string()).optional(),
     hourlyRate: z.number().optional(),
-    status: z
-      .enum(Object.values(USER_STATUS) as [string, ...string[]])
-      .optional(),
+    bankDetails: BankAccountSchema.optional(),
     isNotify: z.boolean().optional(),
   }),
 })

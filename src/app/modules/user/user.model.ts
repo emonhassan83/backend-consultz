@@ -17,7 +17,7 @@ const EducationSchema = new Schema(
     certificate: { type: [String], default: [] },
     phd: { type: String, default: '' },
   },
-  { _id: false }
+  { _id: false },
 )
 
 // 📅 Availability
@@ -27,7 +27,7 @@ const AvailabilitySchema = new Schema(
     from: { type: String, required: true },
     to: { type: String, required: true },
   },
-  { _id: false }
+  { _id: false },
 )
 
 // 🌐 Social Profile
@@ -36,7 +36,7 @@ const SocialProfileSchema = new Schema(
     type: { type: String, required: true },
     url: { type: String, required: true },
   },
-  { _id: false }
+  { _id: false },
 )
 
 // ⏱ Session Duration
@@ -46,7 +46,17 @@ const SessionDurationSchema = new Schema(
     duration: { type: String, required: true },
     isOffered: { type: Boolean, default: false },
   },
-  { _id: false }
+  { _id: false },
+)
+
+// 🏦 Bank Account
+const BankAccountSchema = new Schema(
+  {
+    holderName: { type: String, default: '' },
+    number: { type: Number, default: 0 },
+    sortCode: { type: String, default: '' },
+  },
+  { _id: false },
 )
 
 // ===== User Schema =====
@@ -68,7 +78,7 @@ const userSchema = new Schema<TUser, UserModel>(
     fcmToken: { type: String, default: null },
     photoUrl: { type: String, default: null },
     coverPhoto: { type: String, default: null },
-    contractNumber: { type: String, default: null },
+    phoneNumber: { type: String, default: null },
     timeZone: { type: String, default: 'UTC' },
     priceRange: { type: String, default: '' },
 
@@ -84,6 +94,7 @@ const userSchema = new Schema<TUser, UserModel>(
     socialProfiles: { type: [SocialProfileSchema], default: [] },
     sessionDurations: { type: [SessionDurationSchema], default: [] },
 
+    bankDetails: { type: BankAccountSchema, default: {} },
     hourlyRate: { type: Number, default: 0 },
 
     role: {
@@ -131,7 +142,7 @@ const userSchema = new Schema<TUser, UserModel>(
   },
   {
     timestamps: true,
-  }
+  },
 )
 
 // TTL index for expireAt
@@ -142,7 +153,7 @@ userSchema.pre('save', async function (next) {
   if (this.isModified('password')) {
     this.password = await bcrypt.hash(
       this.password,
-      Number(config.bcrypt_salt_rounds)
+      Number(config.bcrypt_salt_rounds),
     )
   }
   next()
@@ -150,7 +161,7 @@ userSchema.pre('save', async function (next) {
 
 //* Static method: find user by username (assuming username == email or name)
 userSchema.statics.isUserExistsByUserName = async function (
-  name: string
+  name: string,
 ): Promise<TUser | null> {
   return await this.findOne({
     $or: [{ firstName: name }, { lastName: name }, { email: name }],
@@ -159,7 +170,7 @@ userSchema.statics.isUserExistsByUserName = async function (
 
 //* Static method: find user by email
 userSchema.statics.isUserExistsByEmail = async function (
-  email: string
+  email: string,
 ): Promise<TUser | null> {
   return await this.findOne({ email })
 }
@@ -167,7 +178,7 @@ userSchema.statics.isUserExistsByEmail = async function (
 //* Static method: compare passwords
 userSchema.statics.isPasswordMatched = async function (
   plainTextPassword: string,
-  hashedPassword: string
+  hashedPassword: string,
 ): Promise<boolean> {
   return await bcrypt.compare(plainTextPassword, hashedPassword)
 }

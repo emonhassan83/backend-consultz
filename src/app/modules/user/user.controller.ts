@@ -8,15 +8,15 @@ import { otpServices } from '../otp/otp.service'
 
 const registerUser = catchAsync(async (req, res) => {
   const result = await UserService.registerUserIntoDB(req?.body)
-  const sendOtp = await otpServices.resendOtp(result?.email)
-  const { _id, id, firstName, lastName, email, status } = result
+  const sendOtp = await otpServices.sendOtpInPhone(result.phoneNumber as string)
+  const { _id, id, firstName, lastName, email, phoneNumber, status } = result
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
     message: 'User registered successfully!',
     data: {
-      user: { _id, id, firstName, lastName, email, status },
+      user: { _id, id, firstName, lastName, email, phoneNumber, status },
       otpToken: sendOtp,
     },
   })
