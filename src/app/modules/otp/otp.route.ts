@@ -11,9 +11,9 @@ router.post(
 );
 
 router.post(
-  '/verify-with-email',
+  '/verify-with-phone',
   validateRequest(resentOtpValidations.verifyOtpZodSchema),
-  otpControllers.verifyWithEmail,
+  otpControllers.verifyWithPhoneNumber,
 );
 
 router.post(

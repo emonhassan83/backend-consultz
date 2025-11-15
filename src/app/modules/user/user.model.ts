@@ -43,7 +43,7 @@ const SocialProfileSchema = new Schema(
 const SessionDurationSchema = new Schema(
   {
     type: { type: String, required: true },
-    duration: { type: String, required: true },
+    duration: { type: Number, required: true },
     isOffered: { type: Boolean, default: false },
   },
   { _id: false },

@@ -14,7 +14,7 @@ type TSocialProfile = {
 
 type TSessionDuration = {
   type: string
-  duration: string
+  duration: number
   isOffered: boolean
 }
 

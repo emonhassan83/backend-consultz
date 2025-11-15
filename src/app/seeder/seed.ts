@@ -5,11 +5,12 @@ import { User } from '../modules/user/user.model'
 import { findAdmin } from '../utils/findAdmin'
 
 const adminUser = {
-  name: 'vincentwong',
+  firstName: 'vincent',
+  lastName: 'wong',
   email: 'admin@vincentwong.gmail.com',
   password: config.admin_pass,
   role: USER_ROLE.admin,
-  contractNumber: "+876543345678",
+  contractNumber: '+876543345678',
   verification: {
     otp: '0',
     status: true,

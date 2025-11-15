@@ -21,7 +21,7 @@ const SocialProfileSchema = z.object({
 
 const SessionDurationSchema = z.object({
   type: z.string({ required_error: 'Session type is required!' }),
-  duration: z.string({ required_error: 'Duration is required!' }),
+  duration: z.number({ required_error: 'Duration is required!' }),
   isOffered: z.boolean({ required_error: 'isOffered must be true or false' }),
 })
 
@@ -59,12 +59,9 @@ const updateValidationSchema = z.object({
   body: z.object({
     firstName: z.string().optional(),
     lastName: z.string().optional(),
-    email: z.string().email().optional(),
     phoneNumber: z.string().optional(),
     dob: z.string().optional(),
     bio: z.string().optional(),
-    fcmToken: z.string().optional(),
-    photoUrl: z.string().optional(),
     coverPhoto: z.string().optional(),
     timeZone: z.string().optional(),
     priceRange: z.string().optional(),
@@ -80,7 +77,6 @@ const updateValidationSchema = z.object({
     advisingStyles: z.array(z.string()).optional(),
     hourlyRate: z.number().optional(),
     bankDetails: BankAccountSchema.optional(),
-    isNotify: z.boolean().optional(),
   }),
 })
 

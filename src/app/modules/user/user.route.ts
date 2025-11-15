@@ -33,18 +33,12 @@ router.patch(
 router.put(
   '/update-profile',
   auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult),
-  upload.single('image'),
+    upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'cover', maxCount: 1 },
+  ]),
   parseData(),
   UserControllers.updateMyProfile,
-)
-
-router.put(
-  '/:id',
-  auth(USER_ROLE.admin),
-  upload.single('image'),
-  parseData(),
-  zodValidationRequest(UserValidation.updateValidationSchema),
-  UserControllers.updateUserInfo,
 )
 
 router.delete(

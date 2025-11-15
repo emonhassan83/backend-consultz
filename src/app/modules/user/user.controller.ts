@@ -5,6 +5,7 @@ import { UserService } from './user.service'
 import { Request, Response } from 'express'
 import { uploadToS3 } from '../../utils/s3'
 import { otpServices } from '../otp/otp.service'
+import { UploadedFiles } from '../../interface/common.interface'
 
 const registerUser = catchAsync(async (req, res) => {
   const result = await UserService.registerUserIntoDB(req?.body)
@@ -80,11 +81,24 @@ const changeUserNotify = catchAsync(async (req, res) => {
 })
 
 const updateUserInfo = catchAsync(async (req, res) => {
-  if (req?.file) {
-    req.body.photoUrl = await uploadToS3({
-      file: req.file,
-      fileName: `images/user/photoUrl/${Math.floor(100000 + Math.random() * 900000)}`,
-    })
+   if (req.files) {
+    const { image, cover } = req.files as UploadedFiles;
+
+    if (image?.length) {
+      const uploadedPhoto = await uploadToS3({
+        file: image[0],
+        fileName: `images/user/photoUrl/${Math.floor(100000 + Math.random() * 900000)}`,
+      });
+      req.body.photoUrl = uploadedPhoto as string;
+    }
+
+    if (cover?.length) {
+      const uploadedCover = await uploadToS3({
+        file: cover[0],
+        fileName: `images/user/cover/${Math.floor(100000 + Math.random() * 900000)}`,
+      });
+      req.body.coverPhoto = uploadedCover as string;
+    }
   }
 
   const result = await UserService.updateUserInfoFromDB(req.params.id, req.body)
@@ -98,11 +112,24 @@ const updateUserInfo = catchAsync(async (req, res) => {
 })
 
 const updateMyProfile = catchAsync(async (req, res) => {
-  if (req?.file) {
-    req.body.photoUrl = await uploadToS3({
-      file: req.file,
-      fileName: `images/user/photoUrl/${Math.floor(100000 + Math.random() * 900000)}`,
-    })
+  if (req.files) {
+    const { image, cover } = req.files as UploadedFiles;
+
+    if (image?.length) {
+      const uploadedPhoto = await uploadToS3({
+        file: image[0],
+        fileName: `images/user/photoUrl/${Math.floor(100000 + Math.random() * 900000)}`,
+      });
+      req.body.photoUrl = uploadedPhoto as string;
+    }
+
+    if (cover?.length) {
+      const uploadedCover = await uploadToS3({
+        file: cover[0],
+        fileName: `images/user/cover/${Math.floor(100000 + Math.random() * 900000)}`,
+      });
+      req.body.coverPhoto = uploadedCover as string;
+    }
   }
 
   const result = await UserService.updateUserInfoFromDB(
