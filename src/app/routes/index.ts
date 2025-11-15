@@ -10,6 +10,7 @@ import { FeedRoutes } from '../modules/feed/feed.route'
 import { ContentMetaRoutes } from '../modules/contentMeta/contentMeta.route'
 import { CommentsRoutes } from '../modules/comments/comments.route'
 import { ReplyRoutes } from '../modules/reply/reply.route'
+import { ReviewsRoutes } from '../modules/review/review.route'
 
 const router = Router()
 
@@ -49,6 +50,10 @@ const moduleRoutes = [
   {
     path: '/reply',
     route: ReplyRoutes,
+  },
+  {
+    path: '/reviews',
+    route: ReviewsRoutes,
   },
   {
     path: '/notifications',
