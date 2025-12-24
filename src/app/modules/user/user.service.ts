@@ -54,7 +54,7 @@ const registerUserIntoDB = async (payload: TUser) => {
 const getAllUsersFromDB = async (query: Record<string, unknown>) => {
   const usersQuery = new QueryBuilder(
     User.find({ isDeleted: false, role: { $ne: USER_ROLE.admin } }).select(
-      '_id id name email photoUrl address city country status createdAt',
+      '_id id name email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status createdAt',
     ),
     query,
   )
@@ -75,7 +75,7 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
 
 const geUserByIdFromDB = async (id: string) => {
   const user = await User.findById(id).select(
-    '_id id name email photoUrl address city country status createdAt',
+    '_id id name email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status createdAt',
   )
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
@@ -97,7 +97,9 @@ const changeUserStatusFromDB = async (payload: any) => {
     userId,
     { status },
     { new: true },
-  ).select('_id id name email photoUrl contactNumber status')
+  ).select(
+    '_id id name email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status createdAt',
+  )
   if (!updateUserStatus) {
     throw new AppError(
       httpStatus.NOT_FOUND,
@@ -113,26 +115,56 @@ const changeUserStatusFromDB = async (payload: any) => {
 }
 
 const changeUserNotifyFromDB = async (id: string) => {
-  //* if the user is is not exist
+  // 1️⃣ Validate user
   const user = await User.findById(id)
-  if (!user || user?.isDeleted) {
+  if (!user || user.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
 
-  const updateNotify = await User.findByIdAndUpdate(
+  // 2️⃣ Determine toggle intent
+  const isTurningOn =
+    !Object.values(user.pushNotify || {}).some(v => v === false) &&
+    !Object.values(user.emailNotify || {}).some(v => v === false)
+      ? false
+      : true
+
+  // 3️⃣ Build updated notify payload
+  const updatedNotify = {
+    pushNotify: {
+      booking: isTurningOn,
+      schedule: isTurningOn,
+      payment: isTurningOn,
+      points: isTurningOn,
+      followers: isTurningOn,
+      post: isTurningOn,
+      reviews: isTurningOn,
+    },
+    emailNotify: {
+      booking: isTurningOn,
+      schedule: isTurningOn,
+      payment: isTurningOn,
+    },
+  }
+
+  // 4️⃣ Update user
+  const updatedUser = await User.findByIdAndUpdate(
     id,
-    { isNotify: !user.isNotify },
+    updatedNotify,
     { new: true },
-  ).select('_id id name email photoUrl status isNotify')
-  if (!updateNotify) {
+  ).select(
+    '_id id firstName lastName email photoUrl headline following followers points avgRating skills languages expertise status createdAt pushNotify emailNotify',
+  )
+
+  if (!updatedUser) {
     throw new AppError(
       httpStatus.NOT_FOUND,
-      'User not found and failed to update status!',
+      'User not found and failed to update notification settings!',
     )
   }
 
-  return updateNotify
+  return updatedUser
 }
+
 
 const updateUserInfoFromDB = async (
   userId: string,
@@ -152,7 +184,9 @@ const updateUserInfoFromDB = async (
 
   const updatedUser = await User.findByIdAndUpdate(userId, payload, {
     new: true,
-  }).select('_id id name email photoUrl contactNumber status')
+  }).select(
+    '_id id name email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status createdAt',
+  )
   if (!updatedUser) {
     throw new AppError(
       httpStatus.NOT_FOUND,
@@ -165,9 +199,9 @@ const updateUserInfoFromDB = async (
 
 const updateLocationFromDB = async (
   userId: string,
-  payload: { longitude: number; latitude: number },
+  payload: { longitude: number; latitude: number; address: string },
 ) => {
-  const { longitude, latitude } = payload
+  const { longitude, latitude, address } = payload
 
   //* if the user is is not exist
   const user = await User.findById(userId)
@@ -186,6 +220,7 @@ const updateLocationFromDB = async (
     userId,
     {
       location: { type: 'Point', coordinates: [longitude, latitude] },
+      address: address,
     },
     { new: true },
   )
@@ -205,7 +240,9 @@ const deleteAUserFromDB = async (userId: string) => {
     userId,
     { isDeleted: true },
     { new: true },
-  ).select('_id id name email photoUrl contactNumber status isDeleted')
+  ).select(
+    '_id id name email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status createdAt',
+  )
 
   if (!updatedUser) {
     throw new AppError(httpStatus.NOT_FOUND, 'Failed to update user status!')

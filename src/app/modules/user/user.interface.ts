@@ -1,7 +1,7 @@
 import { Model, Types } from 'mongoose'
 import { TUserRole, TUserStatus } from './user.constant'
 
-type TAvailability  = {
+type TAvailability = {
   day: string
   from: string
   to: string
@@ -48,7 +48,7 @@ export interface TUser {
   education: {
     degree: string
     certificate: string[]
-    phd: string 
+    phd: string
   }
   bankDetails: TBankAccount
   socialProfiles: TSocialProfile[]
@@ -65,6 +65,20 @@ export interface TUser {
     expiresAt: Date
     status: boolean
   }
+  pushNotify: {
+    booking: boolean
+    schedule: boolean
+    payment: boolean
+    points: boolean
+    followers: boolean
+    post: boolean
+    reviews: boolean
+  }
+  emailNotify: {
+    booking: boolean
+    schedule: boolean
+    payment: boolean
+  }
   following: number
   followers: number
   points: number
@@ -73,7 +87,6 @@ export interface TUser {
   ratingCount: number
   status: TUserStatus
   expireAt: Date
-  isNotify: boolean
   isDeleted: boolean
   createdAt?: Date
   updatedAt?: Date

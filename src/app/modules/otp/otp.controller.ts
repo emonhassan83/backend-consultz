@@ -18,7 +18,7 @@ const verifyWithEmail = catchAsync(async (req: Request, res: Response) => {
 
 const verifyWithPhoneNumber = catchAsync(async (req: Request, res: Response) => {
   const token = req?.headers?.authorization
-  const result = await otpServices.verifyWithEmail(token as string, req.body.otp)
+  const result = await otpServices.verifyWithPhoneNumber(token as string, req.body.otp)
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

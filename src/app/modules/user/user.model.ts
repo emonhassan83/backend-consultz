@@ -136,8 +136,50 @@ const userSchema = new Schema<TUser, UserModel>(
         return expireAt.setMinutes(expireAt.getMinutes() + 30)
       },
     },
-
-    isNotify: { type: Boolean, default: true },
+    pushNotify: {
+      booking: {
+        type: Boolean,
+        default: true,
+      },
+      schedule: {
+        type: Boolean,
+        default: true,
+      },
+      payment: {
+        type: Boolean,
+        default: true,
+      },
+      points: {
+        type: Boolean,
+        default: true,
+      },
+      followers: {
+        type: Boolean,
+        default: true,
+      },
+      post: {
+        type: Boolean,
+        default: true,
+      },
+      reviews: {
+        type: Boolean,
+        default: true,
+      },
+    },
+    emailNotify: {
+      booking: {
+        type: Boolean,
+        default: true,
+      },
+      schedule: {
+        type: Boolean,
+        default: true,
+      },
+      payment: {
+        type: Boolean,
+        default: true,
+      },
+    },
     isDeleted: { type: Boolean, default: false },
   },
   {
