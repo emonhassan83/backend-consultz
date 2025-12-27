@@ -46,6 +46,18 @@ class QueryBuilder<T> {
     return this
   }
 
+  // 🔥 NEW METHOD
+  sortByCustom(customSort: Record<string, 1 | -1>) {
+    if (this.query?.sort) {
+      const sort = (this.query.sort as string)?.split(',')?.join(' ')
+      this.modelQuery = this.modelQuery.sort(sort)
+      return this
+    }
+
+    this.modelQuery = this.modelQuery.sort(customSort)
+    return this
+  }
+
   paginate() {
     const page = Number(this?.query?.page) || 1
     const limit = Number(this?.query?.limit) || 10

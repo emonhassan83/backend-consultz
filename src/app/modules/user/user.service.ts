@@ -3,11 +3,12 @@ import AppError from '../../errors/AppError'
 import { TUser } from './user.interface'
 import { User } from './user.model'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { USER_ROLE } from './user.constant'
+import { USER_ROLE, USER_STATUS } from './user.constant'
 import {
   sendUserStatusNotifYToAdmin,
   sendUserStatusNotifYToUser,
 } from './user.utils'
+import { Types } from 'mongoose'
 
 const registerUserIntoDB = async (payload: TUser) => {
   if (payload.role === 'admin') {
@@ -73,6 +74,131 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
   }
 }
 
+const getInterestExpertsFromDB = async (
+  userId: string,
+  query: Record<string, unknown>,
+) => {
+  // 1️⃣ Get current user
+  const currentUser = await User.findById(userId).select('interests')
+  if (!currentUser) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+  }
+
+  const { interests } = currentUser
+
+  // 2️⃣ Build interest matching logic
+  const matchConditions: any[] = []
+  if (interests?.length) {
+    matchConditions.push({ interests: { $in: interests } })
+  }
+
+  // 3️⃣ Base expert filter
+  const baseFilter = {
+    _id: { $ne: new Types.ObjectId(userId) },
+    isDeleted: false,
+    status: USER_STATUS.active,
+    role: USER_ROLE.consult,
+    $or: matchConditions,
+  }
+
+  // 4️⃣ Query Builder (same standard you already use)
+  const usersQuery = new QueryBuilder(
+    User.find(baseFilter).select(
+      '_id id firstName lastName photoUrl headline followers following avgRating skills languages expertise',
+    ),
+    query,
+  )
+    .sort()
+    .paginate()
+    .fields()
+
+  const result = await usersQuery.modelQuery
+  const meta = await usersQuery.countTotal()
+
+  return {
+    meta,
+    result,
+  }
+}
+
+const getPropertyExpertsFromDB = async (query: Record<string, unknown>) => {
+  const filter = {
+    role: USER_ROLE.consult,
+    status: USER_STATUS.active,
+    isDeleted: false,
+
+    // 🎯 KEY LOGIC
+    $or: [
+      // Match key expertise (pink)
+      {
+        expertise: {
+          $in: ['Property Investment & Development'],
+        },
+      },
+
+      // Match sub-categories
+      {
+        skills: {
+          $in: [
+            'Real Estate',
+            'Property Law',
+            'Investment',
+            'Real Estate Development',
+          ],
+        },
+      },
+    ],
+  }
+
+  const usersQuery = new QueryBuilder(
+    User.find(filter).select(
+      '_id id firstName lastName photoUrl headline avgRating followers expertise skills hourlyRate',
+    ),
+    query,
+  )
+    .sortByCustom({
+      avgRating: -1,
+      followers: -1,
+      points: -1,
+    })
+    .paginate()
+    .fields()
+
+  const result = await usersQuery.modelQuery
+  const meta = await usersQuery.countTotal()
+
+  return { meta, result }
+}
+
+const getTopExpertsFromDB = async (query: Record<string, unknown>) => {
+  const filter = {
+    role: USER_ROLE.consult,
+    status: USER_STATUS.active,
+    isDeleted: false,
+    avgRating: { $gte: 4 },
+  }
+
+  const usersQuery = new QueryBuilder(
+    User.find(filter).select(
+      '_id id firstName lastName photoUrl headline avgRating ratingCount followers expertise skills',
+    ),
+    query,
+  )
+    .sortByCustom({
+      avgRating: -1,
+      ratingCount: -1,
+      followers: -1,
+    })
+    .paginate()
+    .fields()
+
+  const result = await usersQuery.modelQuery
+  const meta = await usersQuery.countTotal()
+
+  return { meta, result }
+}
+
+
 const geUserByIdFromDB = async (id: string) => {
   const user = await User.findById(id).select(
     '_id id name email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status createdAt',
@@ -123,8 +249,8 @@ const changeUserNotifyFromDB = async (id: string) => {
 
   // 2️⃣ Determine toggle intent
   const isTurningOn =
-    !Object.values(user.pushNotify || {}).some(v => v === false) &&
-    !Object.values(user.emailNotify || {}).some(v => v === false)
+    !Object.values(user.pushNotify || {}).some((v) => v === false) &&
+    !Object.values(user.emailNotify || {}).some((v) => v === false)
       ? false
       : true
 
@@ -147,11 +273,9 @@ const changeUserNotifyFromDB = async (id: string) => {
   }
 
   // 4️⃣ Update user
-  const updatedUser = await User.findByIdAndUpdate(
-    id,
-    updatedNotify,
-    { new: true },
-  ).select(
+  const updatedUser = await User.findByIdAndUpdate(id, updatedNotify, {
+    new: true,
+  }).select(
     '_id id firstName lastName email photoUrl headline following followers points avgRating skills languages expertise status createdAt pushNotify emailNotify',
   )
 
@@ -164,7 +288,6 @@ const changeUserNotifyFromDB = async (id: string) => {
 
   return updatedUser
 }
-
 
 const updateUserInfoFromDB = async (
   userId: string,
@@ -254,6 +377,9 @@ const deleteAUserFromDB = async (userId: string) => {
 export const UserService = {
   registerUserIntoDB,
   getAllUsersFromDB,
+  getInterestExpertsFromDB,
+  getTopExpertsFromDB,
+  getPropertyExpertsFromDB,
   geUserByIdFromDB,
   changeUserStatusFromDB,
   changeUserNotifyFromDB,

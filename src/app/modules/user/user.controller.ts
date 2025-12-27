@@ -23,6 +23,48 @@ const registerUser = catchAsync(async (req, res) => {
   })
 })
 
+const getInterestExpert = catchAsync(async (req, res) => {
+  const result = await UserService.getInterestExpertsFromDB(
+    req.user._id,
+    req.query,
+  )
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Interest experts retrieved successfully!',
+    meta: result.meta,
+    data: result.result,
+  })
+})
+
+
+// 🔥 Top Experts
+const getTopExperts = catchAsync(async (req, res) => {
+  const result = await UserService.getTopExpertsFromDB(req.query)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: 'Top experts retrieved successfully!',
+    meta: result.meta,
+    data: result.result,
+  })
+})
+
+// 🏠 Property Experts
+const getPropertyExperts = catchAsync(async (req, res) => {
+  const result = await UserService.getPropertyExpertsFromDB(req.query)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: 'Property experts retrieved successfully!',
+    meta: result.meta,
+    data: result.result,
+  })
+})
+
 const getAllUsers = catchAsync(async (req, res) => {
   const result = await UserService.getAllUsersFromDB(req.query)
 
@@ -159,6 +201,9 @@ const deleteMyProfile = catchAsync(async (req, res) => {
 export const UserControllers = {
   registerUser,
   getAllUsers,
+  getInterestExpert,
+  getTopExperts,
+  getPropertyExperts,
   getUserById,
   getMyProfile,
   changeUserStatus,

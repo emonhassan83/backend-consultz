@@ -27,11 +27,6 @@ export const sendNotification = async (
       return null
     }
 
-    if (!user.isNotify) {
-      console.log(`🔕 Notifications are disabled for user: ${user._id}`)
-      return { successCount: 0, skipped: true }
-    }
-
     const response = await admin.messaging().sendEachForMulticast({
       tokens: fcmToken,
       notification: {

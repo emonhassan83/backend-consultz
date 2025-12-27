@@ -8,6 +8,7 @@ import { generateOtp } from '../../utils/generateOtp'
 import emailSender from '../../utils/emailSender'
 import { createToken, TExpiresIn } from '../auth/auth.utils'
 import { Types } from 'mongoose'
+import twilio from 'twilio'
 
 const verifyWithEmail = async (token: string, otp: string | number) => {
   if (!token) {
@@ -213,6 +214,7 @@ const sendOtpInPhone = async (phoneNumber: string) => {
   const otp = generateOtp()
   const expiresAt = moment().add(5, 'minute')
 
+  // ডাটাবেসে OTP সেভ করা
   const updateOtp = await User.findByIdAndUpdate(
     user?._id,
     {
@@ -242,8 +244,44 @@ const sendOtpInPhone = async (phoneNumber: string) => {
     expiresIn: '5m',
   })
 
-  // For Test purpose sent response in phone number
-  return { token, otp }
+  // === মক মোড চেক করা ===
+  const isDevelopment = process.env.NODE_ENV !== 'production'
+
+  if (isDevelopment) {
+    console.log('🔑 [MOCK OTP] Phone:', phoneNumber)
+    console.log('🔑 [MOCK OTP] Code:', otp)
+    console.log(
+      '🔑 [MOCK OTP] Expires at:',
+      expiresAt.format('YYYY-MM-DD HH:mm:ss'),
+    )
+    console.log('⚠️  Real SMS skipped in development mode')
+
+    // টেস্টের জন্য OTP রিটার্ন করছি (প্রোডাকশনে এটা রিমুভ করবেন)
+    return {
+      message: 'OTP generated (Mock mode - check console)',
+      token,
+      otp,
+      mock: true,
+    }
+  }
+
+  // === প্রোডাকশন মোড: রিয়েল Twilio SMS ===
+  const client = twilio(config.twilio.accountSid, config.twilio.authToken)
+
+  try {
+    await client.messages.create({
+      body: `Your verification code is ${otp}. It expires in 5 minutes. Do not share it.`,
+      from: config.twilio.phoneNumber,
+      to: phoneNumber,
+    })
+
+    return {
+      token,
+    }
+  } catch (error: any) {
+    console.error('Twilio SMS Error:', error)
+    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to send OTP')
+  }
 }
 
 export const otpServices = {

@@ -48,6 +48,24 @@ router.delete(
 )
 
 router.get(
+  '/interest-experts',
+  auth(USER_ROLE.expert, USER_ROLE.consult),
+  UserControllers.getInterestExpert,
+)
+
+router.get(
+  '/property-experts',
+  auth(USER_ROLE.expert, USER_ROLE.consult),
+  UserControllers.getPropertyExperts,
+)
+
+router.get(
+  '/top-experts',
+  auth(USER_ROLE.expert, USER_ROLE.consult),
+  UserControllers.getTopExperts,
+)
+
+router.get(
   '/my-profile',
   auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult),
   UserControllers.getMyProfile,
