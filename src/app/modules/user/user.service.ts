@@ -8,7 +8,7 @@ import {
   sendUserStatusNotifYToAdmin,
   sendUserStatusNotifYToUser,
 } from './user.utils'
-import { Types } from 'mongoose'
+import { FilterQuery, Types } from 'mongoose'
 
 const registerUserIntoDB = async (payload: TUser) => {
   if (payload.role === 'admin') {
@@ -198,6 +198,109 @@ const getTopExpertsFromDB = async (query: Record<string, unknown>) => {
   return { meta, result }
 }
 
+const getInvestmentExperts = async (query: Record<string, unknown>) => {
+const filterQuery: FilterQuery<any> = {
+    isDeleted: false,
+  }
+
+  /* -------------------- 1️⃣ Price Range -------------------- */
+  if (query.minPrice || query.maxPrice) {
+    filterQuery.hourlyRate = {}
+
+    if (query.minPrice) {
+      filterQuery.hourlyRate.$gte = Number(query.minPrice)
+    }
+
+    if (query.maxPrice) {
+      filterQuery.hourlyRate.$lte = Number(query.maxPrice)
+    }
+  }
+
+  /* -------------------- 2️⃣ Learning Styles -------------------- */
+  if (query.learningStyles) {
+    filterQuery.learningStyles = {
+      $in: (query.learningStyles as string).split(','),
+    }
+  }
+
+  /* -------------------- 3️⃣ Interests -------------------- */
+  if (query.interests) {
+    filterQuery.interests = {
+      $in: (query.interests as string).split(','),
+    }
+  }
+
+  /* -------------------- 4️⃣ Availability (Nested Array) -------------------- */
+  /**
+   * ?availabilityDays=Monday,Tuesday
+   */
+  if (query.availabilityDays) {
+    filterQuery.availability = {
+      $elemMatch: {
+        day: {
+          $in: (query.availabilityDays as string).split(','),
+        },
+      },
+    }
+  }
+
+  /* -------------------- 5️⃣ Rating -------------------- */
+  /**
+   * ?minRating=4
+   */
+  if (query.minRating) {
+    filterQuery.avgRating = {
+      $gte: Number(query.minRating),
+    }
+  }
+
+  /* -------------------- 6️⃣ Session Duration -------------------- */
+  /**
+   * ?sessionDurationType=video,audio
+   * ?sessionDurationMin=30
+   */
+  if (query.sessionDurationType || query.sessionDurationMin) {
+    const sessionDurationMatch: any = {
+      isOffered: true,
+    }
+
+    if (query.sessionDurationType) {
+      sessionDurationMatch.type = {
+        $in: (query.sessionDurationType as string).split(','),
+      }
+    }
+
+    if (query.sessionDurationMin) {
+      sessionDurationMatch.duration = { $gte: Number(query.sessionDurationMin) }
+    }
+
+    filterQuery.sessionDurations = {
+      $elemMatch: sessionDurationMatch,
+    }
+  }
+
+  /* -------------------- Query Builder -------------------- */
+  const queryBuilder = new QueryBuilder(
+    User.find(filterQuery),
+    query,
+  )
+    .search(['firstName', 'lastName', 'expertise'])
+    .sortByCustom({
+      avgRating: -1,
+      followers: -1,
+      createdAt: -1,
+    })
+    .paginate()
+    .fields()
+
+  const result = await queryBuilder.modelQuery
+  const meta = await queryBuilder.countTotal()
+
+  return {
+    meta,
+    result,
+  }
+}
 
 const geUserByIdFromDB = async (id: string) => {
   const user = await User.findById(id).select(
@@ -377,6 +480,7 @@ const deleteAUserFromDB = async (userId: string) => {
 export const UserService = {
   registerUserIntoDB,
   getAllUsersFromDB,
+  getInvestmentExperts,
   getInterestExpertsFromDB,
   getTopExpertsFromDB,
   getPropertyExpertsFromDB,

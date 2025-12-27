@@ -6,6 +6,7 @@ import { Request, Response } from 'express'
 import { uploadToS3 } from '../../utils/s3'
 import { otpServices } from '../otp/otp.service'
 import { UploadedFiles } from '../../interface/common.interface'
+import { USER_ROLE } from './user.constant'
 
 const registerUser = catchAsync(async (req, res) => {
   const result = await UserService.registerUserIntoDB(req?.body)
@@ -60,6 +61,19 @@ const getPropertyExperts = catchAsync(async (req, res) => {
     success: true,
     statusCode: httpStatus.OK,
     message: 'Property experts retrieved successfully!',
+    meta: result.meta,
+    data: result.result,
+  })
+})
+
+const getInvestmentExperts = catchAsync(async (req, res) => {
+  req.query['role'] = USER_ROLE.expert;
+  const result = await UserService.getInvestmentExperts(req.query)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Investment experts retrieved successfully!',
     meta: result.meta,
     data: result.result,
   })
@@ -201,6 +215,7 @@ const deleteMyProfile = catchAsync(async (req, res) => {
 export const UserControllers = {
   registerUser,
   getAllUsers,
+  getInvestmentExperts,
   getInterestExpert,
   getTopExperts,
   getPropertyExperts,
