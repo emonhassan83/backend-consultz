@@ -33,7 +33,7 @@ const updateReply = catchAsync(async (req: Request, res: Response) => {
   const result = await ReplyService.updateReply(
     req.params.id,
     req.body,
-    req?.user?.userId,
+    req?.user?._id,
   )
 
   sendResponse(res, {
@@ -47,7 +47,7 @@ const updateReply = catchAsync(async (req: Request, res: Response) => {
 const deleteReply = catchAsync(async (req: Request, res: Response) => {
   const result = await ReplyService.deleteReply(
     req.params.id,
-    req?.user?.userId,
+    req?.user?._id,
   )
 
   sendResponse(res, {

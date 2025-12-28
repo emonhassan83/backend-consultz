@@ -14,10 +14,6 @@ const createComments = async (payload: TComments, userId: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'This profile is not found!');
   }
 
-  if (user.status === 'blocked') {
-    throw new AppError(httpStatus.FORBIDDEN, 'This profile is blocked!');
-  }
-
   const session = await Comments.startSession();
   session.startTransaction();
 

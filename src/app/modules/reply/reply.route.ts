@@ -14,7 +14,7 @@ router.post(
   ReplyController.createReply,
 )
 
-router.patch(
+router.put(
   '/:id',
   auth(USER_ROLE.admin, USER_ROLE.consult, USER_ROLE.expert),
    zodValidationRequest(ReplyValidation.updateValidationSchema),
