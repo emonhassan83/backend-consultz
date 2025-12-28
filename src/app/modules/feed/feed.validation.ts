@@ -16,7 +16,16 @@ const updateValidationSchema = z.object({
   }),
 })
 
+const changeStatusValidationSchema = z.object({
+  body: z.object({
+    status: z.enum(['active', 'inactive'], {
+      message: 'Status must be either active or inactive',
+    }),
+  }),
+})
+
 export const FeedValidation = {
   createValidationSchema,
-  updateValidationSchema
+  updateValidationSchema,
+  changeStatusValidationSchema
 }

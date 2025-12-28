@@ -7,10 +7,7 @@ import { User } from '../user/user.model'
 import { ContentMetaService } from '../contentMeta/contentMeta.service'
 import { uploadToS3 } from '../../utils/s3'
 import { enrichFeedWithUserInfo } from './feed.utils'
-
-const modelMap = {
-  Feed,
-}
+import { FEED_STATUS, TFeedStatus } from './feed.constant'
 
 const createFeedIntoDB = async (
   payload: TFeed,
@@ -21,9 +18,6 @@ const createFeedIntoDB = async (
   const user = await User.findById(userId)
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'This profile is not found !')
-  }
-  if (user?.status === 'blocked') {
-    throw new AppError(httpStatus.FORBIDDEN, 'This profile is blocked !!')
   }
 
   if (files?.length) {
@@ -67,7 +61,7 @@ const createFeedIntoDB = async (
   // update to assign content and modelType meta content
   await ContentMetaService.updateAContentMetaFromDB(contentMeta?._id, {
     // @ts-ignore
-    content: feed?._id
+    content: feed?._id,
   })
 
   return feed
@@ -161,6 +155,38 @@ const updateFeedFromDB = async (
   return updateFeed
 }
 
+const changeFeedStatus = async (
+  id: string,
+  payload: { status: TFeedStatus },
+) => {
+  const { status } = payload
+
+  // Optional: validate status explicitly (extra safety)
+  if (!Object.values(FEED_STATUS).includes(status)) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid feed status')
+  }
+
+  const updatedFeed = await Feed.findOneAndUpdate(
+    {
+      _id: id,
+      isDeleted: false,
+    },
+    {
+      $set: { status },
+    },
+    {
+      new: true,
+      runValidators: true,
+    },
+  )
+
+  if (!updatedFeed) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Feed post not found or deleted')
+  }
+
+  return updatedFeed
+}
+
 const deleteAFeedFromDB = async (id: string) => {
   const feed = await Feed.findById(id)
   if (feed?.isDeleted) {
@@ -187,5 +213,6 @@ export const FeedService = {
   getAllFeedsFromDB,
   getAFeedFromDB,
   updateFeedFromDB,
+  changeFeedStatus,
   deleteAFeedFromDB,
 }

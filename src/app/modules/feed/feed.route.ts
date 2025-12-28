@@ -13,7 +13,7 @@ const upload = multer({ storage })
 
 router.post(
   '/',
-  auth(USER_ROLE.consult, USER_ROLE.expert),
+  auth(USER_ROLE.expert),
   upload.fields([{ name: 'content', maxCount: 12 }]),
   parseData(),
   zodValidationRequest(FeedValidation.createValidationSchema),
@@ -22,16 +22,23 @@ router.post(
 
 router.put(
   '/:id',
-  auth(USER_ROLE.consult, USER_ROLE.expert),
+  auth(USER_ROLE.expert),
   upload.fields([{ name: 'content', maxCount: 12 }]),
   parseData(),
   zodValidationRequest(FeedValidation.updateValidationSchema),
   FeedControllers.updateFeed,
 )
 
+router.patch(
+  '/status/:id',
+  auth(USER_ROLE.admin),
+  zodValidationRequest(FeedValidation.changeStatusValidationSchema),
+  FeedControllers.changeFeedStatus,
+)
+
 router.delete(
   '/:id',
-  auth(USER_ROLE.consult, USER_ROLE.expert),
+  auth(USER_ROLE.expert),
   FeedControllers.deleteAFeed,
 )
 
@@ -43,6 +50,12 @@ router.get(
 
 router.get(
   '/user/:userId',
+  auth(USER_ROLE.consult, USER_ROLE.expert),
+  FeedControllers.getAllFeedsByUserId,
+)
+
+router.get(
+  '/active-feed',
   auth(USER_ROLE.consult, USER_ROLE.expert),
   FeedControllers.getAllFeedsByUserId,
 )

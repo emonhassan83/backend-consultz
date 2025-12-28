@@ -2,6 +2,7 @@ import catchAsync from '../../utils/catchAsync'
 import httpStatus from 'http-status'
 import sendResponse from '../../utils/sendResponse'
 import { FeedService } from './feed.service'
+import { FEED_STATUS } from './feed.constant'
 
 const createFeed = catchAsync(async (req, res) => {
   const files =
@@ -31,8 +32,22 @@ const getAllFeeds = catchAsync(async (req, res) => {
   })
 })
 
+const getActiveFeeds = catchAsync(async (req, res) => {
+  req.query['status'] = FEED_STATUS.active
+  const result = await FeedService.getAllFeedsFromDB(req.query, req.user._id)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Feed posts retrieved successfully!',
+    meta: result.meta,
+    data: result.result,
+  })
+})
+
 const getAllFeedsByUserId = catchAsync(async (req, res) => {
   req.query['author'] = req?.params?.userId
+  req.query['status'] = FEED_STATUS.active
   const result = await FeedService.getAllFeedsFromDB(req.query, req.user._id)
 
   sendResponse(res, {
@@ -88,6 +103,17 @@ const updateFeed = catchAsync(async (req, res) => {
   })
 })
 
+const changeFeedStatus = catchAsync(async (req, res) => {
+  const result = await FeedService.changeFeedStatus(req.params.id, req.body)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Feed status changed successfully!',
+    data: result,
+  })
+})
+
 const deleteAFeed = catchAsync(async (req, res) => {
   const result = await FeedService.deleteAFeedFromDB(req.params.id)
 
@@ -102,9 +128,11 @@ const deleteAFeed = catchAsync(async (req, res) => {
 export const FeedControllers = {
   createFeed,
   getAllFeeds,
+  getActiveFeeds,
   getAllMyFeed,
   getAllFeedsByUserId,
   getAFeed,
   updateFeed,
+  changeFeedStatus,
   deleteAFeed,
 }
