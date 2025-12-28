@@ -6,8 +6,9 @@ import { Feed } from './feed.model'
 import { User } from '../user/user.model'
 import { ContentMetaService } from '../contentMeta/contentMeta.service'
 import { uploadToS3 } from '../../utils/s3'
-import { enrichFeedWithUserInfo } from './feed.utils'
+import { enrichFeedWithUserInfo, sendFeedNotificationToUser } from './feed.utils'
 import { FEED_STATUS, TFeedStatus } from './feed.constant'
+import { TUser } from '../user/user.interface'
 
 const createFeedIntoDB = async (
   payload: TFeed,
@@ -161,27 +162,31 @@ const changeFeedStatus = async (
 ) => {
   const { status } = payload
 
-  // Optional: validate status explicitly (extra safety)
+  // 1. Validate status
   if (!Object.values(FEED_STATUS).includes(status)) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Invalid feed status')
   }
 
+  // 2. Update feed
   const updatedFeed = await Feed.findOneAndUpdate(
-    {
-      _id: id,
-      isDeleted: false,
-    },
-    {
-      $set: { status },
-    },
-    {
-      new: true,
-      runValidators: true,
-    },
-  )
+    { _id: id, isDeleted: false },
+    { $set: { status } },
+    { new: true, runValidators: true },
+  ).populate('author')
 
   if (!updatedFeed) {
     throw new AppError(httpStatus.NOT_FOUND, 'Feed post not found or deleted')
+  }
+
+  // 3. Send notification to feed owner
+  const author = updatedFeed.author as unknown as TUser
+
+  if (author) {
+    await sendFeedNotificationToUser(
+      status === FEED_STATUS.active ? 'active' : 'restricted',
+      author,
+      updatedFeed,
+    )
   }
 
   return updatedFeed

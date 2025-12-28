@@ -38,7 +38,7 @@ export const sendUserStatusNotifYToUser = async (
   status: 'active' | 'blocked',
   user: TUser,
 ) => {
-  if (!user?.fcmToken) throw new Error('User FCM token is missing!');
+  if (!user?.fcmToken) return;
 
   let message = '';
   let description = '';

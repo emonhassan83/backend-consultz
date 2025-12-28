@@ -16,6 +16,11 @@ export const messages = {
     unfollowed: 'Someone unfollowed you',
   },
 
+  feed: {
+    active: 'Your post is now live!',
+    restricted: 'Your post has been restricted.',
+  },
+
   comment: {
     add: 'Comment posted in the feed',
   },

@@ -36,17 +36,9 @@ router.patch(
   FeedControllers.changeFeedStatus,
 )
 
-router.delete(
-  '/:id',
-  auth(USER_ROLE.expert),
-  FeedControllers.deleteAFeed,
-)
+router.delete('/:id', auth(USER_ROLE.expert), FeedControllers.deleteAFeed)
 
-router.get(
-  '/',
-  auth(USER_ROLE.consult, USER_ROLE.expert),
-  FeedControllers.getAllFeeds,
-)
+router.get('/', auth(USER_ROLE.admin), FeedControllers.getAllFeeds)
 
 router.get(
   '/user/:userId',
@@ -60,15 +52,11 @@ router.get(
   FeedControllers.getAllFeedsByUserId,
 )
 
-router.get(
-  '/my-feed',
-  auth(USER_ROLE.consult, USER_ROLE.expert),
-  FeedControllers.getAllMyFeed,
-)
+router.get('/my-feed', auth(USER_ROLE.expert), FeedControllers.getAllMyFeed)
 
 router.get(
   '/:id',
-  auth(USER_ROLE.consult, USER_ROLE.expert),
+  auth(USER_ROLE.admin, USER_ROLE.consult, USER_ROLE.expert),
   FeedControllers.getAFeed,
 )
 
