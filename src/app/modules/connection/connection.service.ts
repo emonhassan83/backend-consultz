@@ -3,6 +3,7 @@ import httpStatus from 'http-status';
 import { sendUserFollowNotify } from './connection.utils';
 import { User } from '../user/user.model';
 import AppError from '../../errors/AppError';
+import QueryBuilder from '../../builder/QueryBuilder';
 
 const followUser = async (followerId: string, followingId: string) => {
   // 1. Prevent following self
@@ -92,34 +93,73 @@ const unfollowUser = async (followerId: string, followingId: string) => {
   return result;
 };
 
-const getAllFollowers = async (userId: string) => {
+const getAllFollowers = async (userId: string, query: Record<string, unknown>) => {
   // 1. Check if the user exists and is active
   const user = await User.findById(userId);
   if (!user || user.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found or inactive');
   }
 
-  // 2. Get followers
-  const followers = await Follow.find({ following: userId }).populate([
+  const followerQuery = new QueryBuilder(
+    Follow.find({ following: userId }).populate([
     { path: 'follower', select: 'firstName lastName headline photoUrl' },
-  ]);
+  ]),
+    query,
+  )
+    .search([])
+    .filter()
+    .sort()
+    .paginate()
+    .fields()
 
-  return followers;
+  const followDocs = await followerQuery.modelQuery
+  const meta = await followerQuery.countTotal()
+
+  // 3. Transform response (IMPORTANT PART)
+  const result = followDocs
+    .map((doc: any) => doc.follower)
+    .filter(Boolean);
+
+  return {
+    meta,
+    result,
+  }
 };
 
-const getAllFollowing = async (userId: string) => {
-  // 1. Check if the user exists and is active
+const getAllFollowing = async (
+  userId: string,
+  query: Record<string, unknown>,
+) => {
+  // 1. Validate user
   const user = await User.findById(userId);
   if (!user || user.isDeleted || user.status === 'blocked') {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found or inactive');
   }
 
-  // 2. Get following
-  const following = await Follow.find({ follower: userId }).populate([
-    { path: 'following', select: 'firstName lastName headline photoUrl' },
-  ]);
+  // 2. Build query
+  const followerQuery = new QueryBuilder(
+    Follow.find({ follower: userId }).populate({
+      path: 'following',
+      select: 'firstName lastName headline photoUrl',
+    }),
+    query,
+  )
+    .filter()
+    .sort()
+    .paginate();
 
-  return following;
+  const followDocs = await followerQuery.modelQuery;
+  const meta = await followerQuery.countTotal();
+
+  // 3. Transform response (IMPORTANT PART)
+  const result = followDocs
+    .map((doc: any) => doc.following)
+    .filter(Boolean);
+
+  return {
+    meta,
+    result,
+  };
 };
 
 const checkedFollowUser = async (viewerId: string, targetUserId: string) => {

@@ -26,7 +26,7 @@ const SessionDurationSchema = z.object({
 })
 
 const BankAccountSchema = z.object({
-  holderName: z.string().optional(),
+  bankName: z.string().optional(),
   number: z.number().optional(),
   sortCode: z.string().optional(),
 })

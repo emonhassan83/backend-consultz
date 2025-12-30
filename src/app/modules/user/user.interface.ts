@@ -19,7 +19,7 @@ type TSessionDuration = {
 }
 
 type TBankAccount = {
-  holderName: string
+  bankName: string
   number: number
   sortCode: string
 }
@@ -82,6 +82,7 @@ export interface TUser {
   following: number
   followers: number
   points: number
+  advisingTime: number
   level: number
   avgRating: number
   ratingCount: number

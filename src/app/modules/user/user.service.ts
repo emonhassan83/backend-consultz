@@ -104,7 +104,7 @@ const getInterestExpertsFromDB = async (
   // 4️⃣ Query Builder (same standard you already use)
   const usersQuery = new QueryBuilder(
     User.find(baseFilter).select(
-      '_id id firstName lastName photoUrl headline followers following avgRating skills languages expertise',
+      '_id id firstName lastName photoUrl coverPhoto headline followers following avgRating skills languages expertise',
     ),
     query,
   )
@@ -152,7 +152,7 @@ const getPropertyExpertsFromDB = async (query: Record<string, unknown>) => {
 
   const usersQuery = new QueryBuilder(
     User.find(filter).select(
-      '_id id firstName lastName photoUrl headline avgRating followers expertise skills hourlyRate',
+      '_id id firstName lastName photoUrl coverPhoto headline avgRating followers expertise skills hourlyRate',
     ),
     query,
   )
@@ -180,7 +180,7 @@ const getTopExpertsFromDB = async (query: Record<string, unknown>) => {
 
   const usersQuery = new QueryBuilder(
     User.find(filter).select(
-      '_id id firstName lastName photoUrl headline avgRating ratingCount followers expertise skills',
+      '_id id firstName lastName photoUrl coverPhoto headline avgRating ratingCount followers expertise skills',
     ),
     query,
   )
@@ -304,7 +304,7 @@ const filterQuery: FilterQuery<any> = {
 
 const geUserByIdFromDB = async (id: string) => {
   const user = await User.findById(id).select(
-    '_id id name email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status createdAt',
+    '_id id name email phoneNumber photoUrl coverPhoto headline following followers points advisingTime avgRating skills languages expertise status createdAt',
   )
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
@@ -343,40 +343,15 @@ const changeUserStatusFromDB = async (payload: any) => {
   return updateUserStatus
 }
 
-const changeUserNotifyFromDB = async (id: string) => {
+const changeUserNotifyFromDB = async (id: string, payload: any) => {
   // 1️⃣ Validate user
   const user = await User.findById(id)
   if (!user || user.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
 
-  // 2️⃣ Determine toggle intent
-  const isTurningOn =
-    !Object.values(user.pushNotify || {}).some((v) => v === false) &&
-    !Object.values(user.emailNotify || {}).some((v) => v === false)
-      ? false
-      : true
-
-  // 3️⃣ Build updated notify payload
-  const updatedNotify = {
-    pushNotify: {
-      booking: isTurningOn,
-      schedule: isTurningOn,
-      payment: isTurningOn,
-      points: isTurningOn,
-      followers: isTurningOn,
-      post: isTurningOn,
-      reviews: isTurningOn,
-    },
-    emailNotify: {
-      booking: isTurningOn,
-      schedule: isTurningOn,
-      payment: isTurningOn,
-    },
-  }
-
   // 4️⃣ Update user
-  const updatedUser = await User.findByIdAndUpdate(id, updatedNotify, {
+  const updatedUser = await User.findByIdAndUpdate(id, payload, {
     new: true,
   }).select(
     '_id id firstName lastName email photoUrl headline following followers points avgRating skills languages expertise status createdAt pushNotify emailNotify',

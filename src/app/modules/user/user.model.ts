@@ -52,8 +52,8 @@ const SessionDurationSchema = new Schema(
 // 🏦 Bank Account
 const BankAccountSchema = new Schema(
   {
-    holderName: { type: String, default: '' },
-    number: { type: Number, default: 0 },
+    bankName: { type: String, default: '' },
+    number: { type: Number, default: null },
     sortCode: { type: String, default: '' },
   },
   { _id: false },
@@ -119,6 +119,7 @@ const userSchema = new Schema<TUser, UserModel>(
     following: { type: Number, default: 0 },
     followers: { type: Number, default: 0 },
     points: { type: Number, default: 0 },
+    advisingTime: { type: Number, default: 0 },
     level: { type: Number, default: 1 },
     avgRating: { type: Number, default: 0 },
     ratingCount: { type: Number, default: 0 },
