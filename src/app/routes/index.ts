@@ -40,7 +40,7 @@ const moduleRoutes = [
     path: '/feeds',
     route: FeedRoutes,
   },
-    {
+  {
     path: '/reports',
     route: ReportRoutes,
   },
