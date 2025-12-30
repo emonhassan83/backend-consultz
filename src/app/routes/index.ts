@@ -11,6 +11,7 @@ import { ContentMetaRoutes } from '../modules/contentMeta/contentMeta.route'
 import { CommentsRoutes } from '../modules/comments/comments.route'
 import { ReplyRoutes } from '../modules/reply/reply.route'
 import { ReviewsRoutes } from '../modules/review/review.route'
+import { ReportRoutes } from '../modules/report/report.route'
 
 const router = Router()
 
@@ -38,6 +39,10 @@ const moduleRoutes = [
   {
     path: '/feeds',
     route: FeedRoutes,
+  },
+    {
+    path: '/reports',
+    route: ReportRoutes,
   },
   {
     path: '/content-meta',
