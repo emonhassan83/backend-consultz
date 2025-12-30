@@ -52,7 +52,7 @@ router.get(
   FeedControllers.getAllFeedsByUserId,
 )
 
-router.get('/my-feed', auth(USER_ROLE.expert), FeedControllers.getAllMyFeed)
+router.get('/author/my-feed', auth(USER_ROLE.expert), FeedControllers.getAllMyFeed)
 
 router.get(
   '/:id',

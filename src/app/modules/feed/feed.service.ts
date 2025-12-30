@@ -9,13 +9,13 @@ import { uploadToS3 } from '../../utils/s3'
 import { enrichFeedWithUserInfo, sendFeedNotificationToUser } from './feed.utils'
 import { FEED_STATUS, TFeedStatus } from './feed.constant'
 import { TUser } from '../user/user.interface'
+import { Types } from 'mongoose'
 
 const createFeedIntoDB = async (
   payload: TFeed,
+  userId: string,
   files: Express.Multer.File[],
 ) => {
-  const { author: userId } = payload
-
   const user = await User.findById(userId)
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'This profile is not found !')
@@ -53,6 +53,7 @@ const createFeedIntoDB = async (
 
   // add contentMeta to payload
   payload.contentMeta = contentMeta?._id
+  payload.author = user._id
 
   const feed = await Feed.create(payload)
   if (!feed) {
@@ -68,10 +69,12 @@ const createFeedIntoDB = async (
   return feed
 }
 
-const getAllFeedsFromDB = async (
-  query: Record<string, unknown>,
-  userId: string,
-) => {
+const getAllFeedsFromDB = async (query: Record<string, unknown>, userId: string) => {
+  // Convert author string to ObjectId
+  if (query.author) {
+    query.author = new Types.ObjectId(query.author as string)
+  }
+
   const feedQuery = new QueryBuilder(
     Feed.find({ isDeleted: false }).populate([
       { path: 'author', select: 'firstName lastName expertise photoUrl' },
@@ -91,10 +94,7 @@ const getAllFeedsFromDB = async (
     result.map((feed) => enrichFeedWithUserInfo(feed, userId)),
   )
 
-  return {
-    meta,
-    result: enrichedResult,
-  }
+  return { meta, result: enrichedResult }
 }
 
 const getAFeedFromDB = async (id: string, userId: string) => {
@@ -172,7 +172,7 @@ const changeFeedStatus = async (
     { _id: id, isDeleted: false },
     { $set: { status } },
     { new: true, runValidators: true },
-  ).populate('author')
+  )
 
   if (!updatedFeed) {
     throw new AppError(httpStatus.NOT_FOUND, 'Feed post not found or deleted')

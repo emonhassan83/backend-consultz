@@ -3,6 +3,7 @@ import httpStatus from 'http-status'
 import sendResponse from '../../utils/sendResponse'
 import { FeedService } from './feed.service'
 import { FEED_STATUS } from './feed.constant'
+import { Types } from 'mongoose'
 
 const createFeed = catchAsync(async (req, res) => {
   const files =
@@ -10,7 +11,11 @@ const createFeed = catchAsync(async (req, res) => {
       ? (req.files['content'] as Express.Multer.File[])
       : []
 
-  const result = await FeedService.createFeedIntoDB(req.body, files)
+  const result = await FeedService.createFeedIntoDB(
+    req.body,
+    req.user._id,
+    files,
+  )
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
@@ -60,7 +65,8 @@ const getAllFeedsByUserId = catchAsync(async (req, res) => {
 })
 
 const getAllMyFeed = catchAsync(async (req, res) => {
-  req.query['author'] = req?.user?._id
+  req.query['author'] = req.user._id.toString()  // keep string for safe conversion
+
   const result = await FeedService.getAllFeedsFromDB(req.query, req.user._id)
 
   sendResponse(res, {
@@ -92,7 +98,7 @@ const updateFeed = catchAsync(async (req, res) => {
   const result = await FeedService.updateFeedFromDB(
     req.params.id,
     req.body,
-    files
+    files,
   )
 
   sendResponse(res, {
