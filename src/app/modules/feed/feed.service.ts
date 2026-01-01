@@ -70,13 +70,15 @@ const createFeedIntoDB = async (
 }
 
 const getAllFeedsFromDB = async (query: Record<string, unknown>, userId: string) => {
-  // Convert author string to ObjectId
-  if (query.author) {
-    query.author = new Types.ObjectId(query.author as string)
-  }
+  // // Convert author string to ObjectId
+  // if (query.author) {
+  //   query.author = new Types.ObjectId(query.author as string)
+  // }
+  console.log(query);
+  
 
   const feedQuery = new QueryBuilder(
-    Feed.find({ isDeleted: false }).populate([
+    Feed.find({ isDeleted: false, author: query.author }).populate([
       { path: 'author', select: 'firstName lastName expertise photoUrl' },
       { path: 'contentMeta', select: 'like comment likeBy' },
     ]),

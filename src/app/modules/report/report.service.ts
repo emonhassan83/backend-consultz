@@ -6,6 +6,7 @@ import AppError from '../../errors/AppError'
 import httpStatus from 'http-status'
 import { Feed } from '../feed/feed.model'
 import { Report } from './report.models'
+import { FEED_STATUS } from '../feed/feed.constant'
 
 const createReport = async (payload: IReport) => {
   const { author: authorId, feed: feedId } = payload
@@ -47,18 +48,18 @@ const createReport = async (payload: IReport) => {
 const getAllReport = async (query: Record<string, any>) => {
   const reportModel = new QueryBuilder(
     Report.find().populate([
-      { path: 'author', select: 'name photoUrl email' },
+      { path: 'author', select: 'firstName lastName photoUrl email' },
       {
         path: 'feed',
         populate: {
-          path: 'author', // example subfield inside the feed document
-          select: 'name email photoUrl',
+          path: 'author',
+          select: 'firstName lastName photoUrl email',
         },
       },
     ]),
     query,
   )
-    .search(['author.name'])
+    .search([''])
     .filter()
     .paginate()
     .sort()
@@ -71,12 +72,12 @@ const getAllReport = async (query: Record<string, any>) => {
 
 const getReportById = async (id: string) => {
   const result = await Report.findById(id).populate([
-    { path: 'author', select: 'name photoUrl email' },
+    { path: 'author', select: 'firstName lastName photoUrl email' },
     {
       path: 'feed',
       populate: {
         path: 'author', // example subfield inside the feed document
-        select: 'name email photoUrl',
+        select: 'firstName lastName photoUrl email',
       },
     },
   ])
@@ -105,31 +106,52 @@ const updateReport = async (id: string, payload: Partial<IReport>) => {
 
 const changeStatusReport = async (
   id: string,
-  payload: { status: (typeof REPORT_STATUS)[keyof typeof REPORT_STATUS] },
+  payload: { status: keyof typeof REPORT_STATUS },
 ) => {
+  const { status } = payload
+
+  // 1. Validate status
+  if (!Object.values(REPORT_STATUS).includes(status)) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid report status')
+  }
+
+  // 2. Find report
   const report = await Report.findById(id)
   if (!report) {
     throw new AppError(httpStatus.NOT_FOUND, 'Report not found!')
   }
 
-  // Prevent updating if report already has a terminal status
+  // 3. Prevent duplicate action
   if (report.status !== REPORT_STATUS.pending) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
-      `Cannot change status from ${report.status}.`,
+      `Report already ${report.status}`,
     )
   }
 
-  if (payload.status === REPORT_STATUS.denied) {
-    const result = await Report.findByIdAndDelete(id)
-    if (!result) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'Report status can not update!',
-      )
+  // 4. Update report status
+  report.status = status
+  await report.save()
+
+  // 5. If approved → restrict feed
+  if (status === REPORT_STATUS.approved) {
+    const feed = await Feed.findOne({
+      _id: report.feed,
+      isDeleted: false,
+    })
+
+    if (!feed) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Reported feed not found')
     }
-    return result
+
+    // Avoid unnecessary write
+    if (feed.status !== FEED_STATUS.restrict) {
+      feed.status = FEED_STATUS.restrict
+      await feed.save()
+    }
   }
+
+  return report
 }
 
 const deleteReport = async (id: string) => {
@@ -138,15 +160,15 @@ const deleteReport = async (id: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Report not found!')
   }
 
-  const deletedReport = await Report.findByIdAndDelete(id)
-  if (!deletedReport) {
+  const result = await Report.findByIdAndDelete(id)
+  if (!result) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
-      'Report history updated failed !',
+      'Report history deleted failed !',
     )
   }
 
-  return deletedReport
+  return result
 }
 
 export const ReportService = {
