@@ -14,6 +14,7 @@ import { ReviewsRoutes } from '../modules/review/review.route'
 import { ReportRoutes } from '../modules/report/report.route'
 import { ChatRoutes } from '../modules/chat/chat.route'
 import { MessagesRoutes } from '../modules/messages/messages.route'
+import { uploadRouter } from '../modules/uploads/route'
 
 const router = Router()
 
@@ -62,9 +63,13 @@ const moduleRoutes = [
     path: '/chats',
     route: ChatRoutes,
   },
-    {
+  {
     path: '/messages',
     route: MessagesRoutes,
+  },
+  {
+    path: '/uploads',
+    route: uploadRouter,
   },
   {
     path: '/reviews',
