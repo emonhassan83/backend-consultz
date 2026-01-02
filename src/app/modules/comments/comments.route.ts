@@ -14,10 +14,10 @@ router.post(
   commentsController.createComments,
 )
 
-router.patch(
+router.put(
   '/:id',
   auth(USER_ROLE.consult, USER_ROLE.expert),
-  zodValidationRequest(CommentValidation.createValidationSchema),
+  zodValidationRequest(CommentValidation.updateValidationSchema),
   commentsController.updateComments,
 )
 

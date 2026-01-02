@@ -3,9 +3,6 @@ import { z } from 'zod'
 
 const createValidationSchema = z.object({
   body: z.object({
-    user: z.string().refine((val) => mongoose.Types.ObjectId.isValid(val), {
-      message: 'Invalid user ID',
-    }),
     content: z.string().refine((val) => mongoose.Types.ObjectId.isValid(val), {
       message: 'Invalid content ID',
     }),

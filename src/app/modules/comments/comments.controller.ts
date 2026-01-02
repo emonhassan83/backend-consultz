@@ -56,7 +56,7 @@ const updateComments = catchAsync(async (req: Request, res: Response) => {
   const result = await commentsService.updateComments(
     req.params.id,
     req.body,
-    req?.user?.userId,
+    req?.user?._id,
   )
 
   sendResponse(res, {
@@ -70,7 +70,7 @@ const updateComments = catchAsync(async (req: Request, res: Response) => {
 const deleteComments = catchAsync(async (req: Request, res: Response) => {
   const result = await commentsService.deleteComments(
     req.params.id,
-    req?.user?.userId,
+    req?.user?._id,
   )
 
   sendResponse(res, {

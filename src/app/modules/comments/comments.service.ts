@@ -1,4 +1,5 @@
 import httpStatus from 'http-status'
+import { Types } from 'mongoose'
 import QueryBuilder from '../../builder/QueryBuilder'
 import { TComments } from './comments.interface'
 import { Comments } from './comments.models'
@@ -24,6 +25,8 @@ const createComments = async (payload: TComments, userId: string) => {
     if (!feed || feed.isDeleted) {
       throw new AppError(httpStatus.NOT_FOUND, `Feed not found!`);
     }
+    // assign author
+    payload.user = new Types.ObjectId(userId);
 
     let result;
 
