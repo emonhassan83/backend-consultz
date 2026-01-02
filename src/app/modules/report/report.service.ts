@@ -7,12 +7,13 @@ import httpStatus from 'http-status'
 import { Feed } from '../feed/feed.model'
 import { Report } from './report.models'
 import { FEED_STATUS } from '../feed/feed.constant'
+import mongoose from 'mongoose'
 
-const createReport = async (payload: IReport) => {
-  const { author: authorId, feed: feedId } = payload
+const createReport = async (payload: IReport, userId: string) => {
+  const { feed: feedId } = payload
 
   // 1. Validate Author
-  const author = await User.findById(authorId)
+  const author = await User.findById(userId)
   if (!author || author.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Author not found!')
   }
@@ -24,7 +25,7 @@ const createReport = async (payload: IReport) => {
 
   // 4. 🔁 Check for duplicate pending reports
   const existingReport = await Report.findOne({
-    author: authorId,
+    author: userId,
     feed: feedId,
     status: REPORT_STATUS.pending,
   })
@@ -35,6 +36,8 @@ const createReport = async (payload: IReport) => {
       'You have already submitted a report for this feed!',
     )
   }
+  // set author
+  payload.author = new mongoose.Types.ObjectId(userId)
 
   // 5. ✅ Create report
   const report = await Report.create(payload)

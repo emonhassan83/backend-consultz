@@ -1,21 +1,18 @@
-import mongoose from 'mongoose';
-import { z } from 'zod';
-import { REPORT_STATUS } from './report.constant';
+import mongoose from 'mongoose'
+import { z } from 'zod'
+import { REPORT_STATUS } from './report.constant'
 
 // Define the Zod validation schema
 const createValidationSchema = z.object({
   body: z.object({
-    author: z.string().refine(val => mongoose.Types.ObjectId.isValid(val), {
-      message: 'Invalid author ID',
-    }),
-    feed: z.string().refine(val => mongoose.Types.ObjectId.isValid(val), {
+    feed: z.string().refine((val) => mongoose.Types.ObjectId.isValid(val), {
       message: 'Invalid feed ID',
     }),
     reason: z.string({
       required_error: 'Report reason is required !',
     }),
   }),
-});
+})
 
 const updateValidationSchema = z.object({
   body: z.object({
@@ -25,7 +22,7 @@ const updateValidationSchema = z.object({
       })
       .optional(),
   }),
-});
+})
 
 const changeStatusValidationSchema = z.object({
   body: z.object({
@@ -33,10 +30,10 @@ const changeStatusValidationSchema = z.object({
       required_error: 'Report status is required!',
     }),
   }),
-});
+})
 
 export const ReportValidation = {
   createValidationSchema,
   updateValidationSchema,
   changeStatusValidationSchema,
-};
+}

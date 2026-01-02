@@ -5,7 +5,7 @@ import sendResponse from '../../utils/sendResponse';
 import httpStatus from 'http-status';
 
 const createReport = catchAsync(async (req: Request, res: Response) => {
-  const result = await ReportService.createReport(req.body);
+  const result = await ReportService.createReport(req.body, req.user._id);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
