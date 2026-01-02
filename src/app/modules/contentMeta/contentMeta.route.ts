@@ -7,18 +7,6 @@ import { USER_ROLE } from '../user/user.constant'
 
 const router = express.Router()
 
-router.post(
-  '/',
-  auth(USER_ROLE.consult, USER_ROLE.expert),
-  zodValidationRequest(ContentMetaValidation.createValidationSchema),
-  ContentMetaControllers.createContentMeta,
-)
-
-router.put(
-  '/:id',
-  ContentMetaControllers.updateContentMeta,
-)
-
 router.patch(
   '/like/:contentId',
   auth(USER_ROLE.consult, USER_ROLE.expert),

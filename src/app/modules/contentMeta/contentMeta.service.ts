@@ -34,7 +34,7 @@ const updateAContentMetaFromDB = async (
 }
 
 const likeContentFromDB = async (contentId: string, user: any) => {
-  const contentMeta = await ContentMeta.findById(contentId)
+  const contentMeta = await ContentMeta.findOne({ content: contentId })
   if (!contentMeta) {
     throw new AppError(httpStatus.NOT_FOUND, 'Content Meta not found')
   }
@@ -44,8 +44,8 @@ const likeContentFromDB = async (contentId: string, user: any) => {
     return contentMeta
   }
 
-  const updateContentMeta = await ContentMeta.findByIdAndUpdate(
-    contentId,
+  const updateContentMeta = await ContentMeta.findOneAndUpdate(
+    { content: contentId },
     {
       $inc: { like: 1 }, // Increase like count by 1
       $addToSet: { likeBy: user._id }, // Add user to likeBy array (prevents duplicates)
@@ -61,7 +61,7 @@ const likeContentFromDB = async (contentId: string, user: any) => {
 }
 
 const unlikeContentFromDB = async (contentId: string, user: any) => {
-  const contentMeta = await ContentMeta.findById(contentId)
+  const contentMeta = await ContentMeta.findOne({ content: contentId })
   if (!contentMeta) {
     throw new AppError(httpStatus.NOT_FOUND, 'Content Meta not found')
   }
@@ -71,8 +71,8 @@ const unlikeContentFromDB = async (contentId: string, user: any) => {
     return contentMeta
   }
 
-  const updateContentMeta = await ContentMeta.findByIdAndUpdate(
-    contentId,
+  const updateContentMeta = await ContentMeta.findOneAndUpdate(
+    { content: contentId },
     {
       $inc: { like: -1 }, // Decrease like count by 1
       $pull: { likeBy: user._id }, // Remove user from likeBy array

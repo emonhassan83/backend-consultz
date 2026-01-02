@@ -44,7 +44,7 @@ const getActiveFeeds = catchAsync(async (req, res) => {
   sendResponse(res, {
     success: true,
     statusCode: 200,
-    message: 'Feed posts retrieved successfully!',
+    message: 'Feed active posts retrieved successfully!',
     meta: result.meta,
     data: result.result,
   })
