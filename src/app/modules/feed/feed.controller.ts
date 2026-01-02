@@ -65,9 +65,11 @@ const getAllFeedsByUserId = catchAsync(async (req, res) => {
 })
 
 const getAllMyFeed = catchAsync(async (req, res) => {
-  req.query['author'] = req.user._id.toString()  // keep string for safe conversion
-
-  const result = await FeedService.getAllFeedsFromDB(req.query, req.user._id)
+  req.query.author = req.user._id
+  const result = await FeedService.getAllFeedsFromDB(
+    req.query,
+    req.user._id.toString(),
+  )
 
   sendResponse(res, {
     success: true,

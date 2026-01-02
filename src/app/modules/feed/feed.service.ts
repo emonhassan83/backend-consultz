@@ -6,10 +6,12 @@ import { Feed } from './feed.model'
 import { User } from '../user/user.model'
 import { ContentMetaService } from '../contentMeta/contentMeta.service'
 import { uploadToS3 } from '../../utils/s3'
-import { enrichFeedWithUserInfo, sendFeedNotificationToUser } from './feed.utils'
+import {
+  enrichFeedWithUserInfo,
+  sendFeedNotificationToUser,
+} from './feed.utils'
 import { FEED_STATUS, TFeedStatus } from './feed.constant'
 import { TUser } from '../user/user.interface'
-import { Types } from 'mongoose'
 
 const createFeedIntoDB = async (
   payload: TFeed,
@@ -69,22 +71,19 @@ const createFeedIntoDB = async (
   return feed
 }
 
-const getAllFeedsFromDB = async (query: Record<string, unknown>, userId: string) => {
-  // // Convert author string to ObjectId
-  // if (query.author) {
-  //   query.author = new Types.ObjectId(query.author as string)
-  // }
-  console.log(query);
-  
-
+const getAllFeedsFromDB = async (
+  query: Record<string, unknown>,
+  userId: string,
+) => {
   const feedQuery = new QueryBuilder(
-    Feed.find({ isDeleted: false, author: query.author }).populate([
+    Feed.find({ isDeleted: false }).populate([
       { path: 'author', select: 'firstName lastName expertise photoUrl' },
       { path: 'contentMeta', select: 'like comment likeBy' },
     ]),
     query,
   )
     .search(['description'])
+    .filter()
     .sort()
     .paginate()
     .fields()
@@ -196,7 +195,7 @@ const changeFeedStatus = async (
 
 const deleteAFeedFromDB = async (id: string) => {
   const feed = await Feed.findById(id)
-  if (feed?.isDeleted) {
+  if (!feed || feed?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Feed post already deleted!')
   }
 
