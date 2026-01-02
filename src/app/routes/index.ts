@@ -12,6 +12,7 @@ import { CommentsRoutes } from '../modules/comments/comments.route'
 import { ReplyRoutes } from '../modules/reply/reply.route'
 import { ReviewsRoutes } from '../modules/review/review.route'
 import { ReportRoutes } from '../modules/report/report.route'
+import { ChatRoutes } from '../modules/chat/chat.route'
 
 const router = Router()
 
@@ -55,6 +56,10 @@ const moduleRoutes = [
   {
     path: '/reply',
     route: ReplyRoutes,
+  },
+  {
+    path: '/chats',
+    route: ChatRoutes,
   },
   {
     path: '/reviews',
