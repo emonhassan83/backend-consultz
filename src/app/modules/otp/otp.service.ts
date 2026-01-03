@@ -155,7 +155,7 @@ const sendOtpInEmail = async (email: string) => {
         verification: {
           otp,
           expiresAt,
-          status: false,
+          status: true,
         },
       },
     },
@@ -222,7 +222,7 @@ const sendOtpInPhone = async (phoneNumber: string) => {
         verification: {
           otp,
           expiresAt,
-          status: false,
+          status: true,
         },
       },
     },
@@ -258,7 +258,6 @@ const sendOtpInPhone = async (phoneNumber: string) => {
 
     // টেস্টের জন্য OTP রিটার্ন করছি (প্রোডাকশনে এটা রিমুভ করবেন)
     return {
-      message: 'OTP generated (Mock mode - check console)',
       token,
       otp,
       mock: true,
