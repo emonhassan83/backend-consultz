@@ -1,3 +1,9 @@
+export const SESSION_TYPE = {
+  introduction: 'introduction',
+  discussion: 'discussion',
+  deep_drive: 'deep_drive'
+} as const
+
 export const PAYMENT_STATUS = {
   unpaid: 'unpaid',
   paid: 'paid',
@@ -12,5 +18,6 @@ export const BOOKING_STATUS = {
   cancelled: 'cancelled',
 } as const
 
+export type TSessionType = keyof typeof SESSION_TYPE
 export type TPaymentStatus = keyof typeof PAYMENT_STATUS
 export type TBookingStatus = keyof typeof BOOKING_STATUS

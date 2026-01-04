@@ -5,7 +5,7 @@ import { bookingsService } from './booking.service'
 import sendResponse from '../../utils/sendResponse'
 
 const createBookings = catchAsync(async (req: Request, res: Response) => {
-  const result = await bookingsService.createBookings(req.body)
+  const result = await bookingsService.createBookings(req.body, req.user._id)
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
@@ -14,14 +14,14 @@ const createBookings = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-const getAllBookingsWithReference = catchAsync(
+const getConsultBookings = catchAsync(
   async (req: Request, res: Response) => {
-    req.query['session'] = req.params.referenceId
+    req.query['consult'] = req.user._id
     const result = await bookingsService.getAllBookings(req.query)
     sendResponse(res, {
       statusCode: 200,
       success: true,
-      message: 'All bookings with reference fetched successfully',
+      message: 'Consult bookings fetched successfully',
       meta: result.meta,
       data: result.data,
     })
@@ -30,13 +30,13 @@ const getAllBookingsWithReference = catchAsync(
 
 const getMyBookings = catchAsync(async (req: Request, res: Response) => {
   req.query['user'] = req.user._id
-  const result = await bookingsService.getMyBookings(req.query)
+  const result = await bookingsService.getAllBookings(req.query)
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'My booking fetched successfully',
     meta: result.meta,
-    data: result.result,
+    data: result.data,
   })
 })
 
@@ -61,22 +61,12 @@ const getBookingsById = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-const updateBookings = catchAsync(async (req: Request, res: Response) => {
-  const result = await bookingsService.updateBookings(req.params.id, req.body)
+const changeBookingStatus = catchAsync(async (req: Request, res: Response) => {
+  const result = await bookingsService.changeBookingStatus(req.params.id, req.body)
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Bookings updated successfully',
-    data: result,
-  })
-})
-
-const cancelBooking = catchAsync(async (req: Request, res: Response) => {
-  const result = await bookingsService.cancelBooking(req.params.id)
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: 'Bookings canceled successfully',
+    message: 'Bookings status changed successfully',
     data: result,
   })
 })
@@ -90,16 +80,6 @@ const rescheduleBooking = catchAsync(async (req: Request, res: Response) => {
     statusCode: 200,
     success: true,
     message: 'Bookings reschedule successfully',
-    data: result,
-  })
-})
-
-const completeBooking = catchAsync(async (req: Request, res: Response) => {
-  const result = await bookingsService.completeBooking(req.params.id)
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: 'Bookings completed successfully',
     data: result,
   })
 })
@@ -118,11 +98,9 @@ export const bookingsController = {
   createBookings,
   getAllBookings,
   getBookingsById,
-  updateBookings,
   deleteBookings,
-  getAllBookingsWithReference,
+  getConsultBookings,
   getMyBookings,
-  completeBooking,
-  cancelBooking,
+  changeBookingStatus,
   rescheduleBooking
 }

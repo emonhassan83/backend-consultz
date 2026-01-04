@@ -3,63 +3,50 @@ import { bookingsController } from './booking.controller'
 import zodValidationRequest from '../../middleware/validateRequest'
 import { BookingsValidation } from './booking.validation'
 import auth from '../../middleware/auth'
-import { USER_ROLE } from '../User/user.constant'
+import { USER_ROLE } from '../user/user.constant'
 
 const router = Router()
 
 router.post(
   '/',
   zodValidationRequest(BookingsValidation.createValidationSchema),
-  auth(USER_ROLE.user),
+  auth(USER_ROLE.consult),
   bookingsController.createBookings,
 )
 
 router.patch(
-  '/complete/:id',
-  auth(USER_ROLE.admin, USER_ROLE.user),
-  bookingsController.completeBooking,
-)
-
-router.patch(
-  '/canceled/:id',
-  auth(USER_ROLE.admin, USER_ROLE.user),
-  bookingsController.cancelBooking,
+  '/status/:id',
+  auth(USER_ROLE.consult, USER_ROLE.expert),
+  bookingsController.changeBookingStatus,
 )
 
 router.patch(
   '/reschedule/:id',
-  auth(USER_ROLE.admin, USER_ROLE.user),
+  auth(USER_ROLE.consult, USER_ROLE.expert),
   bookingsController.rescheduleBooking,
-)
-
-router.put(
-  '/:id',
-  auth(USER_ROLE.admin, USER_ROLE.user),
-  zodValidationRequest(BookingsValidation.updateValidationSchema),
-  bookingsController.updateBookings,
 )
 
 router.delete(
   '/:id',
-  auth(USER_ROLE.admin, USER_ROLE.user),
+  auth(USER_ROLE.consult, USER_ROLE.expert),
   bookingsController.deleteBookings,
 )
 
 router.get(
-  '/my-bookings',
-  auth(USER_ROLE.user),
+  '/consult/my-bookings',
+  auth(USER_ROLE.consult),
   bookingsController.getMyBookings,
 )
 
 router.get(
-  '/reference/:referenceId',
-  auth(USER_ROLE.admin, USER_ROLE.trainer, USER_ROLE.user),
-  bookingsController.getAllBookingsWithReference,
+  '/expert/my-bookings',
+  auth(USER_ROLE.expert),
+  bookingsController.getConsultBookings,
 )
 
 router.get(
   '/:id',
-  auth(USER_ROLE.admin, USER_ROLE.user),
+  auth(USER_ROLE.consult, USER_ROLE.expert, USER_ROLE.admin),
   bookingsController.getBookingsById,
 )
 

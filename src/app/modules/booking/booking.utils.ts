@@ -1,101 +1,47 @@
-import moment from 'moment'
-import { messages } from '../Notification/notification.constant'
-import { modeType } from '../Notification/notification.interface'
-import { NotificationService } from '../Notification/notification.service'
-import { Session } from '../Session/session.model'
-import { SessionSlots } from '../SessionSlots/sessionSlots.model'
+import { messages } from '../notification/notification.constant'
+import { modeType } from '../notification/notification.interface'
 import { TBookings } from './booking.interface'
-import { WaitList } from '../WaitList/waitlist.model'
+import { sendNotification } from '../../utils/sentNotification'
 
 export const sendBookingsNotification = async (
   action: 'confirmed' | 'cancellation' | 'reschedule',
   booking: TBookings,
+  user: any,
 ) => {
-  const session = await Session.findById(booking?.session)
-  const slot = await SessionSlots.findById(booking?.slot)
+  if (!user?.fcmToken) return
 
-  const formatDate = (dateString: string) => {
-    return moment(dateString).format('MMMM D, YYYY')
-  }
+  const sessionInfo = `${booking.sessionDate} at ${booking.sessionTime} (${booking.timezone})`
 
-  const formattedDate = session?.startDate
-    ? formatDate(session?.startDate)
-    : 'Unknown Date'
-
-  // Define message and description based on type
-  let message
-  let description
+  let message = ''
+  let description = ''
 
   switch (action) {
     case 'confirmed':
-      message = messages.bookingManagement.bookingConfirmed
-      description = `You've successfully booked a ${session?.name} session on ${formattedDate} at ${slot?.startTime} at ${session?.location}.`
+      message = messages.booking.confirmed
+      description = `Your session has been confirmed for ${sessionInfo}. Please be available on time to get the most out of your consultation.`
       break
+
     case 'cancellation':
-      message = messages.bookingManagement.bookingCancelled
-      description = `Your ${session?.name} session on ${formattedDate} at ${slot?.startTime} at ${session?.location} has been cancelled successfully.`
+      message = messages.booking.cancellation
+      description = `Your session scheduled for ${sessionInfo} has been cancelled. If this was unexpected, you may contact support for assistance.`
       break
+
     case 'reschedule':
-      message = messages.bookingManagement.bookingRescheduled
-      description = `Your ${session?.name} session on ${formattedDate} at ${slot?.startTime} at ${session?.location} has been rescheduled successfully.`
+      message = messages.booking.rescheduled
+      description = `Your session has been rescheduled to ${sessionInfo}. Please review the updated schedule and prepare accordingly.`
       break
+
     default:
-      throw new Error('Invalid action type')
+      throw new Error('Invalid booking notification action')
   }
 
-  // Create a notification entry
-  await NotificationService.createNotificationIntoDB({
-    receiver: booking.user,
+  const notifyPayload = {
+    receiver: user._id,
     message,
     description,
-    // @ts-ignore
-    reference: booking?._id,
+    reference: booking._id as string,
     model_type: modeType.Booking,
-  })
-}
-
-export const bookingsOnendNotifyToUsers = async (
-  action: 'opened',
-  booking: any,
-) => {
-  const session = await Session.findById(booking?.session)
-  const slot = await SessionSlots.findById(booking?.slot)
-  const waitlists = await WaitList.find({ session: session?._id }).select(
-    'user',
-  )
-  const userIDs = waitlists.map((waitlist) => waitlist.user)
-
-  const formatDate = (dateString: string) => {
-    return moment(dateString).format('MMMM D, YYYY')
   }
 
-  const formattedDate = session?.startDate
-    ? formatDate(session?.startDate)
-    : 'Unknown Date'
-
-  // Define message and description based on type
-  let message
-  let description
-
-  switch (action) {
-    case 'opened':
-      message = messages.bookingManagement.bookingOpened
-      description = `A ${session?.name} session spot is now available for ${formattedDate} at ${slot?.startTime} session. You have to confirm before it's offered to the next user!`
-      break
-    default:
-      throw new Error('Invalid action type')
-  }
-
-  // ✅ Send notifications to each waitlisted user
-  await Promise.all(
-    userIDs.map((userId) =>
-      NotificationService.createNotificationIntoDB({
-        receiver: userId,
-        message,
-        description,
-        reference: booking?._id,
-        model_type: modeType.Booking,
-      }),
-    ),
-  )
+  await sendNotification([user.fcmToken], notifyPayload)
 }

@@ -1,6 +1,6 @@
 import { model, Schema } from 'mongoose'
 import { TBookings, TBookingsModules } from './booking.interface'
-import { BOOKING_STATUS, PAYMENT_STATUS } from './booking.constants'
+import { BOOKING_STATUS, PAYMENT_STATUS, SESSION_TYPE } from './booking.constants'
 
 const bookingsSchema = new Schema<TBookings>(
   {
@@ -9,19 +9,47 @@ const bookingsSchema = new Schema<TBookings>(
       ref: 'User',
       required: true,
     },
-    session: {
+    consult: {
       type: Schema.Types.ObjectId,
-      ref: 'Session',
+      ref: 'User',
       required: true,
     },
-    slot: {
-      type: Schema.Types.ObjectId,
-      ref: 'SessionSlots',
+    sessionType: {
+      type: String,
+      enum: Object.values(SESSION_TYPE),
       required: true,
     },
-    credit: {
+    sessionDuration: {
       type: Number,
-      default: 0,
+      required: true,
+    },
+    price: {
+      type: Number,
+      required: true,
+    },
+    sessionDate: {
+      type: String,
+      required: true,
+    },
+    sessionTime: {
+      type: String,
+      required: true,
+    },
+    timezone: {
+      type: String,
+      required: true,
+    },
+    mainQuestion: {
+      type: String,
+      required: true,
+    },
+    challengeQuestion: {
+      type: String,
+      required: true,
+    },
+    backgroundQuestion: {
+      type: String,
+      required: true,
     },
     paymentStatus: {
       type: String,

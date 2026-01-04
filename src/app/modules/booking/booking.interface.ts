@@ -1,12 +1,19 @@
 import { Model, ObjectId, Types } from 'mongoose'
-import { TBookingStatus, TPaymentStatus } from './booking.constants'
+import { TBookingStatus, TPaymentStatus, TSessionType } from './booking.constants'
 
 export interface TBookings {
   _id?: ObjectId | string
   user: Types.ObjectId
-  session: Types.ObjectId
-  slot: Types.ObjectId
-  credit: number
+  consult: Types.ObjectId
+  sessionType: TSessionType
+  sessionDuration: number
+  price: number
+  sessionDate: string
+  sessionTime: string
+  timezone: string
+  mainQuestion: string
+  challengeQuestion: string
+  backgroundQuestion: string
   paymentStatus: TPaymentStatus
   status: TBookingStatus
   isDeleted: boolean
