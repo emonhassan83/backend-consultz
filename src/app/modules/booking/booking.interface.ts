@@ -5,11 +5,10 @@ export interface TBookings {
   _id?: ObjectId | string
   user: Types.ObjectId
   consult: Types.ObjectId
+  slot: Types.ObjectId
   sessionType: TSessionType
   sessionDuration: number
   price: number
-  sessionDate: string
-  sessionTime: string
   timezone: string
   mainQuestion: string
   challengeQuestion: string

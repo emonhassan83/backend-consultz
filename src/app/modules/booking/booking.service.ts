@@ -6,17 +6,16 @@ import { BOOKING_STATUS, TBookingStatus } from './booking.constants'
 import AppError from '../../errors/AppError'
 import { Booking } from './booking.models'
 import { User } from '../user/user.model'
-import {
-  sendBookingsNotification,
-} from './booking.utils'
+import { sendBookingsNotification } from './booking.utils'
 import QueryBuilder from '../../builder/QueryBuilder'
+import { BookingSlots } from '../bookingSlots/bookingSlots.model'
 
 const createBookings = async (payload: TBookings, userId: string) => {
   const sessionClient = await mongoose.startSession()
   sessionClient.startTransaction()
 
   try {
-    const { consult: consultId } = payload
+    const { consult: consultId, slot: slotId } = payload
 
     // Find the user
     const userData = await User.findById(userId).session(sessionClient)
@@ -30,8 +29,19 @@ const createBookings = async (payload: TBookings, userId: string) => {
       throw new AppError(httpStatus.BAD_REQUEST, 'Consult not found!')
     }
 
+    // Find the slot
+    const slotTime = await BookingSlots.findById(slotId).session(sessionClient)
+    if (!slotTime) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Slot not found!')
+    }
+    if (slotTime.isBooked) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Slot already booked!')
+    }
+
     //assign payload values
-    payload.user = userData._id
+    payload.user = new mongoose.Types.ObjectId(userData._id)
+    payload.slot = new mongoose.Types.ObjectId(slotTime._id)
+    payload.timezone = consult.timeZone || 'UTC'
     payload.status = BOOKING_STATUS.pending
 
     // Create the booking
@@ -56,7 +66,8 @@ const getAllBookings = async (query: Record<string, any>) => {
   const bookingModel = new QueryBuilder(
     Booking.find().populate([
       { path: 'user', select: 'firstName lastName photoUrl email' },
-      { path: 'consult', select: 'firstName lastName photoUrl email' }
+      { path: 'consult', select: 'firstName lastName photoUrl email' },
+      { path: 'slot', select: 'date time' },
     ]),
     query,
   )
@@ -74,7 +85,8 @@ const getAllBookings = async (query: Record<string, any>) => {
 const getBookingsById = async (id: string) => {
   const result = await Booking.findById(id).populate([
     { path: 'user', select: 'firstName lastName photoUrl email' },
-    { path: 'consult', select: 'firstName lastName photoUrl email' }
+    { path: 'consult', select: 'firstName lastName photoUrl email' },
+    { path: 'slot', select: 'date time' },
   ])
 
   if (!result || result?.isDeleted) {
@@ -84,16 +96,12 @@ const getBookingsById = async (id: string) => {
   return result
 }
 
-const changeBookingStatus = async (
-  id: string,
-  status: TBookingStatus,
-) => {
+const changeBookingStatus = async (id: string, status: TBookingStatus) => {
   const session = await mongoose.startSession()
   session.startTransaction()
 
   try {
     const booking = await Booking.findById(id).session(session)
-
     if (!booking || booking.isDeleted) {
       throw new AppError(httpStatus.NOT_FOUND, 'Booking not found!')
     }
@@ -117,12 +125,18 @@ const changeBookingStatus = async (
     booking.status = BOOKING_STATUS.cancelled
     await booking.save({ session })
 
+    // Change slot to unbooked
+    const slot = await BookingSlots.findById(booking.slot).session(session)
+    if (slot) {
+      slot.isBooked = false
+      await slot.save({ session })
+    }
+
     // Fetch both parties
     const [user, consultant] = await Promise.all([
       User.findById(booking.user).session(session),
       User.findById(booking.consult).session(session),
     ])
-
     if (!user || user.isDeleted) {
       throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
     }
@@ -151,9 +165,7 @@ const changeBookingStatus = async (
 const rescheduleBooking = async (
   id: string,
   payload: {
-    sessionDate: string
-    sessionTime: string
-    timezone?: string
+    slot: string
   },
 ) => {
   const session = await mongoose.startSession()
@@ -161,7 +173,6 @@ const rescheduleBooking = async (
 
   try {
     const booking = await Booking.findById(id).session(session)
-
     if (!booking || booking.isDeleted) {
       throw new AppError(httpStatus.NOT_FOUND, 'Booking not found!')
     }
@@ -173,15 +184,31 @@ const rescheduleBooking = async (
       )
     }
 
-    booking.sessionDate = payload.sessionDate
-    booking.sessionTime = payload.sessionTime
-
-    if (payload.timezone) {
-      booking.timezone = payload.timezone
+    // check new slot
+    const newSlot = await BookingSlots.findById(payload.slot).session(session)
+    if (!newSlot) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Slot not found!')
+    }
+    if (newSlot.isBooked) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Slot already booked!')
     }
 
+    // Free up old slot
+    const oldSlot = await BookingSlots.findById(booking.slot).session(session)
+    if (oldSlot) {
+      oldSlot.isBooked = false
+      await oldSlot.save({ session })
+    }
+
+    // Update booking with new slot
+    booking.slot = new mongoose.Types.ObjectId(newSlot._id)
     await booking.save({ session })
 
+    // Mark new slot as booked
+    newSlot.isBooked = true
+    await newSlot.save({ session })
+
+    // Fetch user
     const user = await User.findById(booking.user).session(session)
     if (!user || user.isDeleted) {
       throw new AppError(httpStatus.NOT_FOUND, 'User not found!')

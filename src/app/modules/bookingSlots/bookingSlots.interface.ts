@@ -5,6 +5,7 @@ export type TBookingSlots = {
   author: Types.ObjectId
   date: string
   time: string
+  isBooked: boolean
 }
 
 export type TBookingSlotsModel = Model<TBookingSlots, Record<string, unknown>>

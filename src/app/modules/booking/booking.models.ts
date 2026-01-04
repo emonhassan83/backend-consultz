@@ -14,6 +14,11 @@ const bookingsSchema = new Schema<TBookings>(
       ref: 'User',
       required: true,
     },
+    slot: {
+      type: Schema.Types.ObjectId,
+      ref: 'BookingSlots',
+      required: true,
+    },
     sessionType: {
       type: String,
       enum: Object.values(SESSION_TYPE),
@@ -25,14 +30,6 @@ const bookingsSchema = new Schema<TBookings>(
     },
     price: {
       type: Number,
-      required: true,
-    },
-    sessionDate: {
-      type: String,
-      required: true,
-    },
-    sessionTime: {
-      type: String,
       required: true,
     },
     timezone: {
