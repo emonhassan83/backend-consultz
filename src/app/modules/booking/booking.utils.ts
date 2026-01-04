@@ -2,16 +2,18 @@ import { messages } from '../notification/notification.constant'
 import { modeType } from '../notification/notification.interface'
 import { TBookings } from './booking.interface'
 import { sendNotification } from '../../utils/sentNotification'
+import { TBookingSlots } from '../bookingSlots/bookingSlots.interface'
 
 export const sendBookingsNotification = async (
   action: 'confirmed' | 'cancellation' | 'reschedule',
   booking: TBookings,
   user: any,
+  slot: TBookingSlots
 ) => {
   if (!user?.fcmToken) return
 
-  const sessionInfo = `${booking.sessionDate} at ${booking.sessionTime} (${booking.timezone})`
-
+  const sessionInfo = `${slot.date} at ${slot.time} (${booking.timezone})`
+  
   let message = ''
   let description = ''
 

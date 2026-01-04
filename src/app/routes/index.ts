@@ -17,6 +17,7 @@ import { MessagesRoutes } from '../modules/messages/messages.route'
 import { uploadRouter } from '../modules/uploads/route'
 import { BookingsRoutes } from '../modules/booking/booking.route'
 import { BookingSlotsRoutes } from '../modules/bookingSlots/bookingSlots.route'
+import { PaymentRoutes } from '../modules/payment/payment.route'
 
 const router = Router()
 
@@ -68,6 +69,10 @@ const moduleRoutes = [
   {
     path: '/bookings',
     route: BookingsRoutes,
+  },
+  {
+    path: '/payments',
+    route: PaymentRoutes,
   },
   {
     path: '/chats',
