@@ -8,7 +8,7 @@ export const sendBookingsNotification = async (
   action: 'confirmed' | 'cancellation' | 'reschedule',
   booking: TBookings,
   user: any,
-  slot: TBookingSlots
+  slot: any
 ) => {
   if (!user?.fcmToken) return
 

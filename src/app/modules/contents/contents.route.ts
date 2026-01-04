@@ -25,6 +25,4 @@ router.get('/:id', contentsController.getContentsById)
 
 router.get('/', contentsController.getAllContents)
 
-router.delete('/:id', contentsController.deleteContents)
-
 export const contentsRoutes = router

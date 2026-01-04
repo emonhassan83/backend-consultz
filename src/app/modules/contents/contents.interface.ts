@@ -7,6 +7,8 @@ export interface TContents {
   privacyPolicy?: string
   supports?: string
   faq?: string
+  paymentHoldDays?: number
+  consultationFee?: number
   createdBy: Types.ObjectId
   isDeleted?: boolean
 }

@@ -18,6 +18,12 @@ const contentsSchema = new Schema<TContents>(
     faq: {
       type: String,
     },
+    paymentHoldDays: {
+      type: Number
+    },
+    consultationFee: {
+      type: Number,
+    },
     isDeleted: {
       type: Boolean,
       default: false,

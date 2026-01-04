@@ -12,7 +12,9 @@ const createValidationSchema = z.object({
     supports: z
       .string({ required_error: 'supports us is required' })
       .optional(),
-    faq: z.string({ required_error: 'supports us is required' }).optional(),
+    faq: z.string({ required_error: 'faq is required' }).optional(),
+    paymentHoldDays: z.number({ required_error: 'paymentHoldDays is required' }).optional(),
+    consultationFee: z.number({ required_error: 'consultationFee is required' }).optional(),
   }),
 })
 
@@ -30,17 +32,12 @@ const updateValidationSchema = z.object({
       .optional(),
     faq: z.string({ required_error: 'supports us is required' }).optional(),
     createBy: z.string({ required_error: 'createBy is required' }).optional(),
-  }),
-})
-
-const increaseMaxMembersValidation = z.object({
-  body: z.object({
-    maxMembers: z.number({ required_error: 'maxMembers is required' }).optional(),
+    paymentHoldDays: z.number({ required_error: 'paymentHoldDays is required' }).optional(),
+    consultationFee: z.number({ required_error: 'consultationFee is required' }).optional(),
   }),
 })
 
 export const contentsValidation = {
   createValidationSchema,
-  updateValidationSchema,
-  increaseMaxMembersValidation
+  updateValidationSchema
 }

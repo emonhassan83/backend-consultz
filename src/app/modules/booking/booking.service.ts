@@ -147,8 +147,8 @@ const changeBookingStatus = async (id: string, status: TBookingStatus) => {
 
     // 🔔 Notify both user & consultant
     await Promise.all([
-      sendBookingsNotification('cancellation', booking, user),
-      sendBookingsNotification('cancellation', booking, consultant),
+      sendBookingsNotification('cancellation', booking, user, slot),
+      sendBookingsNotification('cancellation', booking, consultant, slot),
     ])
 
     await session.commitTransaction()
@@ -215,7 +215,7 @@ const rescheduleBooking = async (
     }
 
     // Notify user after reschedule
-    await sendBookingsNotification('reschedule', booking, user)
+    await sendBookingsNotification('reschedule', booking, user, newSlot)
 
     await session.commitTransaction()
     session.endSession()
