@@ -20,9 +20,7 @@ const createValidationSchema = z.object({
 
     cvc: z.string({
       required_error: 'CVC is required',
-    }).min(3, 'CVC must be valid'),
-
-    isDeleted: z.boolean().optional(),
+    }).min(3, 'CVC must be valid')
   }),
 })
 

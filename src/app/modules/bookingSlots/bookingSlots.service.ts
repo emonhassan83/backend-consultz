@@ -4,21 +4,89 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { TBookingSlots } from './bookingSlots.interface'
 import { BookingSlots } from './bookingSlots.model'
 import { User } from '../user/user.model'
+import dayjs from 'dayjs'
 
-const insertIntoDB = async (payload: TBookingSlots) => {
-  const { author: authorId } = payload
+const insertIntoDB = async (
+  payload: TBookingSlots,
+  query: { year?: string; month?: string },
+) => {
+  const { author } = payload
+  const year = Number(query.year)
+  const month = Number(query.month) // 1–12
 
-  const user = await User.findById(authorId)
-  if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.CONFLICT, 'Session is not found!')
+  if (!year || !month) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Year and month are required')
   }
 
-  const slots = await BookingSlots.create(payload)
-  if (!slots) {
-    throw new AppError(httpStatus.CONFLICT, 'Session slots not created!')
+  /* ============================
+     1. Validate Expert
+  ============================ */
+  const user = await User.findById(author)
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Expert not found!')
   }
 
-  return slots
+  if (!user.availability?.length) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Expert availability not set')
+  }
+
+  /* ============================
+     2. Prevent Duplicate Creation
+  ============================ */
+  const monthPrefix = `${year}-${month.toString().padStart(2, '0')}`
+
+  const exists = await BookingSlots.findOne({
+    author,
+    date: { $regex: `^${monthPrefix}` },
+  })
+
+  if (exists) {
+    return {
+      message: 'Booking slots already exist for this month',
+    }
+  }
+
+  /* ============================
+     3. Generate Slots
+  ============================ */
+  const daysInMonth = dayjs(`${year}-${month}-01`).daysInMonth()
+  const slotsToInsert: any[] = []
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = dayjs(`${year}-${month}-${d}`)
+    const weekDay = date.day() // 0–6
+
+    user.availability.forEach((a) => {
+      if (DAY_MAP[a.day] === weekDay) {
+        const hourlySlots = generateHourlySlots(a.from, a.to)
+
+        hourlySlots.forEach((time) => {
+          slotsToInsert.push({
+            author,
+            date: date.format('YYYY-MM-DD'),
+            time,
+            isBooked: false,
+          })
+        })
+      }
+    })
+  }
+
+  if (!slotsToInsert.length) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'No slots generated from availability',
+    )
+  }
+
+  /* ============================
+     4. Insert Slots
+  ============================ */
+  const result = await BookingSlots.insertMany(slotsToInsert, {
+    ordered: false,
+  })
+
+  return result
 }
 
 const getAllIntoFromDB = async (query: Record<string, unknown>) => {
