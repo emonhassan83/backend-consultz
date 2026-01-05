@@ -1,33 +1,39 @@
 import mongoose, { Schema } from 'mongoose';
-import { IReport, IReportModel } from './card.interface';
-import { REPORT_STATUS } from './card.constant';
+import { ICard, ICardModel } from './card.interface';
 
-const reportSchema: Schema<IReport> = new Schema(
+const cardSchema: Schema<ICard> = new Schema(
   {
     author: {
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
     },
-    feed: {
-      type: Schema.Types.ObjectId,
-      refPath: 'Feed',
-      required: true,
-    },
-    reason: {
+    holderName: {
       type: String,
       required: true,
     },
-    status: {
+    cardNumber: {
       type: String,
-      enum: Object.values(REPORT_STATUS),
-      default: REPORT_STATUS.pending,
+      required: true,
+    },
+    expiryDate: {
+      type: String,
+      required: true,
+    },
+    cvc: {
+      type: String,
+      required: true,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+      required: true,
     },
   },
   { timestamps: true },
 );
 
-export const Report = mongoose.model<IReport, IReportModel>(
-  'Report',
-  reportSchema,
+export const Card = mongoose.model<ICard, ICardModel>(
+  'Card',
+  cardSchema,
 );

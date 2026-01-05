@@ -1,12 +1,13 @@
 import { Model, Types } from 'mongoose';
-import { TReportStatus } from './card.constant';
 
-export interface IReport {
+export interface ICard {
   _id: Types.ObjectId;
   author: Types.ObjectId;
-  feed: Types.ObjectId;
-  reason: string;
-  status: TReportStatus;
+  holderName: string;
+  cardNumber: string;
+  expiryDate: string;
+  cvc: string;
+  isDeleted: boolean;
 }
 
-export type IReportModel = Model<IReport, Record<string, unknown>>;
+export type ICardModel = Model<ICard, Record<string, unknown>>;

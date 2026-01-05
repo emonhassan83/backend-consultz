@@ -1,39 +1,44 @@
 import mongoose from 'mongoose'
 import { z } from 'zod'
-import { REPORT_STATUS } from './card.constant'
 
-// Define the Zod validation schema
+/* ============================
+   Create Card Validation
+============================ */
 const createValidationSchema = z.object({
   body: z.object({
-    feed: z.string().refine((val) => mongoose.Types.ObjectId.isValid(val), {
-      message: 'Invalid feed ID',
-    }),
-    reason: z.string({
-      required_error: 'Report reason is required !',
-    }),
+    holderName: z.string({
+      required_error: 'Card holder name is required',
+    }).min(1, 'Card holder name cannot be empty'),
+
+    cardNumber: z.string({
+      required_error: 'Card number is required',
+    }).min(12, 'Card number must be valid'),
+
+    expiryDate: z.string({
+      required_error: 'Expiry date is required',
+    }).min(1, 'Expiry date cannot be empty'),
+
+    cvc: z.string({
+      required_error: 'CVC is required',
+    }).min(3, 'CVC must be valid'),
+
+    isDeleted: z.boolean().optional(),
   }),
 })
 
+/* ============================
+   Update Card Validation
+============================ */
 const updateValidationSchema = z.object({
   body: z.object({
-    reason: z
-      .string({
-        required_error: 'Report reason is required !',
-      })
-      .optional(),
+    holderName: z.string().min(1).optional(),
+    cardNumber: z.string().min(12).optional(),
+    expiryDate: z.string().min(1).optional(),
+    cvc: z.string().min(3).optional()
   }),
 })
 
-const changeStatusValidationSchema = z.object({
-  body: z.object({
-    status: z.enum(Object.values(REPORT_STATUS) as [string, ...string[]], {
-      required_error: 'Report status is required!',
-    }),
-  }),
-})
-
-export const ReportValidation = {
+export const CardValidation = {
   createValidationSchema,
   updateValidationSchema,
-  changeStatusValidationSchema,
 }

@@ -1,98 +1,70 @@
 import { Request, Response } from 'express';
 import catchAsync from '../../utils/catchAsync';
-import { ReportService } from './card.service';
+import { CardService } from './card.service';
 import sendResponse from '../../utils/sendResponse';
 import httpStatus from 'http-status';
 
-const createReport = catchAsync(async (req: Request, res: Response) => {
-  const result = await ReportService.createReport(req.body, req.user._id);
+const createCard = catchAsync(async (req: Request, res: Response) => {
+  const result = await CardService.createCard(req.body, req.user._id);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Report added successfully',
+    message: 'Card added successfully',
     data: result,
   });
 });
 
-const getAllReport = catchAsync(async (req: Request, res: Response) => {
-  const result = await ReportService.getAllReport(req.query);
+const getAllCard = catchAsync(async (req: Request, res: Response) => {
+  req.query['author'] = req.user._id;
+  const result = await CardService.getAllCard(req.query);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Report histories fetched successfully',
+    message: 'Card histories fetched successfully',
     meta: result.meta,
     data: result.data,
   });
 });
 
-const getMyReport = catchAsync(async (req: Request, res: Response) => {
-  req.query['author'] = req.user.userId;
-  const result = await ReportService.getAllReport(req.query);
+const getCardById = catchAsync(async (req: Request, res: Response) => {
+  const result = await CardService.getCardById(req.params.id);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Report histories fetched successfully',
-    meta: result.meta,
-    data: result.data,
-  });
-});
-
-const getReportById = catchAsync(async (req: Request, res: Response) => {
-  const result = await ReportService.getReportById(req.params.id);
-
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Report history fetched successfully',
+    message: 'Card history fetched successfully',
     data: result,
   });
 });
 
-const updateReport = catchAsync(async (req: Request, res: Response) => {
-  const result = await ReportService.updateReport(req.params.id, req.body);
+const updateCard = catchAsync(async (req: Request, res: Response) => {
+  const result = await CardService.updateCard(req.params.id, req.body);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Report history updated successfully',
+    message: 'Card history updated successfully',
     data: result,
   });
 });
 
-const changeStatusReport = catchAsync(async (req: Request, res: Response) => {
-  const result = await ReportService.changeStatusReport(
-    req.params.id,
-    req.body,
-  );
+const deleteCard = catchAsync(async (req: Request, res: Response) => {
+  const result = await CardService.deleteCard(req.params.id);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Report history status change successfully',
+    message: 'Card history deleted successfully',
     data: result,
   });
 });
 
-const deleteReport = catchAsync(async (req: Request, res: Response) => {
-  const result = await ReportService.deleteReport(req.params.id);
-
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Report history deleted successfully',
-    data: result,
-  });
-});
-
-export const ReportController = {
-  createReport,
-  getAllReport,
-  getMyReport,
-  getReportById,
-  updateReport,
-  changeStatusReport,
-  deleteReport,
+export const CardController = {
+  createCard,
+  getAllCard,
+  getCardById,
+  updateCard,
+  deleteCard,
 };
