@@ -5,7 +5,7 @@ import { reviewsService } from './review.service'
 import sendResponse from '../../utils/sendResponse'
 
 const createReviews = catchAsync(async (req: Request, res: Response) => {
-  const result = await reviewsService.createReviews(req.body)
+  const result = await reviewsService.createReviews(req.body, req.user._id)
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -14,14 +14,14 @@ const createReviews = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-const getAllReviewsWithReference = catchAsync(
+const getReviewsByExpert = catchAsync(
   async (req: Request, res: Response) => {
-    req.query['reference'] = req.params.referenceId
+    req.query['expert'] = req.params.expertId
     const result = await reviewsService.getAllReviews(req.query)
     sendResponse(res, {
       statusCode: 200,
       success: true,
-      message: 'All bookings with reference fetched successfully',
+      message: 'All bookings with expert fetched successfully',
       meta: result.meta,
       data: result.data,
     })
@@ -60,7 +60,7 @@ const deleteReviews = catchAsync(async (req: Request, res: Response) => {
 
 export const reviewsController = {
   createReviews,
-  getAllReviewsWithReference,
+  getReviewsByExpert,
   getReviewsById,
   updateReviews,
   deleteReviews,

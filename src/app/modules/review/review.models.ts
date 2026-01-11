@@ -11,9 +11,14 @@ const reviewsSchema = new Schema<TReviews>(
       ref: 'User',
       required: true,
     },
-    reference: {
+    expert: {
       type: Schema.Types.ObjectId,
-      refPath: 'User',
+      ref: 'User',
+      required: true,
+    },
+    booking: {
+      type: Schema.Types.ObjectId,
+      refPath: 'Booking',
       required: true,
     },
     review: {

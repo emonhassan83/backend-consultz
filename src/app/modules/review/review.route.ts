@@ -28,9 +28,9 @@ router.delete(
 )
 
 router.get(
-  '/reference/:referenceId',
+  '/expert/:expertId',
   auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult),
-  reviewsController.getAllReviewsWithReference,
+  reviewsController.getReviewsByExpert,
 )
 
 router.get(

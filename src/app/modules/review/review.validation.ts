@@ -2,8 +2,8 @@ import { z } from 'zod'
 
 const createValidationSchema = z.object({
   body: z.object({
-    reference: z.string({
-      required_error: 'Reviews reference is Required',
+    booking: z.string({
+      required_error: 'Reviews booking is Required',
     }),
     review: z.string({
       required_error: 'Reviews description is Required',
