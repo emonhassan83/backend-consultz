@@ -7,16 +7,60 @@ import { Card } from './card.models'
 import mongoose from 'mongoose'
 
 const createCard = async (payload: ICard, userId: string) => {
-  // 1. Validate Author
+  /* ============================
+     1. Validate Author
+  ============================ */
   const author = await User.findById(userId)
   if (!author || author.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Author not found!')
   }
 
-  // set author
+  /* ============================
+     2. Validate Expiry Date
+  ============================ */
+  const [month, year] = payload.expiryDate.split('/').map(Number)
+
+  if (!month || !year || month < 1 || month > 12) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid expiry date format')
+  }
+
+  const expiry = new Date(2000 + year, month) // end of expiry month
+  const now = new Date()
+
+  if (expiry <= now) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Card is expired')
+  }
+
+  /* ============================
+     3. Check Existing Card
+  ============================ */
+  const existingCard = await Card.findOne({
+    author: userId,
+    cardNumber: payload.cardNumber,
+    isDeleted: false,
+  })
+
+  if (existingCard) {
+    // Check if existing card is expired
+    const [exMonth, exYear] = existingCard.expiryDate.split('/').map(Number)
+
+    const existingExpiry = new Date(2000 + exYear, exMonth)
+
+    if (existingExpiry <= now) {
+      // Soft delete expired card
+      await Card.findByIdAndUpdate(existingCard._id, {
+        isDeleted: true,
+      })
+    } else {
+      throw new AppError(httpStatus.CONFLICT, 'Card already exists')
+    }
+  }
+
+  /* ============================
+     4. Create Card
+  ============================ */
   payload.author = new mongoose.Types.ObjectId(userId)
 
-  // Create Card
   const card = await Card.create(payload)
   if (!card) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Card creation failed!')
@@ -37,42 +81,50 @@ const getAllCard = async (query: Record<string, any>) => {
     .paginate()
     .sort()
 
-  const data: any = await CardModel?.modelQuery
+  const cards: any = await CardModel?.modelQuery
   const meta = await CardModel?.countTotal()
+
+  const data = cards.map((card: any) => ({
+    ...card.toObject(),
+    status: getCardStatus(card.expiryDate),
+  }))
 
   return { data, meta }
 }
 
 const getCardById = async (id: string) => {
-  const result = await Card.findById(id).populate([
+  const card = await Card.findById(id).populate([
     { path: 'author', select: 'firstName lastName photoUrl email' },
   ])
-  if (!result || result.isDeleted) {
+  if (!card || card.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Card history not found!')
+  }
+
+  return {
+    ...card.toObject(),
+    status: getCardStatus(card.expiryDate),
+  }
+}
+
+const updateCard = async (id: string, payload: Partial<ICard>) => {
+  const card = await Card.findById(id)
+  if (!card || card?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Card not found!')
+  }
+
+  const result = await Card.findByIdAndUpdate(id, payload, {
+    new: true,
+  })
+  if (!result) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Card updated failed !')
   }
 
   return result
 }
 
-const updateCard = async (id: string, payload: Partial<ICard>) => {
-  const card = await Card.findById(id)
-  if (!card || card.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Card not found!')
-  }
-
-  const updatedCard = await Card.findByIdAndUpdate(id, payload, {
-    new: true,
-  })
-  if (!updatedCard) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Card updated failed !')
-  }
-
-  return updatedCard
-}
-
 const deleteCard = async (id: string) => {
   const card = await Card.findById(id)
-  if (!card || card.isDeleted) {
+  if (!card || card?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Card not found!')
   }
 

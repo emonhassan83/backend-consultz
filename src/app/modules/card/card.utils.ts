@@ -1,20 +1,10 @@
-import { NotificationService } from '../notification/notification.service';
-import { modeType } from '../notification/notification.interface';
-import { User } from '../user/user.model';
+const getCardStatus = (expiryDate: string) => {
+  const [month, year] = expiryDate.split('/').map(Number)
 
-export const sendContentBlockedNotification = async (
-  authorId: string
-) => {
-  const user = await User.findById(authorId);
-  if (!user) return;
+  if (!month || !year) return 'expired'
 
-  const message = `Your feed has been blocked`;
-  const description = `Dear ${user.firstName}, your feed was reported and has been soft deleted due to policy violation.`;
+  const expiry = new Date(2000 + year, month)
+  const now = new Date()
 
-  await NotificationService.createNotificationIntoDB({
-    receiver: user._id,
-    message,
-    description,
-    modelType: modeType.Feed,
-  });
-};
+  return expiry <= now ? 'expired' : 'active'
+}

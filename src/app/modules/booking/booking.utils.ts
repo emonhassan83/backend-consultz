@@ -2,7 +2,6 @@ import { messages } from '../notification/notification.constant'
 import { modeType } from '../notification/notification.interface'
 import { TBookings } from './booking.interface'
 import { sendNotification } from '../../utils/sentNotification'
-import { TBookingSlots } from '../bookingSlots/bookingSlots.interface'
 
 export const sendBookingsNotification = async (
   action: 'confirmed' | 'cancellation' | 'reschedule',

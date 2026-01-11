@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { Types } from 'mongoose'
 import {
   BOOKING_STATUS,
-  PAYMENT_STATUS,
   SESSION_TYPE,
 } from './booking.constants'
 
@@ -24,8 +23,6 @@ const createValidationSchema = z.object({
       .number()
       .positive('Session duration must be greater than 0'),
     price: z.number().nonnegative('Price must be zero or a positive number'),
-    sessionDate: z.string().min(1, 'Session date is required'),
-    sessionTime: z.string().min(1, 'Session time is required'),
     timezone: z.string().min(1, 'Timezone is required').optional(),
     mainQuestion: z.string().min(1, 'Main question is required'),
     challengeQuestion: z.string().min(1, 'Challenge question is required'),

@@ -40,6 +40,19 @@ const getMyReport = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getReportsByFeed = catchAsync(async (req: Request, res: Response) => {
+  req.query['feed'] = req.params.feedId;
+  const result = await ReportService.getAllReport(req.query);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Report histories fetched successfully',
+    meta: result.meta,
+    data: result.data,
+  });
+});
+
 const getReportById = catchAsync(async (req: Request, res: Response) => {
   const result = await ReportService.getReportById(req.params.id);
 
@@ -91,6 +104,7 @@ export const ReportController = {
   createReport,
   getAllReport,
   getMyReport,
+  getReportsByFeed,
   getReportById,
   updateReport,
   changeStatusReport,

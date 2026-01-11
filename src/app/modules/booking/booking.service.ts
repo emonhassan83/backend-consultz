@@ -1,7 +1,6 @@
 import mongoose from 'mongoose'
 import httpStatus from 'http-status'
 import { TBookings } from './booking.interface'
-import moment from 'moment'
 import { BOOKING_STATUS, TBookingStatus } from './booking.constants'
 import AppError from '../../errors/AppError'
 import { Booking } from './booking.models'
@@ -64,7 +63,10 @@ const createBookings = async (payload: TBookings, userId: string) => {
 
 const getAllBookings = async (query: Record<string, any>) => {
   const bookingModel = new QueryBuilder(
-    Booking.find().populate([
+    Booking.find({
+      isDeleted: false,
+      status: { $ne: BOOKING_STATUS.pending || BOOKING_STATUS.cancelled },
+    }).populate([
       { path: 'user', select: 'firstName lastName photoUrl email' },
       { path: 'consult', select: 'firstName lastName photoUrl email' },
       { path: 'slot', select: 'date time' },
@@ -83,13 +85,16 @@ const getAllBookings = async (query: Record<string, any>) => {
 }
 
 const getBookingsById = async (id: string) => {
-  const result = await Booking.findById(id).populate([
+  const result = await Booking.findOne({
+    _id: id,
+    status: { $ne: BOOKING_STATUS.pending || BOOKING_STATUS.cancelled },
+    isDeleted: false
+  }).populate([
     { path: 'user', select: 'firstName lastName photoUrl email' },
     { path: 'consult', select: 'firstName lastName photoUrl email' },
     { path: 'slot', select: 'date time' },
   ])
-
-  if (!result || result?.isDeleted) {
+  if (!result) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Bookings not found!')
   }
 
