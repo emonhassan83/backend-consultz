@@ -1,52 +1,88 @@
 import httpStatus from 'http-status'
 import { TReviews } from './review.interface'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { getAverageRating } from './review.utils'
 import { ClientSession, startSession } from 'mongoose'
 import { Reviews } from './review.models'
 import AppError from '../../errors/AppError'
 import { User } from '../user/user.model'
+import { Booking } from '../booking/booking.models'
 
-const createReviews = async (payload: TReviews, userId: string) => {
-  const { booking: bookingId } = payload
-
-  const refUser = await User.findById(userId)
-  if (!refUser || refUser?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, `User not found!`)
-  }
-
+const createReviews = async (
+  payload: Omit<TReviews, 'user' | 'expert'>,
+  userId: string,
+) => {
   const session: ClientSession = await startSession()
   session.startTransaction()
 
   try {
-    // Create the review
-    const result: TReviews[] = await Reviews.create([payload], { session })
-    if (!result || result.length === 0) {
+    // 1. Validate user (single lean query - faster)
+    const user = await User.findOne(
+      { _id: userId, isDeleted: false },
+      { _id: 1 },
+    )
+      .session(session)
+      .lean()
+
+    if (!user) {
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found or deleted!')
+    }
+
+    // 2. Validate booking & get expert (populate expert in one query)
+    const booking = await Booking.findOne(
+      { _id: payload.booking, isDeleted: false },
+      { consult: 1 },
+    )
+      .session(session)
+      .lean()
+
+    if (!booking || !booking.consult) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found or invalid!')
+    }
+
+    // 3. Prepare final payload
+    const finalPayload = {
+      ...payload,
+      user: user._id,
+      expert: booking.consult,
+    }
+
+    // 4. Create review in transaction
+    const [newReview] = await Reviews.create([finalPayload], { session })
+
+    if (!newReview) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Failed to create review')
     }
 
-    // Calculate the new average rating
-    const { averageRating, totalReviews } = await getAverageRating(
-      result[0]?.booking?.toString(),
-    )
-
-    const newAvgRating =
-      (Number(averageRating) * Number(totalReviews) + Number(payload.rating)) /
-      (totalReviews + 1)
-
-    await User.findByIdAndUpdate(
-      result[0].booking,
+    // 5. Calculate new average rating (optimized aggregation)
+    const ratingStats = await Reviews.aggregate([
+      { $match: { expert: booking.consult } },
       {
-        avgRating: newAvgRating.toFixed(2),
-        $addToSet: { reviews: result[0]?._id },
+        $group: {
+          _id: null,
+          totalRating: { $sum: '$rating' },
+          count: { $sum: 1 },
+        },
       },
-      { session },
+    ]).session(session)
+
+    const { totalRating = 0, count = 0 } = ratingStats[0] || {}
+    const newAvgRating = count > 0 ? totalRating / count : 0
+
+    // 6. Update expert's avgRating & push review ID (atomic update)
+    await User.findByIdAndUpdate(
+      booking.consult,
+      {
+        avgRating: Number(newAvgRating.toFixed(2)),
+        $addToSet: { reviews: newReview._id },
+      },
+      { session, new: true },
     )
 
+    // 7. Commit transaction
     await session.commitTransaction()
     session.endSession()
 
-    return result[0]
+    return newReview
   } catch (error: any) {
     await session.abortTransaction()
     session.endSession()
@@ -58,33 +94,72 @@ const createReviews = async (payload: TReviews, userId: string) => {
 }
 
 const getAllReviews = async (query: Record<string, any>) => {
+  const { expert, booking, sort } = query
+
   const reviewsModel = new QueryBuilder(
-    Reviews.find().populate([{ path: 'user', select: 'name email photoUrl' }]),
+    Reviews.find().populate([
+      { path: 'user', select: 'firstName lastName photoUrl' },
+      { path: 'booking', select: 'sessionType' },
+    ]),
     query,
   )
-    .search([''])
+    .search(['review'])
     .filter()
+    .sortByCustom() // custom sort (latest, highest, lowest)
     .paginate()
-    .sort()
     .fields()
 
   const data = await reviewsModel.modelQuery
   const meta = await reviewsModel.countTotal()
 
+  const ratingBreakdown = await Reviews.aggregate([
+    {
+      $match: reviewsModel.modelQuery.getFilter(),
+    },
+    {
+      $group: {
+        _id: '$rating',
+        count: { $sum: 1 },
+      },
+    },
+  ])
+
+  // ৫টি ক্যাটাগরিতে কাউন্ট ম্যাপ করা
+  const countMap = {
+    excellent: 0, // 5
+    veryGood: 0, // 4
+    good: 0, // 3
+    fair: 0, // 2
+    poor: 0, // 1
+  }
+
+  ratingBreakdown.forEach((item) => {
+    const rating = item._id
+    if (rating === 5) countMap.excellent = item.count
+    else if (rating === 4) countMap.veryGood = item.count
+    else if (rating === 3) countMap.good = item.count
+    else if (rating === 2) countMap.fair = item.count
+    else if (rating === 1) countMap.poor = item.count
+  })
+
   return {
-    data,
     meta,
+    data: {
+      ratingBreakdown: countMap,
+      reviews: data,
+    },
   }
 }
 
 const getReviewsById = async (id: string) => {
   const result = await Reviews.findById(id).populate([
-    { path: 'booking' },
-    { path: 'user', select: 'name email photoUrl' },
+    { path: 'user', select: 'firstName lastName photoUrl' },
+    { path: 'booking', select: 'sessionType' },
   ])
   if (!result) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Reviews not found!')
   }
+
   return result
 }
 
