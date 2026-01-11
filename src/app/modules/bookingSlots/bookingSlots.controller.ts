@@ -21,8 +21,7 @@ const getAllBookingSlots = catchAsync(async (req, res) => {
     success: true,
     statusCode: 200,
     message: 'Booking slots retrieved successfully!',
-    meta: result.meta,
-    data: result.result,
+    data: result,
   })
 })
 

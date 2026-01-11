@@ -3,6 +3,7 @@ import config from '../../config'
 import { Schema, model } from 'mongoose'
 import { TUser, UserModel } from './user.interface'
 import {
+  DAY_MAP,
   REGISTER_WITH,
   registerWith,
   USER_ROLE,
@@ -23,7 +24,7 @@ const EducationSchema = new Schema(
 // 📅 Availability
 const AvailabilitySchema = new Schema(
   {
-    day: { type: String, required: true },
+    day: { type: String, enum: Object.values(DAY_MAP), required: true },
     from: { type: String, required: true },
     to: { type: String, required: true },
   },

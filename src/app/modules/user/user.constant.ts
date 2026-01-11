@@ -4,6 +4,16 @@ export const USER_ROLE = {
   consult: 'consult',
 } as const
 
+export const DAY_MAP = {
+  sun: 'sun',
+  mon: 'mon',
+  tue: 'tue',
+  wed: 'wed',
+  thu: 'thu',
+  fri: 'fri',
+  sat: 'sat',
+} as const
+
 export const REGISTER_WITH = {
   google: 'google',
   linkedin: 'linkedin',
@@ -22,8 +32,9 @@ export const registerWith = [
   REGISTER_WITH.credentials,
 ]
 
+export type TDaysMap = keyof typeof DAY_MAP
 export type TRegisterWith = keyof typeof REGISTER_WITH
 export type TUserRole = keyof typeof USER_ROLE
 export type TUserStatus = keyof typeof USER_STATUS
 
-export const UserSearchableFields = ['id', 'name', 'email', 'status']
+export const UserSearchableFields = ['name']

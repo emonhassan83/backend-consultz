@@ -1,10 +1,10 @@
 import httpStatus from 'http-status'
 import AppError from '../../errors/AppError'
-import QueryBuilder from '../../builder/QueryBuilder'
 import { TBookingSlots } from './bookingSlots.interface'
 import { BookingSlots } from './bookingSlots.model'
 import { User } from '../user/user.model'
 import dayjs from 'dayjs'
+import { DAY_MAP, generateHourlySlots } from './bookingSlots.utils'
 
 const insertIntoDB = async (
   payload: TBookingSlots,
@@ -90,20 +90,28 @@ const insertIntoDB = async (
 }
 
 const getAllIntoFromDB = async (query: Record<string, unknown>) => {
-  const BookingSlotsQuery = new QueryBuilder(BookingSlots.find(), query)
-    .search([''])
-    .filter()
-    .sort()
-    .paginate()
-    .fields()
-
-  const result = await BookingSlotsQuery.modelQuery
-  const meta = await BookingSlotsQuery.countTotal()
-
-  return {
-    meta,
-    result,
+  const { year, month, author } = query as {
+    year?: string
+    month?: string
+    author?: string
   }
+
+  if (!year || !month) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Year and month are required')
+  }
+
+  if (!author) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Author is required')
+  }
+
+  const monthPrefix = `${year}-${month.padStart(2, '0')}`
+
+  const result = await BookingSlots.find({
+    author,
+    date: { $regex: `^${monthPrefix}` },
+  }).sort({ date: 1, time: 1 })
+
+  return result
 }
 
 const getAIntoFromDB = async (id: string) => {

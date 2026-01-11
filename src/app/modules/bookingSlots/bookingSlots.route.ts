@@ -12,7 +12,7 @@ router.post(
 )
 
 router.get(
-  '/expert/:sessionId',
+  '/expert/:userId',
   auth(USER_ROLE.admin, USER_ROLE.consult, USER_ROLE.expert),
   BookingSlotsControllers.getAllBookingSlots,
 )

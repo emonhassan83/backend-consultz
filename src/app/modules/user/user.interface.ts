@@ -1,8 +1,8 @@
 import { Model, Types } from 'mongoose'
-import { TUserRole, TUserStatus } from './user.constant'
+import { TDaysMap, TUserRole, TUserStatus } from './user.constant'
 
 type TAvailability = {
-  day: string
+  day: TDaysMap
   from: string
   to: string
 }

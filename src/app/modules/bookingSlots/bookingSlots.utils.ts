@@ -1,4 +1,4 @@
-const DAY_MAP: Record<string, number> = {
+export const DAY_MAP: Record<string, number> = {
   sun: 0,
   mon: 1,
   tue: 2,
@@ -8,7 +8,7 @@ const DAY_MAP: Record<string, number> = {
   sat: 6,
 }
 
-const generateHourlySlots = (from: string, to: string): string[] => {
+export const generateHourlySlots = (from: string, to: string): string[] => {
   const slots: string[] = []
 
   let [hour] = from.split(':').map(Number)

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { USER_STATUS } from './user.constant'
+import { DAY_MAP, USER_STATUS } from './user.constant'
 
 // 🔹 Sub-schemas
 const EducationSchema = z.object({
@@ -9,7 +9,9 @@ const EducationSchema = z.object({
 })
 
 const AvailabilitySchema = z.object({
-  day: z.string({ required_error: 'Day is required!' }),
+  day: z.enum(Object.values(DAY_MAP) as [string, ...string[]], {
+    required_error: 'Day is required!',
+  }),
   from: z.string({ required_error: 'From time is required!' }),
   to: z.string({ required_error: 'To time is required!' }),
 })
