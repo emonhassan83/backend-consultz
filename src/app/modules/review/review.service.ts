@@ -105,7 +105,7 @@ const getAllReviews = async (query: Record<string, any>) => {
   )
     .search(['review'])
     .filter()
-    .sortByCustom() // custom sort (latest, highest, lowest)
+    .sortReviews() // custom sort (latest, highest, lowest)
     .paginate()
     .fields()
 

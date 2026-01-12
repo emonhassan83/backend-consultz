@@ -47,13 +47,24 @@ class QueryBuilder<T> {
   }
 
   // 🔥 NEW METHOD
-sortByCustom() {
-    const sortQuery = this.query?.sort as string;
+  sortByCustom(customSort: Record<string, 1 | -1>) {
+    if (this.query?.sort) {
+      const sort = (this.query.sort as string)?.split(',')?.join(' ')
+      this.modelQuery = this.modelQuery.sort(sort)
+      return this
+    }
 
-    let sortOption: string | Record<string, 1 | -1> = '-createdAt'; // default
+    this.modelQuery = this.modelQuery.sort(customSort)
+    return this
+  }
+
+  sortReviews() {
+    const sortQuery = (this.query?.sort as string)?.toLowerCase()?.trim();
+
+    let sortOption: string | Record<string, 1 | -1> = '-createdAt'; // default: latest
 
     if (sortQuery) {
-      switch (sortQuery.toLowerCase()) {
+      switch (sortQuery) {
         case 'latest':
           sortOption = '-createdAt';
           break;
