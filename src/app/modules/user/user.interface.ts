@@ -88,6 +88,7 @@ export interface TUser {
   ratingCount: number
   status: TUserStatus
   expireAt: Date
+  isProfileSetup: boolean
   isDeleted: boolean
   createdAt?: Date
   updatedAt?: Date

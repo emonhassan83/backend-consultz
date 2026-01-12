@@ -46,7 +46,16 @@ const registerUserIntoDB = async (payload: TUser) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Password is required')
   }
 
-  const newUser = new User(payload)
+  const finalPayload = {
+    ...payload,
+    status:
+      payload.role === USER_ROLE.expert
+        ? USER_STATUS.pending
+        : payload.status || USER_STATUS.active,
+  };
+
+  const newUser = new User(finalPayload);
+
   await newUser.save()
 
   return newUser
@@ -55,7 +64,7 @@ const registerUserIntoDB = async (payload: TUser) => {
 const getAllUsersFromDB = async (query: Record<string, unknown>) => {
   const usersQuery = new QueryBuilder(
     User.find({ isDeleted: false, role: { $ne: USER_ROLE.admin } }).select(
-      '_id id name email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status createdAt',
+      '_id id name email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status isProfileSetup createdAt',
     ),
     query,
   )

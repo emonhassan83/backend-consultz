@@ -182,6 +182,10 @@ const userSchema = new Schema<TUser, UserModel>(
         default: true,
       },
     },
+    isProfileSetup: {
+      type: Boolean,
+      default: false,
+    },
     isDeleted: { type: Boolean, default: false },
   },
   {
