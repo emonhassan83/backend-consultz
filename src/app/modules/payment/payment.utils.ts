@@ -3,9 +3,9 @@ import config from '../../config'
 import { messages } from '../notification/notification.constant'
 import { modeType } from '../notification/notification.interface'
 import { TPayment } from './payment.interface'
-import { NotificationService } from '../notification/notification.service'
 import { findAdmin } from '../../utils/findAdmin'
 import { sendNotification } from '../../utils/sentNotification'
+import { Types } from 'mongoose'
 
 const stripe: Stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2025-02-24.acacia',
@@ -18,8 +18,11 @@ interface TPayload {
     name: string
     quantity: number
   }
-  // customerId: string;
-  paymentId: string
+  customer: {
+    name: string;
+    email: string;
+  };
+  paymentId: string | Types.ObjectId
 }
 
 export const createCheckoutSession = async (payload: TPayload) => {

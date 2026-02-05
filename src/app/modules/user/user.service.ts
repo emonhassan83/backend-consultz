@@ -64,7 +64,7 @@ const registerUserIntoDB = async (payload: TUser) => {
 const getAllUsersFromDB = async (query: Record<string, unknown>) => {
   const usersQuery = new QueryBuilder(
     User.find({ isDeleted: false, role: { $ne: USER_ROLE.admin } }).select(
-      '_id id name email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status isProfileSetup createdAt',
+      '_id id firstName lastName email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status isProfileSetup createdAt',
     ),
     query,
   )
@@ -313,7 +313,7 @@ const filterQuery: FilterQuery<any> = {
 
 const geUserByIdFromDB = async (id: string) => {
   const user = await User.findById(id).select(
-    '_id id name email phoneNumber photoUrl coverPhoto headline following followers points advisingTime avgRating skills languages expertise status createdAt',
+    '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt',
   )
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')

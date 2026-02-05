@@ -23,20 +23,20 @@ const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
 })
 
 const checkout = async (payload: TPayment) => {
-  const transactionId = generateTransactionId()
   const { account, booking: bookingId } = payload
-
+  
   // here user management
   const user = await User.findById(account)
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
-
+  
   const booking = await Booking.findById(bookingId)
   if (!booking || booking?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Booking Not Found!')
   }
-
+  
+  const transactionId = generateTransactionId()
   // Check for existing unpaid payment
   let paymentData = await Payment.findOne({
     booking: bookingId,
@@ -63,13 +63,15 @@ const checkout = async (payload: TPayment) => {
   }
 
   const checkoutSession = await createCheckoutSession({
-    // customerId: customer.id,
     product: {
       amount: paymentData?.amount,
       name: 'Booking Payment',
       quantity: 1,
     },
-
+    customer: {
+      name: user.firstName,
+      email: user.email
+    },
     paymentId: paymentData?._id,
   })
 
