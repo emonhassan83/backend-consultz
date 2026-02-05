@@ -336,7 +336,7 @@ const changeUserStatusFromDB = async (payload: any) => {
     { status },
     { new: true },
   ).select(
-    '_id id name email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status createdAt',
+   '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline status createdAt',
   )
   if (!updateUserStatus) {
     throw new AppError(
@@ -363,7 +363,7 @@ const changeUserNotifyFromDB = async (id: string, payload: any) => {
   const updatedUser = await User.findByIdAndUpdate(id, payload, {
     new: true,
   }).select(
-    '_id id firstName lastName email photoUrl headline following followers points avgRating skills languages expertise status createdAt pushNotify emailNotify',
+    '_id id firstName lastName email photoUrl headline status createdAt pushNotify emailNotify',
   )
 
   if (!updatedUser) {
@@ -386,16 +386,10 @@ const updateUserInfoFromDB = async (
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
 
-  //* checking if the user is blocked
-  if (user?.status === 'blocked') {
-    throw new AppError(httpStatus.FORBIDDEN, 'This user is blocked ! !')
-  }
-  // console.log(payload)
-
   const updatedUser = await User.findByIdAndUpdate(userId, payload, {
     new: true,
   }).select(
-    '_id id name email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status createdAt',
+    '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt',
   )
   if (!updatedUser) {
     throw new AppError(
@@ -426,16 +420,16 @@ const updateLocationFromDB = async (
     )
   }
 
-  const updatedUser = await User.findByIdAndUpdate(
+  const result = await User.findByIdAndUpdate(
     userId,
     {
       location: { type: 'Point', coordinates: [longitude, latitude] },
       address: address,
     },
     { new: true },
-  )
+  ).select('_id id firstName lastName email phoneNumber photoUrl bio coverPhoto status createdAt',)
 
-  return updatedUser
+  return result
 }
 
 const deleteAUserFromDB = async (userId: string) => {
@@ -446,19 +440,19 @@ const deleteAUserFromDB = async (userId: string) => {
   }
 
   // Use `Promise.all` to execute updates in parallel
-  const updatedUser = await User.findByIdAndUpdate(
+  const result = await User.findByIdAndUpdate(
     userId,
     { isDeleted: true },
     { new: true },
   ).select(
-    '_id id name email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status createdAt',
+    '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto status createdAt',
   )
 
-  if (!updatedUser) {
+  if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'Failed to update user status!')
   }
 
-  return updatedUser
+  return result
 }
 
 export const UserService = {
