@@ -8,7 +8,42 @@ import {
   sendUserStatusNotifYToAdmin,
   sendUserStatusNotifYToUser,
 } from './user.utils'
-import { FilterQuery, Types } from 'mongoose'
+import { Types } from 'mongoose'
+
+// Property & Real Estate Related category
+const PROPERTY_EXPERTISE = [
+  'Property Investment & Development',
+  'Property Strategy',
+  'Buy to Let',
+  'HMOs',
+  'Rent to Rent',
+  'Property Deal Sourcing',
+  'Property Negotiation',
+  'Deal Structuring',
+  'Property Lead Generation',
+  'Property Deal Pipelines',
+  'Property CRM Setup',
+  'Investor Branding',
+  'Deal Packaging',
+  'Property Social Media Marketing',
+]
+
+const PROPERTY_SKILLS = [
+  'Property Investment',
+  'Real Estate',
+  'Property Law',
+  'Real Estate Development',
+  'Buy-to-Let Strategy',
+  'HMO Management',
+  'Rent-to-Rent',
+  'Property Sourcing',
+  'Property Negotiation',
+  'Deal Packaging',
+  'Property Lead Generation',
+  'Investor Marketing',
+  'Property Systems',
+  'Real Estate Marketing',
+]
 
 const registerUserIntoDB = async (payload: TUser) => {
   if (payload.role === 'admin') {
@@ -52,9 +87,9 @@ const registerUserIntoDB = async (payload: TUser) => {
       payload.role === USER_ROLE.expert
         ? USER_STATUS.pending
         : payload.status || USER_STATUS.active,
-  };
+  }
 
-  const newUser = new User(finalPayload);
+  const newUser = new User(finalPayload)
 
   await newUser.save()
 
@@ -68,7 +103,7 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
     ),
     query,
   )
-    .search(['name'])
+    .search(['firstName', 'lastName'])
     .filter()
     .sort()
     .paginate()
@@ -106,14 +141,14 @@ const getInterestExpertsFromDB = async (
     _id: { $ne: new Types.ObjectId(userId) },
     isDeleted: false,
     status: USER_STATUS.active,
-    role: USER_ROLE.consult,
+    role: USER_ROLE.expert,
     $or: matchConditions,
   }
 
   // 4️⃣ Query Builder (same standard you already use)
   const usersQuery = new QueryBuilder(
     User.find(baseFilter).select(
-      '_id id firstName lastName photoUrl coverPhoto headline followers following avgRating skills languages expertise',
+      '_id firstName lastName photoUrl headline followers avgRating ratingCount',
     ),
     query,
   )
@@ -132,28 +167,42 @@ const getInterestExpertsFromDB = async (
 
 const getPropertyExpertsFromDB = async (query: Record<string, unknown>) => {
   const filter = {
-    role: USER_ROLE.consult,
+    role: USER_ROLE.expert,
     status: USER_STATUS.active,
     isDeleted: false,
 
-    // 🎯 KEY LOGIC
+    // 🎯 4-Level Taxonomy based on matching
     $or: [
-      // Match key expertise (pink)
+      // Level 1 + Level 4 → Domain + Specialism
       {
         expertise: {
-          $in: ['Property Investment & Development'],
+          $in: PROPERTY_EXPERTISE,
         },
       },
 
-      // Match sub-categories
+      // Level 3 + Level 4 → Role + Specialism
+      {
+        expertise: {
+          $in: [
+            'Property Strategy Coaches',
+            'Property Deal Mentors',
+            'Property Systems Consultants',
+            'Property Marketing Advisors',
+          ],
+        },
+      },
+
+      // Level 2 → Service Type level
+      {
+        expertise: {
+          $in: ['Property Education & Mentoring', 'Property Business Coaching'],
+        },
+      },
+
+      // Skills level
       {
         skills: {
-          $in: [
-            'Real Estate',
-            'Property Law',
-            'Investment',
-            'Real Estate Development',
-          ],
+          $in: PROPERTY_SKILLS,
         },
       },
     ],
@@ -161,10 +210,11 @@ const getPropertyExpertsFromDB = async (query: Record<string, unknown>) => {
 
   const usersQuery = new QueryBuilder(
     User.find(filter).select(
-      '_id id firstName lastName photoUrl coverPhoto headline avgRating followers expertise skills hourlyRate',
+      '_id firstName lastName photoUrl headline followers avgRating ratingCount',
     ),
     query,
   )
+    // sorting
     .sortByCustom({
       avgRating: -1,
       followers: -1,
@@ -181,7 +231,7 @@ const getPropertyExpertsFromDB = async (query: Record<string, unknown>) => {
 
 const getTopExpertsFromDB = async (query: Record<string, unknown>) => {
   const filter = {
-    role: USER_ROLE.consult,
+    role: USER_ROLE.expert,
     status: USER_STATUS.active,
     isDeleted: false,
     avgRating: { $gte: 4 },
@@ -189,7 +239,7 @@ const getTopExpertsFromDB = async (query: Record<string, unknown>) => {
 
   const usersQuery = new QueryBuilder(
     User.find(filter).select(
-      '_id id firstName lastName photoUrl coverPhoto headline avgRating ratingCount followers expertise skills',
+      '_id firstName lastName photoUrl headline avgRating ratingCount followers',
     ),
     query,
   )
@@ -208,112 +258,92 @@ const getTopExpertsFromDB = async (query: Record<string, unknown>) => {
 }
 
 const getInvestmentExperts = async (query: Record<string, unknown>) => {
-const filterQuery: FilterQuery<any> = {
+  const filter = {
+    role: USER_ROLE.expert,
+    status: USER_STATUS.active,
     isDeleted: false,
-  }
 
-  /* -------------------- 1️⃣ Price Range -------------------- */
-  if (query.minPrice || query.maxPrice) {
-    filterQuery.hourlyRate = {}
-
-    if (query.minPrice) {
-      filterQuery.hourlyRate.$gte = Number(query.minPrice)
-    }
-
-    if (query.maxPrice) {
-      filterQuery.hourlyRate.$lte = Number(query.maxPrice)
-    }
-  }
-
-  /* -------------------- 2️⃣ Learning Styles -------------------- */
-  if (query.learningStyles) {
-    filterQuery.learningStyles = {
-      $in: (query.learningStyles as string).split(','),
-    }
-  }
-
-  /* -------------------- 3️⃣ Interests -------------------- */
-  if (query.interests) {
-    filterQuery.interests = {
-      $in: (query.interests as string).split(','),
-    }
-  }
-
-  /* -------------------- 4️⃣ Availability (Nested Array) -------------------- */
-  /**
-   * ?availabilityDays=Monday,Tuesday
-   */
-  if (query.availabilityDays) {
-    filterQuery.availability = {
-      $elemMatch: {
-        day: {
-          $in: (query.availabilityDays as string).split(','),
+    // Fixed categories only — no query params dependency
+    $or: [
+      {
+        expertise: {
+          $in: [
+            'Property Investment & Development',
+            'Buy to Let',
+            'HMOs',
+            'Rent to Rent',
+            'Sourcing',
+            'Negotiation',
+            'Deal Structuring',
+            'Lead Generation',
+            'Deal Pipelines',
+            'Investor Branding',
+            'Deal Packaging',
+          ],
         },
       },
-    }
-  }
+      {
+        expertise: {
+          $in: [
+            'Property Strategy Coaches',
+            'Property Deal Mentors',
+            'Property Systems Consultants',
+            'Property Marketing Advisors',
+          ],
+        },
+      },
+      {
+        expertise: {
+          $in: ['Property Education & Mentoring', 'Property Business Coaching'],
+        },
+      },
+      {
+        skills: {
+          $in: [
+            'Real Estate',
+            'Property Law',
+            'Investment',
+            'Real Estate Development',
+            'Buy-to-Let Strategy',
+            'HMO Management',
+            'Rent-to-Rent',
+            'Property Sourcing',
+            'Property Negotiation',
+            'Deal Packaging',
+            'Property Lead Generation',
+            'Investor Marketing',
+            'Property Systems',
+            'Real Estate Marketing',
+          ],
+        },
+      },
+    ],
+  };
 
-  /* -------------------- 5️⃣ Rating -------------------- */
-  /**
-   * ?minRating=4
-   */
-  if (query.minRating) {
-    filterQuery.avgRating = {
-      $gte: Number(query.minRating),
-    }
-  }
-
-  /* -------------------- 6️⃣ Session Duration -------------------- */
-  /**
-   * ?sessionDurationType=video,audio
-   * ?sessionDurationMin=30
-   */
-  if (query.sessionDurationType || query.sessionDurationMin) {
-    const sessionDurationMatch: any = {
-      isOffered: true,
-    }
-
-    if (query.sessionDurationType) {
-      sessionDurationMatch.type = {
-        $in: (query.sessionDurationType as string).split(','),
-      }
-    }
-
-    if (query.sessionDurationMin) {
-      sessionDurationMatch.duration = { $gte: Number(query.sessionDurationMin) }
-    }
-
-    filterQuery.sessionDurations = {
-      $elemMatch: sessionDurationMatch,
-    }
-  }
-
-  /* -------------------- Query Builder -------------------- */
   const queryBuilder = new QueryBuilder(
-    User.find(filterQuery),
+    User.find(filter).select(
+      '_id firstName lastName photoUrl headline avgRating ratingCount followers',
+    ),
     query,
   )
-    .search(['firstName', 'lastName', 'expertise'])
+    .search(['firstName', 'lastName'])
     .sortByCustom({
       avgRating: -1,
       followers: -1,
       createdAt: -1,
     })
     .paginate()
-    .fields()
+    .fields();
 
-  const result = await queryBuilder.modelQuery
-  const meta = await queryBuilder.countTotal()
+  const result = await queryBuilder.modelQuery;
+  const meta = await queryBuilder.countTotal();
 
-  return {
-    meta,
-    result,
-  }
-}
+  return { meta, result };
+};
 
 const geUserByIdFromDB = async (id: string) => {
   const user = await User.findById(id).select(
-    '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt',
+    '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt',
   )
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
@@ -336,7 +366,7 @@ const changeUserStatusFromDB = async (payload: any) => {
     { status },
     { new: true },
   ).select(
-   '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline status createdAt',
+    '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline status createdAt',
   )
   if (!updateUserStatus) {
     throw new AppError(
@@ -427,7 +457,9 @@ const updateLocationFromDB = async (
       address: address,
     },
     { new: true },
-  ).select('_id id firstName lastName email phoneNumber photoUrl bio coverPhoto status createdAt',)
+  ).select(
+    '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto status createdAt',
+  )
 
   return result
 }

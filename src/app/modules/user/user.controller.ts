@@ -136,37 +136,6 @@ const changeUserNotify = catchAsync(async (req, res) => {
   })
 })
 
-const updateUserInfo = catchAsync(async (req, res) => {
-   if (req.files) {
-    const { image, cover } = req.files as UploadedFiles;
-
-    if (image?.length) {
-      const uploadedPhoto = await uploadToS3({
-        file: image[0],
-        fileName: `images/user/photoUrl/${Math.floor(100000 + Math.random() * 900000)}`,
-      });
-      req.body.photoUrl = uploadedPhoto as string;
-    }
-
-    if (cover?.length) {
-      const uploadedCover = await uploadToS3({
-        file: cover[0],
-        fileName: `images/user/cover/${Math.floor(100000 + Math.random() * 900000)}`,
-      });
-      req.body.coverPhoto = uploadedCover as string;
-    }
-  }
-
-  const result = await UserService.updateUserInfoFromDB(req.params.id, req.body)
-
-  sendResponse(res, {
-    success: true,
-    statusCode: 200,
-    message: 'User info update successfully!',
-    data: result,
-  })
-})
-
 const updateMyProfile = catchAsync(async (req, res) => {
   if (req.files) {
     const { image, cover } = req.files as UploadedFiles;
@@ -222,7 +191,6 @@ export const UserControllers = {
   getUserById,
   getMyProfile,
   changeUserStatus,
-  updateUserInfo,
   updateMyProfile,
   changeUserNotify,
   deleteMyProfile,
