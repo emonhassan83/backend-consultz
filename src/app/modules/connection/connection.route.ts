@@ -17,28 +17,17 @@ router.post(
   FollowController.unfollowUser,
 );
 
-// router.get(
-//   '/follower/:id',
-//   auth(USER_ROLE.consult, USER_ROLE.expert, USER_ROLE.admin),
-//   FollowController.checkedFollowUser,
-// );
-
 router.get(
-  '/following/:id',
-  auth(USER_ROLE.consult, USER_ROLE.expert, USER_ROLE.admin),
-  FollowController.getAllFollowing,
+  '/my-followers',
+  auth(USER_ROLE.consult, USER_ROLE.expert),
+  FollowController.getMyFollowers,
 );
 
 router.get(
-  '/my-following',
+  '/my-followings',
   auth(USER_ROLE.consult, USER_ROLE.expert, USER_ROLE.admin),
   FollowController.getMyFollowing,
 );
 
-router.get(
-  '/my-followers',
-  auth(USER_ROLE.consult, USER_ROLE.expert, USER_ROLE.admin),
-  FollowController.getMyFollowers,
-);
 
 export const ConnectionRoutes = router;

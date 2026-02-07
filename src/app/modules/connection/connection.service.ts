@@ -94,72 +94,63 @@ const unfollowUser = async (followerId: string, followingId: string) => {
 };
 
 const getAllFollowers = async (userId: string, query: Record<string, unknown>) => {
-  // 1. Check if the user exists and is active
   const user = await User.findById(userId);
   if (!user || user.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found or inactive');
   }
 
-  const followerQuery = new QueryBuilder(
-    Follow.find({ following: userId }).populate([
-    { path: 'follower', select: 'firstName lastName headline photoUrl' },
-  ]),
+  const followDocs = await Follow.find({ following: userId }).select('follower');
+  const followerIds = followDocs.map(doc => doc.follower);
+
+  const userQuery = new QueryBuilder(
+    User.find({
+      _id: { $in: followerIds },
+    }).select('firstName lastName headline photoUrl'),
     query,
   )
-    .search([])
-    .filter()
-    .sort()
+    .search(['firstName', 'lastName'])
+    .sortByCustom({
+      avgRating: -1,
+      followers: -1,
+      createdAt: -1,
+    })
     .paginate()
-    .fields()
+    .fields();
 
-  const followDocs = await followerQuery.modelQuery
-  const meta = await followerQuery.countTotal()
+  const result = await userQuery.modelQuery;
+  const meta = await userQuery.countTotal();
 
-  // 3. Transform response (IMPORTANT PART)
-  const result = followDocs
-    .map((doc: any) => doc.follower)
-    .filter(Boolean);
-
-  return {
-    meta,
-    result,
-  }
+  return { meta, result };
 };
 
-const getAllFollowing = async (
-  userId: string,
-  query: Record<string, unknown>,
-) => {
-  // 1. Validate user
+const getAllFollowing = async (userId: string, query: Record<string, unknown>) => {
   const user = await User.findById(userId);
   if (!user || user.isDeleted || user.status === 'blocked') {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found or inactive');
   }
 
-  // 2. Build query
-  const followerQuery = new QueryBuilder(
-    Follow.find({ follower: userId }).populate({
-      path: 'following',
-      select: 'firstName lastName headline photoUrl',
-    }),
+  const followDocs = await Follow.find({ follower: userId }).select('following');
+  const followingIds = followDocs.map(doc => doc.following);
+
+  const userQuery = new QueryBuilder(
+    User.find({
+      _id: { $in: followingIds },
+    }).select('firstName lastName headline photoUrl'),
     query,
   )
-    .filter()
-    .sort()
-    .paginate();
+    .search(['firstName', 'lastName'])
+    .sortByCustom({
+      avgRating: -1,
+      followers: -1,
+      createdAt: -1,
+    })
+    .paginate()
+    .fields();
 
-  const followDocs = await followerQuery.modelQuery;
-  const meta = await followerQuery.countTotal();
+  const result = await userQuery.modelQuery;
+  const meta = await userQuery.countTotal();
 
-  // 3. Transform response (IMPORTANT PART)
-  const result = followDocs
-    .map((doc: any) => doc.following)
-    .filter(Boolean);
-
-  return {
-    meta,
-    result,
-  };
+  return { meta, result };
 };
 
 const checkedFollowUser = async (viewerId: string, targetUserId: string) => {
