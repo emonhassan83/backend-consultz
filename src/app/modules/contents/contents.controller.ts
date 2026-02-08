@@ -22,20 +22,7 @@ const getAllContents = catchAsync(async (req: Request, res: Response) => {
     statusCode: 200,
     success: true,
     message: 'Contents retrieved successfully',
-    meta: result.meta,
-    data: result.data,
-  })
-})
-
-// Get contents by ID
-const getContentsById = catchAsync(async (req: Request, res: Response) => {
-  const result = await contentsService.getContentsById(req.params.id)
-
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: 'Content retrieved successfully',
-    data: result,
+    data: result.data[0],
   })
 })
 
@@ -51,22 +38,8 @@ const updateContents = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-// Delete contents
-const deleteContents = catchAsync(async (req: Request, res: Response) => {
-  const result = await contentsService.deleteContents(req.params.id)
-
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: 'Content deleted successfully',
-    data: result,
-  })
-})
-
 export const contentsController = {
   createContents,
   getAllContents,
-  getContentsById,
-  updateContents,
-  deleteContents,
+  updateContents
 }

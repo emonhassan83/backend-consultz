@@ -12,6 +12,9 @@ import {
 } from './feed.utils'
 import { FEED_STATUS, TFeedStatus } from './feed.constant'
 import { TUser } from '../user/user.interface'
+import { USER_ROLE } from '../user/user.constant'
+import { Follow } from '../connection/connection.models'
+import { BlockProfile } from '../blockProfile/blockProfile.models'
 
 const createFeedIntoDB = async (
   payload: TFeed,
@@ -73,10 +76,60 @@ const createFeedIntoDB = async (
 
 const getAllFeedsFromDB = async (
   query: Record<string, unknown>,
-  userId: string,
+  currentUserId: string,
 ) => {
+  // 1. Get current user role to handle admin bypass
+  const currentUser = await User.findById(currentUserId).select('role')
+  if (!currentUser) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found')
+  }
+
+  // 2. Prepare base filter
+  let feedFilter: any = {
+    isDeleted: false,
+  }
+
+  // 3. Apply follow/block logic only for non-admin users
+  if (currentUser.role !== USER_ROLE.admin) {
+    const followingDocs = await Follow.find({ follower: currentUserId }).select(
+      'following',
+    )
+    const blockedDocs = await BlockProfile.find({
+      blocker: currentUserId,
+    }).select('blocked')
+
+    const followingIds = followingDocs.map((doc) => doc.following)
+    const blockedIds = blockedDocs.map((doc) => doc.blocked)
+
+    if (followingIds.length === 0) {
+      // No one followed → show all except blocked
+      feedFilter.author = { $nin: blockedIds }
+    } else {
+      // Show only followed users' posts, exclude blocked
+      feedFilter.author = {
+        $in: followingIds,
+        $nin: blockedIds,
+      }
+    }
+  }
+
+  // 4. Get counts for active and restricted feeds (for the filtered scope)
+  const activeCount = await Feed.countDocuments({
+    ...feedFilter,
+    status: FEED_STATUS.active,
+  })
+
+  const restrictCount = await Feed.countDocuments({
+    ...feedFilter,
+    status: FEED_STATUS.restrict,
+  })
+
+  // 5. Build main query for paginated list
   const feedQuery = new QueryBuilder(
-    Feed.find({ isDeleted: false }).populate([
+    Feed.find({
+      ...feedFilter,
+      status: FEED_STATUS.active, // By default return only active feeds in the list
+    }).populate([
       { path: 'author', select: 'firstName lastName expertise photoUrl' },
       { path: 'contentMeta', select: 'like comment likeBy' },
     ]),
@@ -84,18 +137,29 @@ const getAllFeedsFromDB = async (
   )
     .search(['description'])
     .filter()
-    .sort()
+    .sortByCustom({
+      createdAt: -1,
+    })
     .paginate()
     .fields()
 
-  const result = await feedQuery.modelQuery
+  const feedList = await feedQuery.modelQuery
   const meta = await feedQuery.countTotal()
 
-  const enrichedResult = await Promise.all(
-    result.map((feed) => enrichFeedWithUserInfo(feed, userId)),
+  // 6. Enrich feeds with user-specific info (likes, etc.)
+  const enrichedFeedList = await Promise.all(
+    feedList.map((feed) => enrichFeedWithUserInfo(feed, currentUserId)),
   )
 
-  return { meta, result: enrichedResult }
+  // 7. Final response structure
+  return {
+    meta,
+    data: {
+      activeFeed: activeCount,
+      restrictFeed: restrictCount,
+      feedList: enrichedFeedList,
+    },
+  }
 }
 
 const getAFeedFromDB = async (id: string, userId: string) => {

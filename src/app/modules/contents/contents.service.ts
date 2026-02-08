@@ -22,15 +22,10 @@ const createContents = async (payload: TContents) => {
 // Get all contents
 const getAllContents = async (query: Record<string, any>) => {
   const ContentModel = new QueryBuilder(
-    Contents.find({ isDeleted: false }).populate([
-      {
-        path: 'createdBy',
-        select: 'name email photoUrl contactNumber status',
-      },
-    ]),
+    Contents.find({ isDeleted: false }).select('termsAndConditions paymentHoldDays consultationFee updatedAt') as any,
     query,
   )
-    .search(['createdBy'])
+    .search([''])
     .filter()
     .paginate()
     .sort()
@@ -44,24 +39,9 @@ const getAllContents = async (query: Record<string, any>) => {
   }
 }
 
-// Get content by ID
-const getContentsById = async (id: string) => {
-  const result = await Contents.findById(id).populate([
-    {
-      path: 'createdBy',
-      select: 'name email photoUrl contactNumber status',
-    },
-  ])
-  if (!result || result?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Oops! Content not found')
-  }
-
-  return result
-}
-
 // Update content
 const updateContents = async (payload: Partial<TContents>) => {
-  const content = await Contents.findOne()
+  const content = await Contents.findOne().select('termsAndConditions paymentHoldDays consultationFee updatedAt')
   if (!content || content?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Content not found!')
   }
@@ -73,29 +53,8 @@ const updateContents = async (payload: Partial<TContents>) => {
   return content
 }
 
-// Delete content
-const deleteContents = async (id: string) => {
-  const result = await Contents.findByIdAndUpdate(
-    id,
-    {
-      $set: {
-        isDeleted: true,
-      },
-    },
-    { new: true },
-  )
-
-  if (!result) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Content deletion failed')
-  }
-
-  return result
-}
-
 export const contentsService = {
   createContents,
   getAllContents,
-  getContentsById,
-  updateContents,
-  deleteContents,
+  updateContents
 }

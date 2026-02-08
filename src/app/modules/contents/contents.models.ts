@@ -12,12 +12,6 @@ const contentsSchema = new Schema<TContents>(
     privacyPolicy: {
       type: String,
     },
-    supports: {
-      type: String,
-    },
-    faq: {
-      type: String,
-    },
     paymentHoldDays: {
       type: Number
     },

@@ -5,8 +5,6 @@ export interface TContents {
   aboutUs?: string
   termsAndConditions?: string
   privacyPolicy?: string
-  supports?: string
-  faq?: string
   paymentHoldDays?: number
   consultationFee?: number
   createdBy: Types.ObjectId

@@ -51,12 +51,12 @@ const createReport = async (payload: IReport, userId: string) => {
 const getAllReport = async (query: Record<string, any>) => {
   const reportModel = new QueryBuilder(
     Report.find().populate([
-      { path: 'author', select: 'firstName lastName photoUrl email' },
+      { path: 'author', select: 'firstName lastName photoUrl expertise' },
       {
         path: 'feed',
         populate: {
           path: 'author',
-          select: 'firstName lastName photoUrl email',
+          select: 'firstName lastName photoUrl expertise',
         },
       },
     ]),
@@ -75,12 +75,12 @@ const getAllReport = async (query: Record<string, any>) => {
 
 const getReportById = async (id: string) => {
   const result = await Report.findById(id).populate([
-    { path: 'author', select: 'firstName lastName photoUrl email' },
+    { path: 'author', select: 'firstName lastName photoUrl expertise' },
     {
       path: 'feed',
       populate: {
         path: 'author', // example subfield inside the feed document
-        select: 'firstName lastName photoUrl email',
+        select: 'firstName lastName photoUrl expertise',
       },
     },
   ])

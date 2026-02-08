@@ -1,5 +1,5 @@
-import mongoose, { Schema } from 'mongoose';
-import { ICard, ICardModel } from './card.interface';
+import mongoose, { Schema } from 'mongoose'
+import { ICard, ICardModel } from './card.interface'
 
 const cardSchema: Schema<ICard> = new Schema(
   {
@@ -24,16 +24,16 @@ const cardSchema: Schema<ICard> = new Schema(
       type: String,
       required: true,
     },
+    setAsDefault: {
+      type: Boolean,
+      default: false,
+    },
     isDeleted: {
       type: Boolean,
       default: false,
-      required: true,
     },
   },
   { timestamps: true },
-);
+)
 
-export const Card = mongoose.model<ICard, ICardModel>(
-  'Card',
-  cardSchema,
-);
+export const Card = mongoose.model<ICard, ICardModel>('Card', cardSchema)

@@ -95,9 +95,10 @@ const getAllComments = async (query: Record<string, any>) => {
       { path: 'user',select: 'firstName lastName photoUrl' },
       {
         path: 'reply',
+        select: "user replyRef comment updatedAt",
         populate: { path: 'user',select: 'firstName lastName photoUrl' },
       },
-    ]),
+    ]).select('user comment reply updatedAt'),
     query,
   )
     .search([''])
