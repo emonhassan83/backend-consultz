@@ -75,6 +75,7 @@ const rescheduleBooking = catchAsync(async (req: Request, res: Response) => {
   const result = await bookingsService.rescheduleBooking(
     req.params.id,
     req.body,
+    req.user._id
   )
   sendResponse(res, {
     statusCode: 200,

@@ -4,7 +4,7 @@ import sendResponse from '../../utils/sendResponse'
 import { PaymentService } from './payment.service'
 
 const checkout = catchAsync(async (req, res) => {
-  const result = await PaymentService.checkout(req.body)
+  const result = await PaymentService.createPaymentIntent(req.body)
 
   sendResponse(res, {
     success: true,
@@ -15,7 +15,7 @@ const checkout = catchAsync(async (req, res) => {
 })
 
 const confirmPayment = catchAsync(async (req, res) => {
-  const result = await PaymentService.confirmPayment(req?.query)
+  const result = await PaymentService.confirmPayment(req.body)
 
   // res.redirect(
   //   `${config.payment_success_url}?subscriptionId=${result?.reference}`,

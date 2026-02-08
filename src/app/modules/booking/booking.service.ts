@@ -1,3 +1,4 @@
+import dayjs from 'dayjs'
 import mongoose from 'mongoose'
 import httpStatus from 'http-status'
 import { TBookings } from './booking.interface'
@@ -16,48 +17,70 @@ const createBookings = async (payload: TBookings, userId: string) => {
   try {
     const { consult: consultId, slot: slotId } = payload
 
-    // Find the user
+    // user checked
     const userData = await User.findById(userId).session(sessionClient)
     if (!userData || userData.isDeleted) {
       throw new AppError(httpStatus.BAD_REQUEST, 'User not found!')
     }
 
-    // Find the session
+    // consult checked
     const consult = await User.findById(consultId).session(sessionClient)
     if (!consult || consult.isDeleted) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Consult not found!')
     }
 
-    // Find the slot
-    const slotTime = await BookingSlots.findById(slotId).session(sessionClient)
+    // check slot
+    const slotTime = await BookingSlots.findOne({
+      _id: slotId,
+      author: consultId,
+    }).session(sessionClient)
     if (!slotTime) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Slot not found!')
     }
+
     if (slotTime.isBooked) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Slot already booked!')
     }
 
-    //assign payload values
+    // date time validation
+    const slotDateTimeStr = `${slotTime.date} ${slotTime.time}` // e.g., "2025-02-10 14:00"
+    const slotDateTime = dayjs(slotDateTimeStr, 'YYYY-MM-DD HH:mm')
+
+    if (!slotDateTime.isValid()) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Invalid slot date/time format',
+      )
+    }
+
+    const now = dayjs()
+    const minBufferMinutes = 60 // checked booking slots buffer time
+
+    if (slotDateTime.isBefore(now.add(minBufferMinutes, 'minute'))) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        `Booking must be made at least ${minBufferMinutes} minutes in advance. Slot time: ${slotDateTime.format('YYYY-MM-DD HH:mm')}`,
+      )
+    }
+
+    // logic assign
     payload.user = new mongoose.Types.ObjectId(userData._id)
     payload.slot = new mongoose.Types.ObjectId(slotTime._id)
     payload.timezone = consult.timeZone || 'UTC'
     payload.status = BOOKING_STATUS.pending
 
-    // Create the booking
     const result = await Booking.create([payload], { session: sessionClient })
     if (!result || result.length === 0) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Failed to create booking')
     }
 
-    // Commit the transaction if everything succeeds
     await sessionClient.commitTransaction()
-    sessionClient.endSession()
-
     return result[0]
   } catch (error) {
     await sessionClient.abortTransaction()
-    sessionClient.endSession()
     throw error
+  } finally {
+    sessionClient.endSession()
   }
 }
 
@@ -88,7 +111,7 @@ const getBookingsById = async (id: string) => {
   const result = await Booking.findOne({
     _id: id,
     status: { $ne: BOOKING_STATUS.pending || BOOKING_STATUS.cancelled },
-    isDeleted: false
+    isDeleted: false,
   }).populate([
     { path: 'user', select: 'firstName lastName photoUrl email' },
     { path: 'consult', select: 'firstName lastName photoUrl email' },
@@ -112,10 +135,10 @@ const changeBookingStatus = async (id: string, status: TBookingStatus) => {
     }
 
     // ✅ User can ONLY cancel when status is pending
-    if (booking.status !== BOOKING_STATUS.pending) {
+    if (booking.status !== BOOKING_STATUS.confirmed) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        'Only pending bookings can be cancelled',
+        'Only confirmed bookings can be cancelled',
       )
     }
 
@@ -170,68 +193,95 @@ const changeBookingStatus = async (id: string, status: TBookingStatus) => {
 const rescheduleBooking = async (
   id: string,
   payload: {
-    slot: string
+    slot: string;
   },
+  currentUserId: string, // added for ownership check (recommended)
 ) => {
-  const session = await mongoose.startSession()
-  session.startTransaction()
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
   try {
-    const booking = await Booking.findById(id).session(session)
+    // 1. Find the booking
+    const booking = await Booking.findById(id).session(session);
     if (!booking || booking.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found!')
+      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found');
     }
 
+    // 2. Verify ownership (security)
+    if (booking.user.toString() !== currentUserId) {
+      throw new AppError(httpStatus.FORBIDDEN, 'You are not authorized to reschedule this booking');
+    }
+
+    // 3. Only confirmed bookings can be rescheduled
     if (booking.status !== BOOKING_STATUS.confirmed) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
         'Only confirmed bookings can be rescheduled',
-      )
+      );
     }
 
-    // check new slot
-    const newSlot = await BookingSlots.findById(payload.slot).session(session)
+    // 4. Find the new slot
+    const newSlot = await BookingSlots.findById(payload.slot).session(session);
     if (!newSlot) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Slot not found!')
+      throw new AppError(httpStatus.BAD_REQUEST, 'New slot not found');
     }
+
+    // 5. New slot must not be already booked
     if (newSlot.isBooked) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Slot already booked!')
+      throw new AppError(httpStatus.BAD_REQUEST, 'New slot is already booked');
     }
 
-    // Free up old slot
-    const oldSlot = await BookingSlots.findById(booking.slot).session(session)
+    // 6. Validate new slot date & time (must be in future + buffer)
+    const slotDateTimeStr = `${newSlot.date} ${newSlot.time}`; // e.g. "2025-02-10 14:00"
+    const slotDateTime = dayjs(slotDateTimeStr, 'YYYY-MM-DD HH:mm');
+
+    if (!slotDateTime.isValid()) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid slot date/time format');
+    }
+
+    const now = dayjs();
+    const minBufferMinutes = 60; // Minimum advance time required (adjustable)
+
+    if (slotDateTime.isBefore(now.add(minBufferMinutes, 'minute'))) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        `New slot must be at least ${minBufferMinutes} minutes in the future. Slot time: ${slotDateTime.format('YYYY-MM-DD HH:mm')}`,
+      );
+    }
+
+    // 7. Free up the old slot
+    const oldSlot = await BookingSlots.findById(booking.slot).session(session);
     if (oldSlot) {
-      oldSlot.isBooked = false
-      await oldSlot.save({ session })
+      oldSlot.isBooked = false;
+      await oldSlot.save({ session });
     }
 
-    // Update booking with new slot
-    booking.slot = new mongoose.Types.ObjectId(newSlot._id)
-    await booking.save({ session })
+    // 8. Assign new slot to booking
+    booking.slot = new mongoose.Types.ObjectId(newSlot._id);
+    await booking.save({ session });
 
-    // Mark new slot as booked
-    newSlot.isBooked = true
-    await newSlot.save({ session })
+    // 9. Mark new slot as booked
+    newSlot.isBooked = true;
+    await newSlot.save({ session });
 
-    // Fetch user
-    const user = await User.findById(booking.user).session(session)
+    // 10. Fetch user (for notification)
+    const user = await User.findById(booking.user).session(session);
     if (!user || user.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found');
     }
 
-    // Notify user after reschedule
-    await sendBookingsNotification('reschedule', booking, user, newSlot)
+    // 11. Send notification (reschedule)
+    await sendBookingsNotification('reschedule', booking, user, newSlot);
 
-    await session.commitTransaction()
-    session.endSession()
-
-    return booking
+    await session.commitTransaction();
+    return booking;
   } catch (error) {
-    await session.abortTransaction()
-    session.endSession()
-    throw error
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
   }
-}
+};
 
 const deleteBookings = async (id: string) => {
   const booking = await Booking.findById(id)
