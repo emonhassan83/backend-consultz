@@ -24,19 +24,6 @@ const createValidationSchema = z.object({
   }),
 })
 
-/* ============================
-   Update Card Validation
-============================ */
-const updateValidationSchema = z.object({
-  body: z.object({
-    holderName: z.string().min(1).optional(),
-    cardNumber: z.string().min(12).optional(),
-    expiryDate: z.string().min(1).optional(),
-    cvc: z.string().min(3).optional()
-  }),
-})
-
 export const CardValidation = {
-  createValidationSchema,
-  updateValidationSchema,
+  createValidationSchema
 }

@@ -14,8 +14,11 @@ const insertIntoDB = async (
   const year = Number(query.year)
   const month = Number(query.month) // 1–12
 
-  if (!year || !month) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Year and month are required')
+  if (!year || !month || isNaN(year) || isNaN(month)) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Valid year and month are required',
+    )
   }
 
   /* ============================
@@ -31,30 +34,35 @@ const insertIntoDB = async (
   }
 
   /* ============================
-     2. Prevent Duplicate Creation
+     2. Check if slots already exist for this month
   ============================ */
   const monthPrefix = `${year}-${month.toString().padStart(2, '0')}`
 
-  const exists = await BookingSlots.findOne({
+  const existingSlots = await BookingSlots.find({
     author,
     date: { $regex: `^${monthPrefix}` },
   })
+    .select('date time isBooked')
+    .lean()
 
-  if (exists) {
+  // If not exist then return existing one
+  if (existingSlots.length > 0) {
     return {
       message: 'Booking slots already exist for this month',
+      data: existingSlots,
+      count: existingSlots.length,
     }
   }
 
   /* ============================
-     3. Generate Slots
+     3. Generate Slots 
   ============================ */
   const daysInMonth = dayjs(`${year}-${month}-01`).daysInMonth()
   const slotsToInsert: any[] = []
 
   for (let d = 1; d <= daysInMonth; d++) {
     const date = dayjs(`${year}-${month}-${d}`)
-    const weekDay = date.day() // 0–6
+    const weekDay = date.day() // 0–6 (Sunday=0)
 
     user.availability.forEach((a) => {
       if (DAY_MAP[a.day] === weekDay) {
@@ -75,18 +83,22 @@ const insertIntoDB = async (
   if (!slotsToInsert.length) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
-      'No slots generated from availability',
+      'No slots generated from availability for this month',
     )
   }
 
   /* ============================
      4. Insert Slots
   ============================ */
-  const result = await BookingSlots.insertMany(slotsToInsert, {
+  const insertedSlots = await BookingSlots.insertMany(slotsToInsert, {
     ordered: false,
   })
 
-  return result
+  return {
+    message: 'Booking slots created successfully',
+    data: insertedSlots,
+    count: insertedSlots.length,
+  }
 }
 
 const getAllIntoFromDB = async (query: Record<string, unknown>) => {
@@ -109,7 +121,9 @@ const getAllIntoFromDB = async (query: Record<string, unknown>) => {
   const result = await BookingSlots.find({
     author,
     date: { $regex: `^${monthPrefix}` },
-  }).sort({ date: 1, time: 1 })
+  })
+    .sort({ date: 1, time: 1 })
+    .select('date time isBooked')
 
   return result
 }

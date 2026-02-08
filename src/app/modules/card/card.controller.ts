@@ -28,8 +28,8 @@ const getAllCard = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-const getCardById = catchAsync(async (req: Request, res: Response) => {
-  const result = await CardService.getCardById(req.params.id);
+const getDefaultCard = catchAsync(async (req: Request, res: Response) => {
+  const result = await CardService.getDefaultCard(req.user._id);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -39,13 +39,13 @@ const getCardById = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-const updateCard = catchAsync(async (req: Request, res: Response) => {
-  const result = await CardService.updateCard(req.params.id, req.body);
+const setAsDefault = catchAsync(async (req: Request, res: Response) => {
+  const result = await CardService.setAsDefault(req.params.id, req.user._id);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Card history updated successfully',
+    message: 'Card set as default successfully',
     data: result,
   });
 });
@@ -64,7 +64,7 @@ const deleteCard = catchAsync(async (req: Request, res: Response) => {
 export const CardController = {
   createCard,
   getAllCard,
-  getCardById,
-  updateCard,
+  getDefaultCard,
+  setAsDefault,
   deleteCard,
 };

@@ -8,8 +8,8 @@ const createBookingSlot = catchAsync(async (req, res) => {
   sendResponse(res, {
     success: true,
     statusCode: 200,
-    message: 'Booking slots inserted successfully!',
-    data: result,
+    message: result.message,
+    data: result.data,
   })
 })
 

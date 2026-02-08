@@ -1,4 +1,4 @@
-const getCardStatus = (expiryDate: string) => {
+export const getCardStatus = (expiryDate: string) => {
   const [month, year] = expiryDate.split('/').map(Number)
 
   if (!month || !year) return 'expired'

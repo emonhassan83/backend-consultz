@@ -14,11 +14,10 @@ router.post(
   CardController.createCard,
 );
 
-router.put(
-  '/:id',
+router.patch(
+  '/default/:id',
   auth(USER_ROLE.consult, USER_ROLE.expert),
-  validateRequest(CardValidation.updateValidationSchema),
-  CardController.updateCard,
+  CardController.setAsDefault,
 );
 
 router.delete(
@@ -28,15 +27,15 @@ router.delete(
 );
 
 router.get(
-  '/',
+  '/default',
   auth(USER_ROLE.consult, USER_ROLE.expert),
-  CardController.getAllCard,
+  CardController.getDefaultCard,
 );
 
 router.get(
-  '/:id',
+  '/',
   auth(USER_ROLE.consult, USER_ROLE.expert),
-  CardController.getCardById,
+  CardController.getAllCard,
 );
 
 export const CardRoutes = router;
