@@ -15,7 +15,7 @@ router.post(
 )
 
 router.patch(
-  '/status/:id',
+  '/canceled/:id',
   auth(USER_ROLE.consult, USER_ROLE.expert),
   bookingsController.changeBookingStatus,
 )
@@ -23,6 +23,7 @@ router.patch(
 router.patch(
   '/reschedule/:id',
   auth(USER_ROLE.consult, USER_ROLE.expert),
+  zodValidationRequest(BookingsValidation.rescheduleValidationSchema),
   bookingsController.rescheduleBooking,
 )
 

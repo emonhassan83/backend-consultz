@@ -19,6 +19,7 @@ import { BookingsRoutes } from '../modules/booking/booking.route'
 import { BookingSlotsRoutes } from '../modules/bookingSlots/bookingSlots.route'
 import { PaymentRoutes } from '../modules/payment/payment.route'
 import { CardRoutes } from '../modules/card/card.route'
+import { CategoriesRoutes } from '../modules/category/category.route'
 
 const router = Router()
 
@@ -102,6 +103,10 @@ const moduleRoutes = [
   {
     path: '/contents',
     route: contentsRoutes,
+  },
+  {
+    path: '/categories',
+    route: CategoriesRoutes,
   },
 ]
 

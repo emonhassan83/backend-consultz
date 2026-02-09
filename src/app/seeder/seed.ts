@@ -1,8 +1,10 @@
 import config from '../config'
+import { Category } from '../modules/category/category.model'
 import { Contents } from '../modules/contents/contents.models'
 import { USER_ROLE } from '../modules/user/user.constant'
 import { User } from '../modules/user/user.model'
 import { findAdmin } from '../utils/findAdmin'
+import { categories } from '../utils/seedData'
 
 const adminUser = {
   firstName: 'vincent',
@@ -48,7 +50,40 @@ const seedContents = async () => {
   }
 }
 
+const seedCategories = async () => {
+  try {
+    let seededCount = 0;
+
+    for (const cat of categories) {
+      // Normalize title for comparison (case-insensitive + trim)
+      const normalizedTitle = cat.title.trim().toLowerCase();
+
+      // Check if category already exists (case-insensitive)
+      const exists = await Category.findOne({
+        $expr: {
+          $eq: [{ $toLower: '$title' }, normalizedTitle],
+        },
+      });
+
+      if (!exists) {
+        // Create only if not found
+        await Category.create({ title: cat.title.trim() });
+        seededCount++;
+      }
+    }
+
+    if (seededCount > 0) {
+      console.log(`\n✅ ${seededCount} new categories seeded successfully!`);
+    } else {
+      console.log('\nℹ️ All categories already exist. No new seeding needed.');
+    }
+  } catch (error) {
+    console.error('❌ Category seeding failed:', error);
+  }
+};
+
 export const seeder = {
   seedContents,
   seedAdmin,
+  seedCategories
 }

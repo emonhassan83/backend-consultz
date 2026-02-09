@@ -1,16 +1,11 @@
 import { z } from 'zod'
 import { Types } from 'mongoose'
-import {
-  BOOKING_STATUS,
-  SESSION_TYPE,
-} from './booking.constants'
+import { SESSION_TYPE } from './booking.constants'
 
 // reusable ObjectId validator
-const objectIdSchema = z
-  .string()
-  .refine((val) => Types.ObjectId.isValid(val), {
-    message: 'Invalid ObjectId format',
-  })
+const objectIdSchema = z.string().refine((val) => Types.ObjectId.isValid(val), {
+  message: 'Invalid ObjectId format',
+})
 
 const createValidationSchema = z.object({
   body: z.object({
@@ -30,23 +25,13 @@ const createValidationSchema = z.object({
   }),
 })
 
-const changeStatusValidationSchema = z.object({
-  body: z.object({
-    status: z
-      .enum(Object.values(BOOKING_STATUS) as [string, ...string[]])
-      .optional(),
-  }),
-})
-
 const rescheduleValidationSchema = z.object({
   body: z.object({
-    sessionDate: z.string().min(1, 'Session date is required'),
-    sessionTime: z.string().min(1, 'Session time is required'),
+    slot: objectIdSchema,
   }),
 })
 
 export const BookingsValidation = {
   createValidationSchema,
-  changeStatusValidationSchema,
   rescheduleValidationSchema,
 }
