@@ -33,7 +33,7 @@ const insertIntoDB = async (payload: TCategory): Promise<TCategory> => {
 
 const getAllIntoFromDB = async (query: Record<string, unknown>) => {
   const queryBuilder = new QueryBuilder(
-    Category.find(),
+    Category.find().select('title') as any,
     query,
   )
     // Case-insensitive search on title

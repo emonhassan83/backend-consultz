@@ -20,6 +20,7 @@ import { BookingSlotsRoutes } from '../modules/bookingSlots/bookingSlots.route'
 import { PaymentRoutes } from '../modules/payment/payment.route'
 import { CardRoutes } from '../modules/card/card.route'
 import { CategoriesRoutes } from '../modules/category/category.route'
+import { SubCategoriesRoutes } from '../modules/subcategory/subcategory.route'
 
 const router = Router()
 
@@ -107,6 +108,10 @@ const moduleRoutes = [
   {
     path: '/categories',
     route: CategoriesRoutes,
+  },
+  {
+    path: '/sub-categories',
+    route: SubCategoriesRoutes,
   },
 ]
 

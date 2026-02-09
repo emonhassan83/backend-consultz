@@ -10,10 +10,7 @@ const categorySchema = new Schema<TCategory>(
       minlength: [2, 'Title must be at least 2 characters'],
       maxlength: [100, 'Title cannot exceed 100 characters'],
     },
-  },
-  {
-    timestamps: true,
-  },
+  }
 );
 
 categorySchema.index({ title: 'text' });
