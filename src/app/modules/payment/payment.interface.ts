@@ -8,6 +8,8 @@ export type TPayment = {
   booking: Types.ObjectId
   transactionId: string
   paymentIntentId: string
+  platformCommission: number
+  consultAmount: number
   amount: number
   status: TPaymentStatus
   isPaid: boolean

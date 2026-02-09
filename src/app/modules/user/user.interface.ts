@@ -86,6 +86,8 @@ export interface TUser {
   level: number
   avgRating: number
   ratingCount: number
+  referralCode: string,
+  referredBy: Types.ObjectId
   balance: number
   status: TUserStatus
   expireAt: Date

@@ -10,6 +10,7 @@ import {
   USER_STATUS,
 } from './user.constant'
 import { generateCryptoString } from '../../utils/generateCryptoString'
+import { generateReferralCode } from '../../utils/generateReferralCode'
 
 // 🎓 Education
 const EducationSchema = new Schema(
@@ -125,6 +126,8 @@ const userSchema = new Schema<TUser, UserModel>(
     avgRating: { type: Number, default: 0 },
     ratingCount: { type: Number, default: 0 },
     balance: { type: Number, default: 0 },
+    referralCode: { type: String, default: () => generateReferralCode() },
+    referredBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
 
     status: {
       type: String,
@@ -196,6 +199,7 @@ const userSchema = new Schema<TUser, UserModel>(
 
 // TTL index for expireAt
 userSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 })
+userSchema.index({ referralCode: 1 });
 
 //* Hash password before saving
 userSchema.pre('save', async function (next) {

@@ -17,57 +17,82 @@ import {
 import { Types } from 'mongoose'
 import { Booking } from '../booking/booking.models'
 import { BOOKING_STATUS } from '../booking/booking.constants'
+import config from '../../config'
 
-const registerUserIntoDB = async (payload: TUser) => {
-  if (payload.role === 'admin') {
+const registerUserIntoDB = async (payload: TUser & { referralCode?: string }) => {
+  const { email, password, referralCode, ...rest } = payload;
+
+  if (payload.role === USER_ROLE.admin) {
     throw new AppError(
       httpStatus.FORBIDDEN,
       'You cannot directly assign admin role',
-    )
+    );
   }
 
-  const existingUser = await User.findOne({ email: payload.email })
+  const existingUser = await User.findOne({ email });
   if (existingUser) {
-    // 🟡 Soft deleted user — recreate
+    // Soft deleted user — recreate
     if (existingUser.isDeleted) {
-      existingUser.set({ ...payload, isDeleted: false })
-      const user = await existingUser.save()
-      return user
+      existingUser.set({ ...payload, isDeleted: false });
+      const user = await existingUser.save();
+      return user;
     }
 
-    // 🟡 Unverified user — update fields and re-save
+    // Unverified user — update fields and re-save
     if (!existingUser.verification?.status) {
-      existingUser.set({ ...payload })
-      const user = await existingUser.save()
-      return user
+      existingUser.set({ ...payload });
+      const user = await existingUser.save();
+      return user;
     }
 
-    // 🔴 Already active user
+    // Already active user
     throw new AppError(
       httpStatus.FORBIDDEN,
       'User already exists with this email',
-    )
+    );
   }
 
-  // 🟢 New user
   if (!payload.password) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Password is required')
+    throw new AppError(httpStatus.BAD_REQUEST, 'Password is required');
   }
 
   const finalPayload = {
-    ...payload,
+    ...rest,
+    email,
+    password,
     status:
       payload.role === USER_ROLE.expert
         ? USER_STATUS.pending
         : payload.status || USER_STATUS.active,
+  };
+
+  const newUser = await User.create(finalPayload);
+
+  // Referral logic: if exist
+  let referredBy = null;
+  if (referralCode) {
+    const referrer = await User.findOne({ referralCode });
+    if (referrer && referrer._id.toString() !== newUser._id.toString()) {
+      // Self-referral block
+      referredBy = referrer._id;
+      newUser.referredBy = referredBy;
+      await newUser.save();
+
+      // Points add
+      referrer.points += 50; // referrer gets 50 points
+      await referrer.save();
+
+      newUser.points += 25; // new user gets 25 bonus
+      await newUser.save();
+    } else if (referrer) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Cannot use your own referral code');
+    } else {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid referral code');
+    }
   }
 
-  const newUser = new User(finalPayload)
-
-  await newUser.save()
-
-  return newUser
-}
+  return newUser;
+};
 
 const getAllUsersFromDB = async (query: Record<string, unknown>) => {
   const usersQuery = new QueryBuilder(
@@ -345,12 +370,16 @@ const getInvestmentExperts = async (query: Record<string, unknown>) => {
 const geUserByIdFromDB = async (id: string) => {
   const user = await User.findById(id)
     .select(
-      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role'
+      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points referredBy referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role'
     )
     .lean();
+
   if (!user || user.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
   }
+
+  // Generate referral link
+  const referralLink = `${config.client_url}/signup?ref=${user.referralCode}`;
 
   // Total bookings (all statuses)
   const totalBookingsCount = await Booking.countDocuments({
@@ -397,7 +426,8 @@ const geUserByIdFromDB = async (id: string) => {
 
   return {
     ...user,
-    totalBookings: completedBookingsCount, // or totalBookingsCount if you want all
+    referralLink, // added for frontend sharing
+    totalBookings: completedBookingsCount,
     profileSetupProgress,
     advisingTimeInHours,
     avgAttendance,

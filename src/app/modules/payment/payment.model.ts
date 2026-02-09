@@ -13,6 +13,8 @@ const paymentSchema = new Schema<TPayment>(
     account: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     booking: { type: Schema.Types.ObjectId, ref: 'Booking', required: true },
     transactionId: { type: String, required: true },
+    platformCommission: { type: Number, default: 0 },
+    consultAmount: { type: Number, default: 0 },
     amount: { type: Number, min: 0 },
     status: {
       type: String,
