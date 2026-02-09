@@ -124,6 +124,7 @@ const userSchema = new Schema<TUser, UserModel>(
     level: { type: Number, default: 1 },
     avgRating: { type: Number, default: 0 },
     ratingCount: { type: Number, default: 0 },
+    balance: { type: Number, default: 0 },
 
     status: {
       type: String,

@@ -86,6 +86,7 @@ export interface TUser {
   level: number
   avgRating: number
   ratingCount: number
+  balance: number
   status: TUserStatus
   expireAt: Date
   isProfileSetup: boolean
