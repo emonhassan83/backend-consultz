@@ -15,3 +15,14 @@ export type TPayment = {
   createdAt?: Date
   updatedAt?: Date
 }
+
+export interface IPaymentIntent {
+  booking: string
+  account: string
+}
+
+export interface IConfirmPayment {
+  paymentIntentId: string
+  booking: string
+  user: string
+}

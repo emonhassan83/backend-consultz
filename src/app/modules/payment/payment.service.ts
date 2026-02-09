@@ -2,45 +2,38 @@ import Stripe from 'stripe'
 import httpStatus from 'http-status'
 import AppError from '../../errors/AppError'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { TPayment } from './payment.interface'
 import { Payment } from './payment.model'
-import {
-  createCheckoutSession,
-  paymentNotifyToAdmin,
-  paymentNotifyToUser,
-} from './payment.utils'
+import { paymentNotifyToAdmin, paymentNotifyToUser } from './payment.utils'
 import config from '../../config'
-import { generateTransactionId } from '../../utils/generateTransctionId'
 import { Booking } from '../booking/booking.models'
-import mongoose, { startSession } from 'mongoose'
+import mongoose from 'mongoose'
 import { PAYMENT_STATUS } from './payment.constant'
 import { BOOKING_STATUS } from '../booking/booking.constants'
 import { User } from '../user/user.model'
+import { BookingSlots } from '../bookingSlots/bookingSlots.model'
+import { IConfirmPayment, IPaymentIntent } from './payment.interface'
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2025-02-24.acacia',
   typescript: true,
 })
 
-const createPaymentIntent = async (payload: {
-  booking: string;
-  account: string;
-}) => {
-  const { booking: bookingId, account: userId } = payload;
+const createPaymentIntent = async (payload: IPaymentIntent) => {
+  const { booking: bookingId, account: userId } = payload
 
-  // বুকিং চেক
-  const booking = await Booking.findById(bookingId);
+  // Check booking
+  const booking = await Booking.findById(bookingId)
   if (!booking || booking.isDeleted || booking.user.toString() !== userId) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid booking');
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid booking')
   }
 
-  // ইউজার চেক
-  const user = await User.findById(userId);
+  // user checked
+  const user = await User.findById(userId)
   if (!user || user.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found')
   }
 
-  // পেমেন্ট ইনটেন্ট তৈরি
+  // Create payment Intent
   const paymentIntent = await stripe.paymentIntents.create({
     amount: booking.price * 100,
     currency: 'usd',
@@ -50,9 +43,9 @@ const createPaymentIntent = async (payload: {
       userId: userId.toString(),
     },
     description: `Booking payment for ${booking._id}`,
-  });
+  })
 
-  // Payment রেকর্ড তৈরি (যদি না থাকে)
+  // Payment record create
   await Payment.findOneAndUpdate(
     { booking: bookingId, isPaid: false },
     {
@@ -62,32 +55,28 @@ const createPaymentIntent = async (payload: {
       status: PAYMENT_STATUS.unpaid,
     },
     { upsert: true, new: true },
-  );
+  )
 
   return {
     clientSecret: paymentIntent.client_secret,
     paymentIntentId: paymentIntent.id,
-  };
-};
+  }
+}
 
-const confirmPayment = async (payload: {
-  paymentIntentId: string;
-  bookingId: string;
-  userId: string;
-}) => {
-  const { paymentIntentId, bookingId, userId } = payload;
+const confirmPayment = async (payload: IConfirmPayment) => {
+  const { paymentIntentId, booking: bookingId, user: userId } = payload
 
-  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId)
 
   if (paymentIntent.status !== 'succeeded') {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Payment not succeeded');
+    throw new AppError(httpStatus.BAD_REQUEST, 'Payment not succeeded')
   }
 
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const session = await mongoose.startSession()
+  session.startTransaction()
 
   try {
-    // পেমেন্ট রেকর্ড আপডেট
+    // Payment record update
     const payment = await Payment.findOneAndUpdate(
       { paymentIntentId, isPaid: false },
       {
@@ -95,13 +84,13 @@ const confirmPayment = async (payload: {
         status: PAYMENT_STATUS.paid,
       },
       { new: true, session },
-    );
+    )
 
     if (!payment) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Payment record not found');
+      throw new AppError(httpStatus.NOT_FOUND, 'Payment record not found')
     }
 
-    // বুকিং কনফার্ম
+    // Booking confirm
     const booking = await Booking.findByIdAndUpdate(
       bookingId,
       {
@@ -109,28 +98,34 @@ const confirmPayment = async (payload: {
         status: BOOKING_STATUS.confirmed,
       },
       { new: true, session },
-    );
-
+    )
     if (!booking) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found');
+      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
     }
 
-    // নোটিফিকেশন
-    const user = await User.findById(userId);
+    // slot booking
+    await BookingSlots.findByIdAndUpdate(
+      booking._id,
+      { isBooked: true },
+      { new: true },
+    )
+
+    // sent notify
+    const user = await User.findById(userId)
     if (user) {
-      await paymentNotifyToUser('SUCCESS', payment, user);
-      await paymentNotifyToAdmin('SUCCESS', payment);
+      await paymentNotifyToUser('SUCCESS', payment, user)
+      await paymentNotifyToAdmin('SUCCESS', payment)
     }
 
-    await session.commitTransaction();
-    return { payment, booking };
+    await session.commitTransaction()
+    return { payment, booking }
   } catch (error) {
-    await session.abortTransaction();
-    throw error;
+    await session.abortTransaction()
+    throw error
   } finally {
-    session.endSession();
+    session.endSession()
   }
-};
+}
 
 const getAllPaymentsFromDB = async (query: Record<string, any>) => {
   const paymentModel = new QueryBuilder(

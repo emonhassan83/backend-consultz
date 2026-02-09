@@ -1,19 +1,28 @@
+import { Types } from 'mongoose'
 import { z } from 'zod'
+
+const objectIdSchema = z.string().refine((val) => Types.ObjectId.isValid(val), {
+  message: 'Invalid ObjectId',
+})
 
 const createValidationSchema = z.object({
   body: z.object({
-    account: z.string({ required_error: 'User ID is required!' }),
-    booking: z.string({ required_error: 'Booking ID is required!' }),
+    account: objectIdSchema,
+    booking: objectIdSchema,
   }),
 })
 
-const paymentLinkValidationSchema = z.object({
+const confirmPaymentSchema = z.object({
   body: z.object({
-    email: z.string({ required_error: 'Email is required' }),
+    account: objectIdSchema,
+    booking: objectIdSchema,
+    paymentIntentId: z.string({
+      required_error: 'Payment IntentId is required!',
+    }),
   }),
 })
 
 export const PaymentValidation = {
   createValidationSchema,
-  paymentLinkValidationSchema,
+  confirmPaymentSchema,
 }

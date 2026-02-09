@@ -13,7 +13,11 @@ router.post(
   PaymentControllers.checkout,
 )
 
-router.get('/confirm-payment', PaymentControllers.confirmPayment)
+router.post(
+  '/confirm-payment',
+  zodValidationRequest(PaymentValidation.confirmPaymentSchema),
+  PaymentControllers.confirmPayment,
+)
 
 router.get('/', auth(USER_ROLE.admin), PaymentControllers.getAllPayments)
 
@@ -31,6 +35,6 @@ router.get(
   PaymentControllers.getAPayment,
 )
 
-router.patch('/refound-payment', PaymentControllers.refundPayment)
+router.patch('/refund-payment', PaymentControllers.refundPayment)
 
 export const PaymentRoutes = router

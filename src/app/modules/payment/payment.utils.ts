@@ -19,9 +19,9 @@ interface TPayload {
     quantity: number
   }
   customer: {
-    name: string;
-    email: string;
-  };
+    name: string
+    email: string
+  }
   paymentId: string | Types.ObjectId
 }
 
@@ -57,9 +57,7 @@ export const paymentNotifyToAdmin = async (
 ) => {
   const admin = await findAdmin()
 
-  if (!admin) {
-    return
-  }
+  if (!admin || !admin?.fcmToken) return
 
   // Define message and description based on type
   const message =
@@ -87,8 +85,10 @@ export const paymentNotifyToAdmin = async (
 export const paymentNotifyToUser = async (
   type: 'SUCCESS' | 'REFUND',
   payment: TPayment,
-  user: any
+  user: any,
 ) => {
+  if (!user || !user?.fcmToken) return
+
   // Define message and description based on type
   const message =
     type === 'SUCCESS'

@@ -2,13 +2,21 @@ import dayjs from 'dayjs'
 import mongoose from 'mongoose'
 import httpStatus from 'http-status'
 import { TBookings } from './booking.interface'
-import { BOOKING_STATUS, TBookingStatus } from './booking.constants'
+import { BOOKING_STATUS, PAYMENT_STATUS } from './booking.constants'
 import AppError from '../../errors/AppError'
 import { Booking } from './booking.models'
 import { User } from '../user/user.model'
 import { sendBookingsNotification } from './booking.utils'
 import QueryBuilder from '../../builder/QueryBuilder'
 import { BookingSlots } from '../bookingSlots/bookingSlots.model'
+import { Payment } from '../payment/payment.model'
+import Stripe from 'stripe'
+import config from '../../config'
+
+const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
+  apiVersion: '2025-02-24.acacia',
+  typescript: true,
+})
 
 const createBookings = async (payload: TBookings, userId: string) => {
   const sessionClient = await mongoose.startSession()
@@ -124,71 +132,117 @@ const getBookingsById = async (id: string) => {
   return result
 }
 
-const changeBookingStatus = async (id: string, status: TBookingStatus) => {
-  const session = await mongoose.startSession()
-  session.startTransaction()
+const cancelBooking = async (bookingId: string, currentUserId: string) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
   try {
-    const booking = await Booking.findById(id).session(session)
-    if (!booking || booking.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found!')
+    // Find booking
+    const booking = await Booking.findOne({
+      _id: bookingId,
+      user: currentUserId,
+      isDeleted: false,
+    }).session(session);
+
+    if (!booking) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found or not yours');
     }
 
-    // ✅ User can ONLY cancel when status is pending
+    // check if it confirm booking or not
     if (booking.status !== BOOKING_STATUS.confirmed) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
         'Only confirmed bookings can be cancelled',
-      )
+      );
     }
 
-    if (status !== BOOKING_STATUS.cancelled) {
+    // Time checked
+    const slot = await BookingSlots.findById(booking.slot).session(session);
+    if (!slot) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Slot not found');
+    }
+
+    const slotDateTimeStr = `${slot.date} ${slot.time}`;
+    const slotDateTime = dayjs(slotDateTimeStr, 'YYYY-MM-DD HH:mm');
+
+    if (!slotDateTime.isValid()) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid slot date/time');
+    }
+
+    const now = dayjs();
+    const hoursLeft = slotDateTime.diff(now, 'hour');
+
+    if (hoursLeft < 12) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        'Invalid status change request',
-      )
+        'Cancellation not allowed within 12 hours of the scheduled time',
+      );
     }
 
-    // Update status
-    booking.status = BOOKING_STATUS.cancelled
-    await booking.save({ session })
+    // Free the slots
+    slot.isBooked = false;
+    await slot.save({ session });
 
-    // Change slot to unbooked
-    const slot = await BookingSlots.findById(booking.slot).session(session)
-    if (slot) {
-      slot.isBooked = false
-      await slot.save({ session })
+    // Booking status canceled
+    booking.status = BOOKING_STATUS.cancelled;
+    await booking.save({ session });
+
+    // Refund process
+    let refundProcessed = false;
+    if (booking.paymentStatus === PAYMENT_STATUS.paid) {
+      const payment = await Payment.findOne({
+        booking: booking._id,
+        isPaid: true,
+        isDeleted: false,
+      }).session(session);
+
+      if (payment && payment.paymentIntentId) {
+        try {
+          await stripe.refunds.create({
+            payment_intent: payment.paymentIntentId,
+            amount: payment.amount * 100, // full amount in cents
+          });
+
+          payment.status = PAYMENT_STATUS.refunded;
+          await payment.save({ session });
+
+          refundProcessed = true;
+        } catch (refundError: any) {
+          console.error('Refund failed:', refundError.message);
+          // If you want to sent notify admin
+        }
+      }
     }
 
-    // Fetch both parties
+    // user and consult sent notify
     const [user, consultant] = await Promise.all([
       User.findById(booking.user).session(session),
       User.findById(booking.consult).session(session),
-    ])
-    if (!user || user.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+    ]);
+
+    if (user) {
+      await sendBookingsNotification('cancellation', booking, user, slot);
+    }
+    if (consultant) {
+      await sendBookingsNotification('cancellation', booking, consultant, slot);
     }
 
-    if (!consultant || consultant.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Consultant not found!')
-    }
+    await session.commitTransaction();
 
-    // 🔔 Notify both user & consultant
-    await Promise.all([
-      sendBookingsNotification('cancellation', booking, user, slot),
-      sendBookingsNotification('cancellation', booking, consultant, slot),
-    ])
-
-    await session.commitTransaction()
-    session.endSession()
-
-    return booking
+    return {
+      booking,
+      refundProcessed,
+      message: refundProcessed
+        ? 'Booking cancelled and refund processed'
+        : 'Booking cancelled (no refund needed)',
+    };
   } catch (error) {
-    await session.abortTransaction()
-    session.endSession()
-    throw error
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
   }
-}
+};
 
 const rescheduleBooking = async (
   id: string,
@@ -307,6 +361,6 @@ export const bookingsService = {
   getAllBookings,
   getBookingsById,
   deleteBookings,
-  changeBookingStatus,
+  cancelBooking,
   rescheduleBooking,
 }
