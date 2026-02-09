@@ -8,21 +8,19 @@ const insertIntoDB = catchAsync(async (req, res) => {
   sendResponse(res, {
     success: true,
     statusCode: 200,
-    message: "SubCategory data insert successfully",
+    message: 'SubCategory data insert successfully',
     data: result,
   })
 })
 
 const getAllSubCategory = catchAsync(async (req, res) => {
-  req.query['category'] = req.params.categoryId
-  const result = await SubCategoryService.getAllFromDB(req.query)
+  const result = await SubCategoryService.getAllFromDB(req.params.categoryId)
 
   sendResponse(res, {
     success: true,
     statusCode: 200,
     message: 'SubCategories retrieved successfully!',
-    meta: result.meta,
-    data: result.data,
+    data: result,
   })
 })
 
@@ -64,5 +62,5 @@ export const SubCategoryControllers = {
   getAllSubCategory,
   getACategory,
   updateACategory,
-  deleteAFromDB
+  deleteAFromDB,
 }
