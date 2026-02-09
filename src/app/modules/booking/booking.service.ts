@@ -133,8 +133,8 @@ const getBookingsById = async (id: string) => {
 }
 
 const cancelBooking = async (bookingId: string, currentUserId: string) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const session = await mongoose.startSession()
+  session.startTransaction()
 
   try {
     // Find booking
@@ -142,10 +142,10 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
       _id: bookingId,
       user: currentUserId,
       isDeleted: false,
-    }).session(session);
+    }).session(session)
 
     if (!booking) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found or not yours');
+      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found or not yours')
     }
 
     // check if it confirm booking or not
@@ -153,62 +153,70 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
       throw new AppError(
         httpStatus.BAD_REQUEST,
         'Only confirmed bookings can be cancelled',
-      );
+      )
     }
 
     // Time checked
-    const slot = await BookingSlots.findById(booking.slot).session(session);
+    const slot = await BookingSlots.findById(booking.slot).session(session)
     if (!slot) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Slot not found');
+      throw new AppError(httpStatus.NOT_FOUND, 'Slot not found')
     }
 
-    const slotDateTimeStr = `${slot.date} ${slot.time}`;
-    const slotDateTime = dayjs(slotDateTimeStr, 'YYYY-MM-DD HH:mm');
+    const slotDateTimeStr = `${slot.date} ${slot.time}`
+    const slotDateTime = dayjs(slotDateTimeStr, 'YYYY-MM-DD HH:mm')
 
     if (!slotDateTime.isValid()) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid slot date/time');
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid slot date/time')
     }
 
-    const now = dayjs();
-    const hoursLeft = slotDateTime.diff(now, 'hour');
+    const now = dayjs()
+    const hoursLeft = slotDateTime.diff(now, 'hour')
 
     if (hoursLeft < 12) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
         'Cancellation not allowed within 12 hours of the scheduled time',
-      );
+      )
     }
 
     // Free the slots
-    slot.isBooked = false;
-    await slot.save({ session });
+    slot.isBooked = false
+    await slot.save({ session })
 
     // Booking status canceled
-    booking.status = BOOKING_STATUS.cancelled;
-    await booking.save({ session });
+    booking.status = BOOKING_STATUS.cancelled
+    await booking.save({ session })
 
     // Refund process
-    let refundProcessed = false;
-    if (booking.paymentStatus === PAYMENT_STATUS.paid) {
+    let refundProcessed = false
+    let refundAmount = 0
+    if (booking.paymentStatus == PAYMENT_STATUS.paid) {
       const payment = await Payment.findOne({
         booking: booking._id,
         isPaid: true,
         isDeleted: false,
-      }).session(session);
+      }).session(session)
 
       if (payment && payment.paymentIntentId) {
         try {
-          await stripe.refunds.create({
+          const refund = await stripe.refunds.create({
             payment_intent: payment.paymentIntentId,
-            amount: payment.amount * 100, // full amount in cents
-          });
+            amount: payment.amount * 100,
+          })
 
-          payment.status = PAYMENT_STATUS.refunded;
-          await payment.save({ session });
+          // payment status changed
+          await Payment.updateOne(
+            { _id: payment._id },
+            { status: PAYMENT_STATUS.refunded },
+            { session },
+          )
 
-          refundProcessed = true;
+          refundProcessed = true
+          refundAmount = refund.amount / 100
+
+          refundProcessed = true
         } catch (refundError: any) {
-          console.error('Refund failed:', refundError.message);
+          console.error('Refund failed:', refundError.message)
           // If you want to sent notify admin
         }
       }
@@ -218,16 +226,16 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
     const [user, consultant] = await Promise.all([
       User.findById(booking.user).session(session),
       User.findById(booking.consult).session(session),
-    ]);
+    ])
 
     if (user) {
-      await sendBookingsNotification('cancellation', booking, user, slot);
+      await sendBookingsNotification('cancellation', booking, user, slot)
     }
     if (consultant) {
-      await sendBookingsNotification('cancellation', booking, consultant, slot);
+      await sendBookingsNotification('cancellation', booking, consultant, slot)
     }
 
-    await session.commitTransaction();
+    await session.commitTransaction()
 
     return {
       booking,
@@ -235,35 +243,38 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
       message: refundProcessed
         ? 'Booking cancelled and refund processed'
         : 'Booking cancelled (no refund needed)',
-    };
+    }
   } catch (error) {
-    await session.abortTransaction();
-    throw error;
+    await session.abortTransaction()
+    throw error
   } finally {
-    session.endSession();
+    session.endSession()
   }
-};
+}
 
 const rescheduleBooking = async (
   id: string,
   payload: {
-    slot: string;
+    slot: string
   },
   currentUserId: string, // added for ownership check (recommended)
 ) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const session = await mongoose.startSession()
+  session.startTransaction()
 
   try {
     // 1. Find the booking
-    const booking = await Booking.findById(id).session(session);
+    const booking = await Booking.findById(id).session(session)
     if (!booking || booking.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found');
+      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
     }
 
     // 2. Verify ownership (security)
     if (booking.user.toString() !== currentUserId) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You are not authorized to reschedule this booking');
+      throw new AppError(
+        httpStatus.FORBIDDEN,
+        'You are not authorized to reschedule this booking',
+      )
     }
 
     // 3. Only confirmed bookings can be rescheduled
@@ -271,71 +282,74 @@ const rescheduleBooking = async (
       throw new AppError(
         httpStatus.BAD_REQUEST,
         'Only confirmed bookings can be rescheduled',
-      );
+      )
     }
 
     // 4. Find the new slot
-    const newSlot = await BookingSlots.findById(payload.slot).session(session);
+    const newSlot = await BookingSlots.findById(payload.slot).session(session)
     if (!newSlot) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'New slot not found');
+      throw new AppError(httpStatus.BAD_REQUEST, 'New slot not found')
     }
 
     // 5. New slot must not be already booked
     if (newSlot.isBooked) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'New slot is already booked');
+      throw new AppError(httpStatus.BAD_REQUEST, 'New slot is already booked')
     }
 
     // 6. Validate new slot date & time (must be in future + buffer)
-    const slotDateTimeStr = `${newSlot.date} ${newSlot.time}`; // e.g. "2025-02-10 14:00"
-    const slotDateTime = dayjs(slotDateTimeStr, 'YYYY-MM-DD HH:mm');
+    const slotDateTimeStr = `${newSlot.date} ${newSlot.time}` // e.g. "2025-02-10 14:00"
+    const slotDateTime = dayjs(slotDateTimeStr, 'YYYY-MM-DD HH:mm')
 
     if (!slotDateTime.isValid()) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid slot date/time format');
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Invalid slot date/time format',
+      )
     }
 
-    const now = dayjs();
-    const minBufferMinutes = 60; // Minimum advance time required (adjustable)
+    const now = dayjs()
+    const minBufferMinutes = 60 // Minimum advance time required (adjustable)
 
     if (slotDateTime.isBefore(now.add(minBufferMinutes, 'minute'))) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
         `New slot must be at least ${minBufferMinutes} minutes in the future. Slot time: ${slotDateTime.format('YYYY-MM-DD HH:mm')}`,
-      );
+      )
     }
 
     // 7. Free up the old slot
-    const oldSlot = await BookingSlots.findById(booking.slot).session(session);
+    const oldSlot = await BookingSlots.findById(booking.slot).session(session)
     if (oldSlot) {
-      oldSlot.isBooked = false;
-      await oldSlot.save({ session });
+      oldSlot.isBooked = false
+      await oldSlot.save({ session })
     }
 
     // 8. Assign new slot to booking
-    booking.slot = new mongoose.Types.ObjectId(newSlot._id);
-    await booking.save({ session });
+    booking.slot = new mongoose.Types.ObjectId(newSlot._id)
+    await booking.save({ session })
 
     // 9. Mark new slot as booked
-    newSlot.isBooked = true;
-    await newSlot.save({ session });
+    newSlot.isBooked = true
+    await newSlot.save({ session })
 
     // 10. Fetch user (for notification)
-    const user = await User.findById(booking.user).session(session);
+    const user = await User.findById(booking.user).session(session)
     if (!user || user.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found')
     }
 
     // 11. Send notification (reschedule)
-    await sendBookingsNotification('reschedule', booking, user, newSlot);
+    await sendBookingsNotification('reschedule', booking, user, newSlot)
 
-    await session.commitTransaction();
-    return booking;
+    await session.commitTransaction()
+    return booking
   } catch (error) {
-    await session.abortTransaction();
-    throw error;
+    await session.abortTransaction()
+    throw error
   } finally {
-    session.endSession();
+    session.endSession()
   }
-};
+}
 
 const deleteBookings = async (id: string) => {
   const booking = await Booking.findById(id)

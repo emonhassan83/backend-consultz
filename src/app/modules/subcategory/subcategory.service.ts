@@ -2,7 +2,6 @@ import { TSubCategory } from './subcategory.interface'
 import { SubCategory } from './subcategory.model'
 import AppError from '../../errors/AppError'
 import httpStatus from 'http-status'
-import QueryBuilder from '../../builder/QueryBuilder'
 
 /**
  * Create subcategory or return existing one (case-insensitive duplicate check under same category)
