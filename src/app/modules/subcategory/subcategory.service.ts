@@ -41,10 +41,7 @@ const insertIntoDB = async (payload: TSubCategory): Promise<TSubCategory> => {
  */
 const getAllFromDB = async (query: Record<string, unknown>) => {
   const queryBuilder = new QueryBuilder(
-    SubCategory.find().populate({
-      path: 'category',
-      select: 'title',
-    }),
+    SubCategory.find(),
     query,
   )
     .search(['title'])
