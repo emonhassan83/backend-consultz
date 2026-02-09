@@ -3,6 +3,85 @@ import { messages } from '../notification/notification.constant';
 import { TUser } from './user.interface';
 import { findAdmin } from '../../utils/findAdmin';
 import { sendNotification } from '../../utils/sentNotification';
+import { USER_ROLE } from './user.constant';
+
+export const calculateProfileSetupProgress = (user: any): number => {
+  if (!user || !user.role) {
+    return 0;
+  }
+
+  let requiredFields: string[] = [];
+
+  // Required fields for 'consult' role
+  if (user.role === USER_ROLE.consult) {
+    requiredFields = [
+      'firstName',
+      'lastName',
+      'email',
+      'password',
+      'dob',
+      'photoUrl',
+      'coverPhoto',
+      'phoneNumber',
+      'timeZone',
+      'priceRange',
+      'interests',
+      'learningStyles',
+      'availability',
+    ];
+  } else {
+    // Required fields for 'tutor' or other roles
+    requiredFields = [
+      'firstName',
+      'lastName',
+      'email',
+      'password',
+      'dob',
+      'photoUrl',
+      'coverPhoto',
+      'phoneNumber',
+      'socialProfiles',
+      'hourlyRate',
+      'expertise',
+      'skills',
+      'advisingStyles',
+      'bio',
+      'timeZone',
+      'sessionDurations',
+      'availability',
+    ];
+  }
+
+  if (requiredFields.length === 0) {
+    return 0;
+  }
+
+  // Count how many fields are "filled"
+  const filledCount = requiredFields.filter((field) => {
+    const value = user[field];
+
+    if (value === null || value === undefined) return false;
+
+    if (typeof value === 'string') {
+      return value.trim().length > 0;
+    }
+
+    if (Array.isArray(value)) {
+      return value.length > 0;
+    }
+
+    if (typeof value === 'number') {
+      return value > 0;
+    }
+
+    // Any other truthy value
+    return !!value;
+  }).length;
+
+  // Calculate percentage and cap at 100
+  const progress = Math.round((filledCount / requiredFields.length) * 100);
+  return Math.min(progress, 100);
+};
 
 export const sendUserStatusNotifYToAdmin = async (
   status: 'active' | 'blocked',

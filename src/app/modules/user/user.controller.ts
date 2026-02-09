@@ -87,7 +87,7 @@ const getAllUsers = catchAsync(async (req, res) => {
     statusCode: 200,
     message: 'Users retrieved successfully!',
     meta: result.meta,
-    data: result.result,
+    data: result.data,
   })
 })
 

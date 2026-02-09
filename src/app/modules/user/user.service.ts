@@ -3,47 +3,20 @@ import AppError from '../../errors/AppError'
 import { TUser } from './user.interface'
 import { User } from './user.model'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { USER_ROLE, USER_STATUS } from './user.constant'
 import {
+  PROPERTY_EXPERTISE,
+  PROPERTY_SKILLS,
+  USER_ROLE,
+  USER_STATUS,
+} from './user.constant'
+import {
+  calculateProfileSetupProgress,
   sendUserStatusNotifYToAdmin,
   sendUserStatusNotifYToUser,
 } from './user.utils'
 import { Types } from 'mongoose'
-
-// Property & Real Estate Related category
-const PROPERTY_EXPERTISE = [
-  'Property Investment & Development',
-  'Property Strategy',
-  'Buy to Let',
-  'HMOs',
-  'Rent to Rent',
-  'Property Deal Sourcing',
-  'Property Negotiation',
-  'Deal Structuring',
-  'Property Lead Generation',
-  'Property Deal Pipelines',
-  'Property CRM Setup',
-  'Investor Branding',
-  'Deal Packaging',
-  'Property Social Media Marketing',
-]
-
-const PROPERTY_SKILLS = [
-  'Property Investment',
-  'Real Estate',
-  'Property Law',
-  'Real Estate Development',
-  'Buy-to-Let Strategy',
-  'HMO Management',
-  'Rent-to-Rent',
-  'Property Sourcing',
-  'Property Negotiation',
-  'Deal Packaging',
-  'Property Lead Generation',
-  'Investor Marketing',
-  'Property Systems',
-  'Real Estate Marketing',
-]
+import { Booking } from '../booking/booking.models'
+import { BOOKING_STATUS } from '../booking/booking.constants'
 
 const registerUserIntoDB = async (payload: TUser) => {
   if (payload.role === 'admin') {
@@ -109,12 +82,40 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
     .paginate()
     .fields()
 
+  // 3. Get counts for active consult and expert (independent of pagination)
+  const activeCounts = await User.aggregate([
+    {
+      $match: {
+        isDeleted: false,
+        role: { $ne: USER_ROLE.admin },
+        status: USER_STATUS.active,
+      },
+    },
+    {
+      $group: {
+        _id: '$role',
+        count: { $sum: 1 },
+      },
+    },
+  ])
+
+  // Extract counts safely
+  const activeConsult =
+    activeCounts.find((item) => item._id === USER_ROLE.consult)?.count || 0
+  const activeExpert =
+    activeCounts.find((item) => item._id === USER_ROLE.expert)?.count || 0
+
   const result = await usersQuery.modelQuery
   const meta = await usersQuery.countTotal()
 
   return {
     meta,
-    result,
+    data: {
+      totalUsers: meta.total,
+      activeConsult,
+      activeExpert,
+      userList: result,
+    },
   }
 }
 
@@ -318,7 +319,7 @@ const getInvestmentExperts = async (query: Record<string, unknown>) => {
         },
       },
     ],
-  };
+  }
 
   const queryBuilder = new QueryBuilder(
     User.find(filter).select(
@@ -333,24 +334,75 @@ const getInvestmentExperts = async (query: Record<string, unknown>) => {
       createdAt: -1,
     })
     .paginate()
-    .fields();
+    .fields()
 
-  const result = await queryBuilder.modelQuery;
-  const meta = await queryBuilder.countTotal();
+  const result = await queryBuilder.modelQuery
+  const meta = await queryBuilder.countTotal()
 
-  return { meta, result };
-};
+  return { meta, result }
+}
 
 const geUserByIdFromDB = async (id: string) => {
-  const user = await User.findById(id).select(
-    '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt',
-  )
-  if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+  const user = await User.findById(id)
+    .select(
+      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role'
+    )
+    .lean();
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
   }
 
-  return user
-}
+  // Total bookings (all statuses)
+  const totalBookingsCount = await Booking.countDocuments({
+    consult: id,
+  });
+
+  // Completed bookings only
+  const completedBookingsCount = await Booking.countDocuments({
+    consult: id,
+    status: BOOKING_STATUS.completed,
+  });
+
+  // Advising time in hours (only for expert role)
+  let advisingTimeInHours = 0;
+  if (user.role === USER_ROLE.expert) {
+    const totalMinutesResult = await Booking.aggregate([
+      {
+        $match: {
+          consult: id,
+          status: BOOKING_STATUS.completed,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalMinutes: { $sum: '$sessionDuration' },
+        },
+      },
+    ]);
+
+    const minutes = totalMinutesResult[0]?.totalMinutes || 0;
+    advisingTimeInHours = Number((minutes / 60).toFixed(2));
+  }
+
+  // Average attendance percentage
+  const avgAttendance = totalBookingsCount > 0
+    ? Math.min(
+        Math.round((completedBookingsCount / totalBookingsCount) * 100),
+        100
+      )
+    : 0;
+
+  const profileSetupProgress = calculateProfileSetupProgress(user);
+
+  return {
+    ...user,
+    totalBookings: completedBookingsCount, // or totalBookingsCount if you want all
+    profileSetupProgress,
+    advisingTimeInHours,
+    avgAttendance,
+  };
+};
 
 const changeUserStatusFromDB = async (payload: any) => {
   const { userId, status } = payload
