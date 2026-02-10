@@ -7,6 +7,13 @@ import { WithdrawValidation } from './withdraw.validation'
 
 const router = express.Router()
 
+router.post(
+  '/',
+  auth(USER_ROLE.consult),
+  zodValidationRequest(WithdrawValidation.createValidationSchema),
+  WithdrawControllers.addWithdraw,
+)
+
 router.patch(
   '/:id',
   auth(USER_ROLE.admin),

@@ -3,8 +3,18 @@ import httpStatus from 'http-status'
 import sendResponse from '../../utils/sendResponse'
 import { WithdrawService } from './withdraw.service'
 
+const addWithdraw = catchAsync(async (req, res) => {
+  const result = await WithdrawService.addWithdraw(req.body, req.user._id)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Withdraw insert successfully!',
+    data: result,
+  })
+})
+
 const getAllMyWithdraw = catchAsync(async (req, res) => {
-  req.query['vendor'] = req.user._id
   const result = await WithdrawService.getAllWithdrawsFromDB(req.query)
 
   sendResponse(res, {
@@ -42,6 +52,7 @@ const updateWithdraw = catchAsync(async (req, res) => {
 })
 
 export const WithdrawControllers = {
+  addWithdraw,
   getAllMyWithdraw,
   getAWithdraw,
   updateWithdraw

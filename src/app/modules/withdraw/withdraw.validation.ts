@@ -1,5 +1,17 @@
 import { z } from 'zod'
 import { WITHDRAW_STATUS } from './withdraw.constant'
+import { Types } from 'mongoose'
+
+// reusable ObjectId validator
+const objectIdSchema = z.string().refine((val) => Types.ObjectId.isValid(val), {
+  message: 'Invalid ObjectId format',
+})
+
+const createValidationSchema = z.object({
+  body: z.object({
+    booking: objectIdSchema,
+  }),
+})
 
 const updateValidationSchema = z.object({
   body: z.object({
@@ -11,4 +23,5 @@ const updateValidationSchema = z.object({
 
 export const WithdrawValidation = {
   updateValidationSchema,
+  createValidationSchema,
 }
