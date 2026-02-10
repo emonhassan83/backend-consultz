@@ -8,6 +8,7 @@ export enum modeType {
   Booking = 'Booking',
   Reviews = 'Reviews',
   Payment = 'Payment',
+  Withdraw = 'Withdraw',
 }
 
 export type TNotification = {

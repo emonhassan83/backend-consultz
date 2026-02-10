@@ -6,6 +6,7 @@ import { errorlogger, logger } from './app/utils/logger'
 import initializeSocketIO from './socket'
 import { seeder } from './app/seeder/seed'
 import colors from 'colors'
+import { transferAmountCron } from './app/modules/withdraw/withdraw.service'
 
 let server: Server
 export const io = initializeSocketIO(createServer(app))
@@ -22,6 +23,9 @@ async function main() {
       seeder.seedContents(),
       seeder.seedCategories(),
     ])
+
+    // run the corn job
+    transferAmountCron();
 
     server = app.listen(Number(config.port), config.ip as string, () => {
       console.log(

@@ -29,4 +29,9 @@ export const messages = {
     paymentSuccess: 'Payment was successful!',
     paymentRefunded: 'Payment refunded successfully.',
   },
+  withdraw: {
+    hold: 'Withdrawal Request On Hold',
+    proceed: 'Withdrawal Processing Started',
+    completed: 'Withdrawal Completed'
+  },
 }

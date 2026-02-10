@@ -41,8 +41,8 @@ const seedContents = async () => {
       aboutUs: '',
       termsAndConditions: '',
       privacyPolicy: '',
-      paymentHoldDays: 0,
-      consultationFee: 0,
+      paymentHoldDays: 30,
+      consultationFee: 12,
       createdBy: admin?._id,
     })
 
