@@ -126,6 +126,7 @@ const userSchema = new Schema<TUser, UserModel>(
     avgRating: { type: Number, default: 0 },
     ratingCount: { type: Number, default: 0 },
     balance: { type: Number, default: 0 },
+    stripeAccountId: { type: String, default: null },
     referralCode: { type: String, default: () => generateReferralCode() },
     referredBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
 
@@ -199,7 +200,7 @@ const userSchema = new Schema<TUser, UserModel>(
 
 // TTL index for expireAt
 userSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 })
-userSchema.index({ referralCode: 1 });
+userSchema.index({ referralCode: 1 })
 
 //* Hash password before saving
 userSchema.pre('save', async function (next) {

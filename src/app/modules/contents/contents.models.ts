@@ -13,10 +13,14 @@ const contentsSchema = new Schema<TContents>(
       type: String,
     },
     paymentHoldDays: {
-      type: Number
+      type: Number,
+      min: 1,
+      max: 60
     },
     consultationFee: {
       type: Number,
+      min: 0,
+      max: 40
     },
     isDeleted: {
       type: Boolean,

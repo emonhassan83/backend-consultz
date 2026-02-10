@@ -79,10 +79,10 @@ const registerUserIntoDB = async (payload: TUser & { referralCode?: string }) =>
       await newUser.save();
 
       // Points add
-      referrer.points += 50; // referrer gets 50 points
+      referrer.points += 50; //! TODO: referrer gets 50 points
       await referrer.save();
 
-      newUser.points += 25; // new user gets 25 bonus
+      newUser.points += 25; //! TODO: new user gets 25 bonus
       await newUser.save();
     } else if (referrer) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Cannot use your own referral code');

@@ -88,6 +88,7 @@ export interface TUser {
   ratingCount: number
   referralCode: string,
   referredBy: Types.ObjectId
+  stripeAccountId: string
   balance: number
   status: TUserStatus
   expireAt: Date
