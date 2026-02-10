@@ -21,6 +21,7 @@ import { PaymentRoutes } from '../modules/payment/payment.route'
 import { CardRoutes } from '../modules/card/card.route'
 import { CategoriesRoutes } from '../modules/category/category.route'
 import { SubCategoriesRoutes } from '../modules/subcategory/subcategory.route'
+import { StripeRoute } from '../modules/stripe/stripe.route'
 
 const router = Router()
 
@@ -80,6 +81,10 @@ const moduleRoutes = [
   {
     path: '/payments',
     route: PaymentRoutes,
+  },
+  {
+    path: '/stripe',
+    route: StripeRoute,
   },
   {
     path: '/chats',
