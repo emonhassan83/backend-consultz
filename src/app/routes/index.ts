@@ -22,6 +22,7 @@ import { CardRoutes } from '../modules/card/card.route'
 import { CategoriesRoutes } from '../modules/category/category.route'
 import { SubCategoriesRoutes } from '../modules/subcategory/subcategory.route'
 import { StripeRoute } from '../modules/stripe/stripe.route'
+import { WithdrawRoutes } from '../modules/withdraw/withdraw.route'
 
 const router = Router()
 
@@ -85,6 +86,10 @@ const moduleRoutes = [
   {
     path: '/stripe',
     route: StripeRoute,
+  },
+    {
+    path: '/withdraw',
+    route: WithdrawRoutes,
   },
   {
     path: '/chats',
