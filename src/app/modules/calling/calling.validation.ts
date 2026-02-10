@@ -15,6 +15,13 @@ const startCallingValidation = z.object({
   }),
 })
 
+const endCallingValidation = z.object({
+  body: z.object({
+    callId: objectIdSchema
+  }),
+})
+
 export const CallingValidation = {
   startCallingValidation,
+  endCallingValidation
 }

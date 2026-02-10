@@ -15,6 +15,18 @@ const startCalling = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const endCalling = catchAsync(async (req: Request, res: Response) => {
+  const result = await CallingService.endCalling(req.body, req.user._id);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: 'Call ended successfully!',
+    data: result,
+  });
+});
+
 export const CallingController = {
   startCalling,
+  endCalling
 };

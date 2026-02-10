@@ -14,4 +14,11 @@ router.post(
   CallingController.startCalling,
 )
 
+router.post(
+  '/end',
+  auth(USER_ROLE.expert, USER_ROLE.consult),
+  zodValidationRequest(CallingValidation.endCallingValidation),
+  CallingController.endCalling,
+)
+
 export const CallingRoutes = router
