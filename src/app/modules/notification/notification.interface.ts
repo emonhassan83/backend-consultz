@@ -6,6 +6,7 @@ export enum modeType {
   Feed = 'Feed',
   Comment = 'Comment',
   Booking = 'Booking',
+  Calling = 'Calling',
   Reviews = 'Reviews',
   Payment = 'Payment',
   Withdraw = 'Withdraw',

@@ -23,6 +23,7 @@ import { CategoriesRoutes } from '../modules/category/category.route'
 import { SubCategoriesRoutes } from '../modules/subcategory/subcategory.route'
 import { StripeRoute } from '../modules/stripe/stripe.route'
 import { WithdrawRoutes } from '../modules/withdraw/withdraw.route'
+import { CallingRoutes } from '../modules/calling/calling.route'
 
 const router = Router()
 
@@ -78,6 +79,10 @@ const moduleRoutes = [
   {
     path: '/bookings',
     route: BookingsRoutes,
+  },
+  {
+    path: '/calling',
+    route: CallingRoutes,
   },
   {
     path: '/payments',

@@ -39,4 +39,9 @@ export default {
     authToken: process.env.TWILIO_AUTH_TOKEN,
     phoneNumber: process.env.TWILIO_PHONE_NUMBER
   },
+  agora: {
+    appId: process.env.AGORA_APP_ID,
+    appCertificate: process.env.AGORA_APP_CERTIFICATE,
+    tokenExpire: process.env.AGORA_TOKEN_EXPIRE
+  },
 }
