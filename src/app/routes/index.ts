@@ -24,6 +24,7 @@ import { SubCategoriesRoutes } from '../modules/subcategory/subcategory.route'
 import { StripeRoute } from '../modules/stripe/stripe.route'
 import { WithdrawRoutes } from '../modules/withdraw/withdraw.route'
 import { CallingRoutes } from '../modules/calling/calling.route'
+import { MetaRoutes } from '../modules/meta/meta.route'
 
 const router = Router()
 
@@ -128,6 +129,10 @@ const moduleRoutes = [
     path: '/sub-categories',
     route: SubCategoriesRoutes,
   },
+  {
+    path: '/meta',
+    route: MetaRoutes,
+  }
 ]
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route))
