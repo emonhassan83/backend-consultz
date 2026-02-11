@@ -14,46 +14,48 @@ import {
   sendUserStatusNotifYToAdmin,
   sendUserStatusNotifYToUser,
 } from './user.utils'
-import { Types } from 'mongoose'
+import mongoose, { Types } from 'mongoose'
 import { Booking } from '../booking/booking.models'
 import { BOOKING_STATUS } from '../booking/booking.constants'
 import config from '../../config'
 
-const registerUserIntoDB = async (payload: TUser & { referralCode?: string }) => {
-  const { email, password, referralCode, ...rest } = payload;
+const registerUserIntoDB = async (
+  payload: TUser & { referralCode?: string },
+) => {
+  const { email, password, referralCode, ...rest } = payload
 
   if (payload.role === USER_ROLE.admin) {
     throw new AppError(
       httpStatus.FORBIDDEN,
       'You cannot directly assign admin role',
-    );
+    )
   }
 
-  const existingUser = await User.findOne({ email });
+  const existingUser = await User.findOne({ email })
   if (existingUser) {
     // Soft deleted user — recreate
     if (existingUser.isDeleted) {
-      existingUser.set({ ...payload, isDeleted: false });
-      const user = await existingUser.save();
-      return user;
+      existingUser.set({ ...payload, isDeleted: false })
+      const user = await existingUser.save()
+      return user
     }
 
     // Unverified user — update fields and re-save
     if (!existingUser.verification?.status) {
-      existingUser.set({ ...payload });
-      const user = await existingUser.save();
-      return user;
+      existingUser.set({ ...payload })
+      const user = await existingUser.save()
+      return user
     }
 
     // Already active user
     throw new AppError(
       httpStatus.FORBIDDEN,
       'User already exists with this email',
-    );
+    )
   }
 
   if (!payload.password) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Password is required');
+    throw new AppError(httpStatus.BAD_REQUEST, 'Password is required')
   }
 
   const finalPayload = {
@@ -64,35 +66,38 @@ const registerUserIntoDB = async (payload: TUser & { referralCode?: string }) =>
       payload.role === USER_ROLE.expert
         ? USER_STATUS.pending
         : payload.status || USER_STATUS.active,
-  };
+  }
 
-  const newUser = await User.create(finalPayload);
+  const newUser = await User.create(finalPayload)
 
   // Referral logic: if exist
-  let referredBy = null;
+  let referredBy = null
   if (referralCode) {
-    const referrer = await User.findOne({ referralCode });
+    const referrer = await User.findOne({ referralCode })
     if (referrer && referrer._id.toString() !== newUser._id.toString()) {
       // Self-referral block
-      referredBy = referrer._id;
-      newUser.referredBy = referredBy;
-      await newUser.save();
+      referredBy = referrer._id
+      newUser.referredBy = referredBy
+      await newUser.save()
 
       // Points add
-      referrer.points += 50; //! TODO: referrer gets 50 points
-      await referrer.save();
+      referrer.points += 50 //! TODO: referrer gets 50 points
+      await referrer.save()
 
-      newUser.points += 25; //! TODO: new user gets 25 bonus
-      await newUser.save();
+      newUser.points += 25 //! TODO: new user gets 25 bonus
+      await newUser.save()
     } else if (referrer) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Cannot use your own referral code');
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Cannot use your own referral code',
+      )
     } else {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid referral code');
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid referral code')
     }
   }
 
-  return newUser;
-};
+  return newUser
+}
 
 const getAllUsersFromDB = async (query: Record<string, unknown>) => {
   const usersQuery = new QueryBuilder(
@@ -370,30 +375,30 @@ const getInvestmentExperts = async (query: Record<string, unknown>) => {
 const geUserByIdFromDB = async (id: string) => {
   const user = await User.findById(id)
     .select(
-      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points referredBy referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role'
+      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points referredBy referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role',
     )
-    .lean();
+    .lean()
 
   if (!user || user.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
 
   // Generate referral link
-  const referralLink = `${config.client_url}/signup?ref=${user.referralCode}`;
+  const referralLink = `${config.client_url}/signup?ref=${user.referralCode}`
 
   // Total bookings (all statuses)
   const totalBookingsCount = await Booking.countDocuments({
     consult: id,
-  });
+  })
 
   // Completed bookings only
   const completedBookingsCount = await Booking.countDocuments({
     consult: id,
     status: BOOKING_STATUS.completed,
-  });
+  })
 
   // Advising time in hours (only for expert role)
-  let advisingTimeInHours = 0;
+  let advisingTimeInHours = 0
   if (user.role === USER_ROLE.expert) {
     const totalMinutesResult = await Booking.aggregate([
       {
@@ -408,21 +413,22 @@ const geUserByIdFromDB = async (id: string) => {
           totalMinutes: { $sum: '$sessionDuration' },
         },
       },
-    ]);
+    ])
 
-    const minutes = totalMinutesResult[0]?.totalMinutes || 0;
-    advisingTimeInHours = Number((minutes / 60).toFixed(2));
+    const minutes = totalMinutesResult[0]?.totalMinutes || 0
+    advisingTimeInHours = Number((minutes / 60).toFixed(2))
   }
 
   // Average attendance percentage
-  const avgAttendance = totalBookingsCount > 0
-    ? Math.min(
-        Math.round((completedBookingsCount / totalBookingsCount) * 100),
-        100
-      )
-    : 0;
+  const avgAttendance =
+    totalBookingsCount > 0
+      ? Math.min(
+          Math.round((completedBookingsCount / totalBookingsCount) * 100),
+          100,
+        )
+      : 0
 
-  const profileSetupProgress = calculateProfileSetupProgress(user);
+  const profileSetupProgress = calculateProfileSetupProgress(user)
 
   return {
     ...user,
@@ -431,8 +437,8 @@ const geUserByIdFromDB = async (id: string) => {
     profileSetupProgress,
     advisingTimeInHours,
     avgAttendance,
-  };
-};
+  }
+}
 
 const changeUserStatusFromDB = async (payload: any) => {
   const { userId, status } = payload
@@ -488,30 +494,76 @@ const changeUserNotifyFromDB = async (id: string, payload: any) => {
   return updatedUser
 }
 
-const updateUserInfoFromDB = async (
-  userId: string,
-  payload: Partial<TUser>,
-) => {
-  //* if the user is is not exist
-  const user = await User.findById(userId)
-  if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
-  }
+const updateUserInfoFromDB = async (userId: string, payload: Partial<TUser>) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-  const updatedUser = await User.findByIdAndUpdate(userId, payload, {
-    new: true,
-  }).select(
-    '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt',
-  )
-  if (!updatedUser) {
-    throw new AppError(
-      httpStatus.NOT_FOUND,
-      'User not found and failed to update!',
-    )
-  }
+  try {
+    // 1. Find the user
+    const user = await User.findById(userId).session(session);
+    if (!user || user.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
+    }
 
-  return updatedUser
-}
+    // 2. sessionDurations update
+    if (payload.sessionDurations && payload.sessionDurations.length > 0) {
+      // hourlyRate validate
+      const effectiveHourlyRate = payload.hourlyRate !== undefined 
+        ? payload.hourlyRate 
+        : user.hourlyRate;
+
+      if (effectiveHourlyRate <= 0) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Hourly rate must be greater than 0 to update session durations. Please set a valid hourly rate first.'
+        );
+      }
+    }
+
+    // 3. If sessionDurations or hourlyRate update → offeredPrice recalculate
+    const updatedSessionDurations = payload.sessionDurations || user.sessionDurations || [];
+    const currentHourlyRate = payload.hourlyRate !== undefined ? payload.hourlyRate : user.hourlyRate;
+
+    const finalSessionDurations = updatedSessionDurations.map((item) => {
+      const durationMinutes = item.duration || 0;
+      const offeredPrice = Number(((durationMinutes / 60) * currentHourlyRate).toFixed(2));
+
+      return {
+        ...item,
+        offeredPrice, // Auto-calculated
+      };
+    });
+
+    // 4. Final payload create
+    const finalPayload = {
+      ...payload,
+      sessionDurations: finalSessionDurations,
+      hourlyRate: currentHourlyRate,
+    };
+
+    // 5. User update
+    const updatedUser = await User.findByIdAndUpdate(userId, finalPayload, {
+      new: true,
+      runValidators: true,
+      session,
+    }).select(
+      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt'
+    );
+
+    if (!updatedUser) {
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found and failed to update!');
+    }
+
+    await session.commitTransaction();
+
+    return updatedUser;
+  } catch (error) {
+    await session.abortTransaction();
+    throw error instanceof AppError ? error : new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to update user info');
+  } finally {
+    session.endSession();
+  }
+};
 
 const updateLocationFromDB = async (
   userId: string,
