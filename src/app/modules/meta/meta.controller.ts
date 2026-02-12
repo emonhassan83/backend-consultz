@@ -4,7 +4,7 @@ import sendResponse from '../../utils/sendResponse'
 import { MetaService } from './meta.service'
 
 const fetchDashboardMetaData = catchAsync(async (req, res) => {
-  const result = await MetaService.fetchDashboardMetaData(req.user, req.query)
+  const result = await MetaService.fetchDashboardMetaData(req.query, req.user._id)
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -14,6 +14,18 @@ const fetchDashboardMetaData = catchAsync(async (req, res) => {
   })
 })
 
+const analysisReportingMetaData = catchAsync(async (req, res) => {
+  const result = await MetaService.analysisReportingMetaData(req.query, req.user._id)
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Analysis reporting meta data retrieval successfully!',
+    data: result,
+  })
+})
+
 export const MetaController = {
   fetchDashboardMetaData,
+  analysisReportingMetaData
 }
