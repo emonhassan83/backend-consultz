@@ -78,12 +78,14 @@ export const getEarningOverview = async (year: number) => {
       $group: {
         _id: { $month: '$createdAt' },
         total: { $sum: '$amount' },
+        consultAmount: { $sum: '$consultAmount' }, // Platform commission
       },
     },
     { $sort: { _id: 1 } },
   ]);
 
   const totalEarnings = monthlyDataRaw.reduce((sum, m) => sum + m.total, 0);
+  const consultAmount = monthlyDataRaw.reduce((sum, m) => sum + m.consultAmount, 0);
 
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -102,6 +104,7 @@ export const getEarningOverview = async (year: number) => {
 
   return {
     totalEarnings,
+    consultAmount,
     monthlyData,
   };
 };

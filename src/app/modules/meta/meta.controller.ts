@@ -25,7 +25,19 @@ const analysisReportingMetaData = catchAsync(async (req, res) => {
   })
 })
 
+const paymentTransactionMetaData = catchAsync(async (req, res) => {
+  const result = await MetaService.paymentTransactionMetaData(req.query, req.user._id)
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Payment transaction meta data retrieval successfully!',
+    data: result,
+  })
+})
+
 export const MetaController = {
   fetchDashboardMetaData,
-  analysisReportingMetaData
+  analysisReportingMetaData,
+  paymentTransactionMetaData
 }

@@ -122,7 +122,51 @@ const analysisReportingMetaData = async (
   };
 };
 
+const paymentTransactionMetaData = async (
+  query: Record<string, unknown>,
+  userId: string,
+) => {
+  const { year } = query;
+
+  // Year selection
+  const selectedYear = year
+    ? parseInt(year as string, 10) || new Date().getFullYear()
+    : new Date().getFullYear();
+
+      // Earning overview (separate year)
+  const earningOverviewData = await getEarningOverview(selectedYear)
+
+  // Latest payout (4 newest withdrawals)
+  const latestPayout = await Withdraw.find()
+    .sort({ createdAt: -1 }) // newest first
+    .limit(4)
+    .populate([
+      { path: 'user', select: '_id firstName lastName email' },
+      { path: 'booking', select: 'user' },
+    ])
+    .lean();
+
+  // Latest notifications for this user (admin or whoever)
+  const notifications = await Notification.find({
+    receiver: userId,
+    isDeleted: false,
+  })
+    .sort({ createdAt: -1 }) // newest first
+    .limit(3)
+    .select('message description date read')
+    .lean();
+
+  return {
+    totalEarnings: earningOverviewData.totalEarnings,
+    consultAmount: earningOverviewData.consultAmount,
+    earningOverview: earningOverviewData.monthlyData,
+    latestPayout,
+    notifications,
+  };
+};
+
 export const MetaService = {
   fetchDashboardMetaData,
   analysisReportingMetaData,
+  paymentTransactionMetaData
 }
