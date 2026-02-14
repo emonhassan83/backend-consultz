@@ -2,8 +2,8 @@ import { USER_ROLE } from '../user/user.constant'
 import { TUser } from '../user/user.interface'
 
 export type TPushNotifyCategory =
-  | 'booking'
-  | 'schedule'
+  | 'bookingAndSchedule'
+  | 'scheduleRemainder'
   | 'payment'
   | 'points'
   | 'followers'
