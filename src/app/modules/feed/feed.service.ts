@@ -8,6 +8,7 @@ import { ContentMetaService } from '../contentMeta/contentMeta.service'
 import { uploadToS3 } from '../../utils/s3'
 import {
   enrichFeedWithUserInfo,
+  notifyFollowersOnNewPost,
   sendFeedNotificationToUser,
 } from './feed.utils'
 import { FEED_STATUS, TFeedStatus } from './feed.constant'
@@ -70,6 +71,9 @@ const createFeedIntoDB = async (
     // @ts-ignore
     content: feed?._id,
   })
+
+  // sent follow user to notify
+  await notifyFollowersOnNewPost(feed._id.toString())
 
   return feed
 }

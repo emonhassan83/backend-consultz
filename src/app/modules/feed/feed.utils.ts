@@ -4,6 +4,12 @@ import { messages } from '../notification/notification.constant';
 import { modeType } from '../notification/notification.interface';
 import { sendNotification } from '../../utils/sentNotification';
 import { TFeed } from './feed.interface';
+import { canSendPushNotification } from '../notification/notification.utils';
+import { User } from '../user/user.model';
+import { Follow } from '../connection/connection.models';
+import { Feed } from './feed.model';
+import admin from 'firebase-admin';
+import { Notification } from '../notification/notification.model';
 
 // Utility to check isLiked
 export const enrichFeedWithUserInfo = async (feed: any, userId: string) => {
@@ -30,24 +36,120 @@ export const enrichFeedWithUserInfo = async (feed: any, userId: string) => {
   };
 };
 
+export const notifyFollowersOnNewPost = async (feedId: string) => {
+  try {
+    // 1. Feed + author find out
+    const feed = await Feed.findById(feedId)
+      .populate('author', 'firstName')
+      .lean() as any;
+
+    if (!feed || feed?.isDeleted) return;
+
+    const authorId = feed.author?._id?.toString() || feed.author?.toString();
+    const authorName = feed.author?.firstName || 'An expert';
+
+    // Find feed caption
+    const firstLine = feed.description?.split('\n')[0]?.trim() || feed.description || 'Check out my new post!';
+
+    // 2. find out followers
+    const followers = await Follow.find({ following: authorId })
+      .select('follower')
+      .lean();
+
+    if (followers.length === 0) return;
+
+    const followerIds = followers.map(f => f.follower.toString());
+
+    // 3. Followers fcmToken + pushNotify
+    const followerUsers = await User.find({
+      _id: { $in: followerIds },
+      isDeleted: false,
+    })
+      .select('fcmToken pushNotify _id')
+      .lean();
+
+    // 4. Valid token + receiver ID collect
+    const notificationsToSend = followerUsers
+      .filter(user => user.fcmToken && canSendPushNotification(user, 'post'))
+      .map(user => ({
+        receiver: user._id,
+        fcmToken: user.fcmToken,
+        message: `${authorName} has posted a new video`,
+        description: firstLine,
+        reference: feed._id.toString(),
+        model_type: modeType.Feed,
+      }));
+
+    if (notificationsToSend.length === 0) return;
+
+    // 5. Database-এ bulk insert 
+    const notificationDocs = notificationsToSend.map(n => ({
+      receiver: n.receiver,
+      message: n.message,
+      description: n.description,
+      reference: n.reference,
+      model_type: n.model_type,
+      read: false,
+      isDeleted: false,
+    }));
+
+    await Notification.insertMany(notificationDocs);
+
+    // 6. FCM batch sent in chunk
+    const chunkSize = 500;
+    const tokensWithPayload = notificationsToSend.map(n => ({
+      token: n.fcmToken,
+      payload: {
+        message: n.message,
+        description: n.description,
+      },
+    }));
+
+    for (let i = 0; i < tokensWithPayload.length; i += chunkSize) {
+      const chunk = tokensWithPayload.slice(i, i + chunkSize);
+
+      const multicastPayload = {
+        tokens: chunk.map(c => c.token),
+        notification: {
+          title: chunk[0].payload.message,
+          body: chunk[0].payload.description,
+        },
+        apns: {
+          headers: { 'apns-push-type': 'alert' },
+          payload: { aps: { badge: 1, sound: 'default' } },
+        },
+      };
+
+      try {
+        const response = await admin.messaging().sendEachForMulticast(multicastPayload);
+        console.log(`Batch sent to ${response.successCount} devices, failed: ${response.failureCount}`);
+      } catch (err) {
+        console.error('FCM batch failed:', err);
+      }
+    }
+
+    console.log(`New post notification queued for ${notificationsToSend.length} followers`);
+  } catch (error) {
+    console.error('Failed to notify followers on new post:', error);
+  }
+};
+
 export const sendFeedNotificationToUser = async (
   status: 'active' | 'restricted',
   user: TUser,
   feed: TFeed,
 ) => {
-  // Respect user notification settings
-  if (!user?.fcmToken || user?.pushNotify?.post === false) return
+  if (!user?.fcmToken || !canSendPushNotification(user, 'post')) return;
 
-  let message = ''
-  let description = ''
+  let message = '';
+  let description = '';
 
   if (status === 'active') {
-    message = messages.feed.active
-    description = 'Your post is now live. You can share it with your followers.'
+    message = messages.feed.active || 'Your post is now live';
+    description = 'Your post is now visible to your followers. Share it!';
   } else {
-    message = messages.feed.restricted
-    description =
-      'Your post has been restricted by admin. Please contact support if you have questions.'
+    message = messages.feed.restricted || 'Your post has been restricted';
+    description = 'Your post has been restricted by admin. Contact support if needed.';
   }
 
   const notifyPayload = {
@@ -56,7 +158,7 @@ export const sendFeedNotificationToUser = async (
     description,
     reference: feed._id,
     model_type: modeType.Feed,
-  }
+  };
 
-  await sendNotification([user.fcmToken], notifyPayload)
-}
+  await sendNotification([user.fcmToken], notifyPayload);
+};
