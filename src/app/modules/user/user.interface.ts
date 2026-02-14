@@ -67,8 +67,8 @@ export interface TUser {
     status: boolean
   }
   pushNotify: {
-    booking: boolean
-    schedule: boolean
+    bookingAndSchedule: boolean
+    scheduleRemainder: boolean
     payment: boolean
     points: boolean
     followers: boolean

@@ -46,7 +46,7 @@ const SessionDurationSchema = new Schema(
   {
     type: { type: String, required: true },
     duration: { type: Number, required: true },
-    offeredPrice:  { type: Number, required: true },
+    offeredPrice: { type: Number, required: true },
     isOffered: { type: Boolean, default: false },
   },
   { _id: false },
@@ -145,11 +145,11 @@ const userSchema = new Schema<TUser, UserModel>(
       },
     },
     pushNotify: {
-      booking: {
+      bookingAndSchedule: {
         type: Boolean,
         default: true,
       },
-      schedule: {
+      scheduleRemainder: {
         type: Boolean,
         default: true,
       },

@@ -9,6 +9,8 @@ import emailSender from '../../utils/emailSender'
 import { createToken, TExpiresIn } from '../auth/auth.utils'
 import { Types } from 'mongoose'
 import twilio from 'twilio'
+import { USER_ROLE } from '../user/user.constant'
+import { sendExpertPendingEmail } from '../user/user.utils'
 
 const verifyWithEmail = async (token: string, otp: string | number) => {
   if (!token) {
@@ -121,7 +123,12 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
       },
     },
     { new: true },
-  ).select('email _id name role')
+  )
+
+  // Send pending review email to expert
+  if (user.role === USER_ROLE.expert) {
+    await sendExpertPendingEmail(user)
+  }
 
   const jwtPayload = {
     _id: updateUser?._id as Types.ObjectId,

@@ -11,6 +11,7 @@ import {
 } from './user.constant'
 import {
   calculateProfileSetupProgress,
+  generateUserStatusEmail,
   sendUserStatusNotifYToAdmin,
   sendUserStatusNotifYToUser,
 } from './user.utils'
@@ -449,14 +450,14 @@ const changeUserStatusFromDB = async (payload: any) => {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
 
-  const updateUserStatus = await User.findByIdAndUpdate(
+  const result = await User.findByIdAndUpdate(
     userId,
     { status },
     { new: true },
   ).select(
     '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline status createdAt',
   )
-  if (!updateUserStatus) {
+  if (!result) {
     throw new AppError(
       httpStatus.NOT_FOUND,
       'User not found and failed to update status!',
@@ -464,10 +465,15 @@ const changeUserStatusFromDB = async (payload: any) => {
   }
 
   // Send notification to both user and admin
-  await sendUserStatusNotifYToUser(status, updateUserStatus)
-  await sendUserStatusNotifYToAdmin(status, updateUserStatus)
+  await sendUserStatusNotifYToUser(status, result)
+  await sendUserStatusNotifYToAdmin(status, result)
 
-  return updateUserStatus
+  // sent email as well
+  if (status === USER_STATUS.blocked || status === USER_STATUS.active) {
+    await generateUserStatusEmail(user, status)
+  }
+
+  return result
 }
 
 const changeUserNotifyFromDB = async (id: string, payload: any) => {
@@ -478,68 +484,73 @@ const changeUserNotifyFromDB = async (id: string, payload: any) => {
   }
 
   // 4️⃣ Update user
-  const updatedUser = await User.findByIdAndUpdate(id, payload, {
+  const result = await User.findByIdAndUpdate(id, payload, {
     new: true,
   }).select(
     '_id id firstName lastName email photoUrl headline status createdAt pushNotify emailNotify',
   )
-
-  if (!updatedUser) {
+  if (!result) {
     throw new AppError(
       httpStatus.NOT_FOUND,
       'User not found and failed to update notification settings!',
     )
   }
 
-  return updatedUser
+  return result
 }
 
-const updateUserInfoFromDB = async (userId: string, payload: Partial<TUser>) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+const updateUserInfoFromDB = async (
+  userId: string,
+  payload: Partial<TUser>,
+) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
 
   try {
     // 1. Find the user
-    const user = await User.findById(userId).session(session);
+    const user = await User.findById(userId).session(session)
     if (!user || user.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
     }
 
     // 2. sessionDurations update
     if (payload.sessionDurations && payload.sessionDurations.length > 0) {
       // hourlyRate validate
-      const effectiveHourlyRate = payload.hourlyRate !== undefined 
-        ? payload.hourlyRate 
-        : user.hourlyRate;
+      const effectiveHourlyRate =
+        payload.hourlyRate !== undefined ? payload.hourlyRate : user.hourlyRate
 
       if (effectiveHourlyRate <= 0) {
         throw new AppError(
           httpStatus.BAD_REQUEST,
-          'Hourly rate must be greater than 0 to update session durations. Please set a valid hourly rate first.'
-        );
+          'Hourly rate must be greater than 0 to update session durations. Please set a valid hourly rate first.',
+        )
       }
     }
 
     // 3. If sessionDurations or hourlyRate update → offeredPrice recalculate
-    const updatedSessionDurations = payload.sessionDurations || user.sessionDurations || [];
-    const currentHourlyRate = payload.hourlyRate !== undefined ? payload.hourlyRate : user.hourlyRate;
+    const updatedSessionDurations =
+      payload.sessionDurations || user.sessionDurations || []
+    const currentHourlyRate =
+      payload.hourlyRate !== undefined ? payload.hourlyRate : user.hourlyRate
 
     const finalSessionDurations = updatedSessionDurations.map((item) => {
-      const durationMinutes = item.duration || 0;
-      const offeredPrice = Number(((durationMinutes / 60) * currentHourlyRate).toFixed(2));
+      const durationMinutes = item.duration || 0
+      const offeredPrice = Number(
+        ((durationMinutes / 60) * currentHourlyRate).toFixed(2),
+      )
 
       return {
         ...item,
         offeredPrice, // Auto-calculated
-      };
-    });
+      }
+    })
 
     // 4. Final payload create
     const finalPayload = {
       ...payload,
       sessionDurations: finalSessionDurations,
       hourlyRate: currentHourlyRate,
-    };
+    }
 
     // 5. User update
     const updatedUser = await User.findByIdAndUpdate(userId, finalPayload, {
@@ -547,23 +558,31 @@ const updateUserInfoFromDB = async (userId: string, payload: Partial<TUser>) => 
       runValidators: true,
       session,
     }).select(
-      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt'
-    );
+      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt',
+    )
 
     if (!updatedUser) {
-      throw new AppError(httpStatus.NOT_FOUND, 'User not found and failed to update!');
+      throw new AppError(
+        httpStatus.NOT_FOUND,
+        'User not found and failed to update!',
+      )
     }
 
-    await session.commitTransaction();
+    await session.commitTransaction()
 
-    return updatedUser;
+    return updatedUser
   } catch (error) {
-    await session.abortTransaction();
-    throw error instanceof AppError ? error : new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to update user info');
+    await session.abortTransaction()
+    throw error instanceof AppError
+      ? error
+      : new AppError(
+          httpStatus.INTERNAL_SERVER_ERROR,
+          'Failed to update user info',
+        )
   } finally {
-    session.endSession();
+    session.endSession()
   }
-};
+}
 
 const updateLocationFromDB = async (
   userId: string,

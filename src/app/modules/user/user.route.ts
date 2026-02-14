@@ -20,6 +20,7 @@ router.post(
 router.patch(
   '/change-notify',
   auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult),
+  zodValidationRequest(UserValidation.updateNotifySettingsValidation),
   UserControllers.changeUserNotify,
 )
 
@@ -33,7 +34,7 @@ router.patch(
 router.put(
   '/update-profile',
   auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult),
-    upload.fields([
+  upload.fields([
     { name: 'image', maxCount: 1 },
     { name: 'cover', maxCount: 1 },
   ]),

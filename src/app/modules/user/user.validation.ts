@@ -192,6 +192,69 @@ const updateValidationSchema = z.object({
   }),
 })
 
+// Push Notification Settings Schema
+const pushNotifySchema = z.object({
+  bookingAndSchedule: z.boolean({
+    required_error: 'bookingAndSchedule notification preference is required',
+    invalid_type_error: 'bookingAndSchedule must be a boolean (true/false)',
+  }),
+
+  scheduleRemainder: z.boolean({
+    required_error: 'scheduleRemainder notification preference is required',
+    invalid_type_error: 'scheduleRemainder must be a boolean (true/false)',
+  }),
+
+  payment: z.boolean({
+    required_error: 'payment notification preference is required',
+    invalid_type_error: 'payment must be a boolean (true/false)',
+  }),
+
+  points: z.boolean({
+    required_error: 'points notification preference is required',
+    invalid_type_error: 'points must be a boolean (true/false)',
+  }),
+
+  followers: z.boolean({
+    required_error: 'followers notification preference is required',
+    invalid_type_error: 'followers must be a boolean (true/false)',
+  }),
+
+  post: z.boolean({
+    required_error: 'post notification preference is required',
+    invalid_type_error: 'post must be a boolean (true/false)',
+  }),
+
+  reviews: z.boolean({
+    required_error: 'reviews notification preference is required',
+    invalid_type_error: 'reviews must be a boolean (true/false)',
+  }),
+});
+
+// Email Notification Settings Schema
+const emailNotifySchema = z.object({
+  booking: z.boolean({
+    required_error: 'booking email notification preference is required',
+    invalid_type_error: 'booking must be a boolean (true/false)',
+  }),
+
+  schedule: z.boolean({
+    required_error: 'schedule email notification preference is required',
+    invalid_type_error: 'schedule must be a boolean (true/false)',
+  }),
+
+  payment: z.boolean({
+    required_error: 'payment email notification preference is required',
+    invalid_type_error: 'payment must be a boolean (true/false)',
+  }),
+});
+
+const updateNotifySettingsValidation = z.object({
+  body: z.object({
+    pushNotify: pushNotifySchema,
+    emailNotify: emailNotifySchema,
+  }).strict(), // Reject any unknown fields
+});
+
 // ✅ Change Status Validation
 const changeStatusValidationSchema = z.object({
   body: z.object({
@@ -206,4 +269,5 @@ export const UserValidation = {
   createValidationSchema,
   updateValidationSchema,
   changeStatusValidationSchema,
+  updateNotifySettingsValidation
 }
