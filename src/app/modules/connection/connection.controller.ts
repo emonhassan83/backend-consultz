@@ -38,8 +38,8 @@ const getMyFollowers = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-const getAllFollowers = catchAsync(async (req: Request, res: Response) => {
-  const result = await FollowService.getAllFollowers(req.params.id, req.query)
+const getUserFollowers = catchAsync(async (req: Request, res: Response) => {
+  const result = await FollowService.getAllFollowers(req.params.userId, req.query)
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -62,7 +62,7 @@ const getMyFollowing = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-const getAllFollowing = catchAsync(async (req: Request, res: Response) => {
+const getUserFollowing = catchAsync(async (req: Request, res: Response) => {
   const result = await FollowService.getAllFollowing(req.params.id, req.query)
 
   sendResponse(res, {
@@ -91,9 +91,9 @@ const checkedFollowUser = catchAsync(async (req: Request, res: Response) => {
 export const FollowController = {
   followUser,
   unfollowUser,
-  getAllFollowers,
   getMyFollowers,
-  getAllFollowing,
+  getUserFollowers,
   getMyFollowing,
+  getUserFollowing,
   checkedFollowUser,
 }

@@ -10,7 +10,7 @@ export const messages = {
     accountDeactivated: 'User account deactivated.',
   },
   userFollow: {
-    followed: 'You have a new follower!',
+    followed: 'New Follower!',
     unfollowed: 'Someone unfollowed you',
   },
   feed: {

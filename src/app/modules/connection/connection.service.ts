@@ -47,7 +47,7 @@ const followUser = async (followerId: string, followingId: string) => {
   ]);
 
   // 6. Notify the followed user
-  await sendUserFollowNotify('follow', followerId, followingId);
+  await sendUserFollowNotify(followerId, followingId, follow);
 
   return follow;
 };
@@ -86,9 +86,6 @@ const unfollowUser = async (followerId: string, followingId: string) => {
     User.findByIdAndUpdate(followerId, { $inc: { following: -1 } }),
     User.findByIdAndUpdate(followingId, { $inc: { followers: -1 } }),
   ]);
-
-  // 5. Notify the unfollowed user
-  await sendUserFollowNotify('unfollow', followerId, followingId);
 
   return result;
 };

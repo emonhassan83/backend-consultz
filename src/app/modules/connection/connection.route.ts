@@ -7,14 +7,20 @@ const router = Router();
 
 router.post(
   '/follow/:id',
-  auth(USER_ROLE.consult, USER_ROLE.expert, USER_ROLE.admin),
+  auth(USER_ROLE.consult, USER_ROLE.expert),
   FollowController.followUser,
 );
 
 router.post(
   '/unfollow/:id',
-  auth(USER_ROLE.consult, USER_ROLE.expert, USER_ROLE.admin),
+  auth(USER_ROLE.consult, USER_ROLE.expert),
   FollowController.unfollowUser,
+);
+
+router.get(
+  '/followers/:userId',
+  auth(USER_ROLE.consult, USER_ROLE.expert),
+  FollowController.getUserFollowers,
 );
 
 router.get(
@@ -24,10 +30,15 @@ router.get(
 );
 
 router.get(
-  '/my-followings',
-  auth(USER_ROLE.consult, USER_ROLE.expert, USER_ROLE.admin),
-  FollowController.getMyFollowing,
+  '/followings/:userId',
+  auth(USER_ROLE.consult, USER_ROLE.expert),
+  FollowController.getUserFollowing,
 );
 
+router.get(
+  '/my-followings',
+  auth(USER_ROLE.consult, USER_ROLE.expert),
+  FollowController.getMyFollowing,
+);
 
 export const ConnectionRoutes = router;

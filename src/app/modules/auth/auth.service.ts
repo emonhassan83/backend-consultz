@@ -12,10 +12,14 @@ import {
   TExpiresIn,
   verifyToken,
 } from './auth.utils'
-import { TAppleLoginPayload, TGoogleLoginPayload, TLoginUser } from './auth.interface'
+import {
+  TAppleLoginPayload,
+  TGoogleLoginPayload,
+  TLoginUser,
+} from './auth.interface'
 import { generateOtp } from '../../utils/generateOtp'
 import moment from 'moment'
-import { REGISTER_WITH } from '../user/user.constant'
+import { REGISTER_WITH, USER_STATUS } from '../user/user.constant'
 
 const loginUser = async (payload: TLoginUser) => {
   //* checking if the user is exist
@@ -30,7 +34,12 @@ const loginUser = async (payload: TLoginUser) => {
 
   // if user is not verify yet throw error
   if (!user?.verification?.status) {
-    throw new AppError(httpStatus.FORBIDDEN, 'User account is not verified')
+    throw new AppError(httpStatus.FORBIDDEN, 'Your profile is not verified')
+  }
+
+  // If user profile not active
+  if (user.status !== USER_STATUS.active) {
+    throw new AppError(httpStatus.FORBIDDEN, 'Your profile is not active now!')
   }
 
   //* create token and sent to the  client
@@ -52,7 +61,7 @@ const loginUser = async (payload: TLoginUser) => {
     config.jwt_refresh_expires_in as TExpiresIn,
   )
 
- //* 5. Prepare update object for FCM + location
+  //* 5. Prepare update object for FCM + location
   const updateData: any = {}
 
   if (payload.fcmToken) {
@@ -82,13 +91,16 @@ const loginUser = async (payload: TLoginUser) => {
       role: user.role,
       isProfileSetup: user.isProfileSetup,
       status: user.status,
-    }
+    },
   }
 }
 
-const registerWithGoogle = async (payload: TGoogleLoginPayload ) => {
+const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
   if (payload.role === 'admin') {
-    throw new AppError(httpStatus.FORBIDDEN, 'You cannot directly assign admin role')
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You cannot directly assign admin role',
+    )
   }
 
   const user = await User.isUserExistsByEmail(payload.email as string)
@@ -113,7 +125,7 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload ) => {
     if (user.registerWith !== REGISTER_WITH.google) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        `This account is registered with ${user.registerWith}, please use that method.`
+        `This account is registered with ${user.registerWith}, please use that method.`,
       )
     }
 
@@ -121,12 +133,20 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload ) => {
     if (user.isDeleted) {
       const updatedUser = await User.findByIdAndUpdate(
         user._id,
-        { ...updateData, isDeleted: false, verification: { otp: 0, expiresAt: new Date(), status: true }, expireAt: null },
-        { new: true }
+        {
+          ...updateData,
+          isDeleted: false,
+          verification: { otp: 0, expiresAt: new Date(), status: true },
+          expireAt: null,
+        },
+        { new: true },
       )
 
       if (!updatedUser) {
-        throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to reactivate deleted user.')
+        throw new AppError(
+          httpStatus.INTERNAL_SERVER_ERROR,
+          'Failed to reactivate deleted user.',
+        )
       }
 
       return generateTokens(updatedUser)
@@ -146,15 +166,21 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload ) => {
   })
 
   if (!newUser) {
-    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to create user!')
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to create user!',
+    )
   }
 
   return generateTokens(newUser)
 }
 
-const registerWithLinkedin = async (payload: TAppleLoginPayload ) => {
+const registerWithLinkedin = async (payload: TAppleLoginPayload) => {
   if (payload.role === 'admin') {
-    throw new AppError(httpStatus.FORBIDDEN, 'You cannot directly assign admin role')
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You cannot directly assign admin role',
+    )
   }
 
   const user = await User.isUserExistsByEmail(payload.email as string)
@@ -177,19 +203,27 @@ const registerWithLinkedin = async (payload: TAppleLoginPayload ) => {
     if (user.registerWith !== REGISTER_WITH.linkedin) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        `This account is registered with ${user.registerWith}, please use that method.`
+        `This account is registered with ${user.registerWith}, please use that method.`,
       )
     }
 
     if (user.isDeleted) {
       const updatedUser = await User.findByIdAndUpdate(
         user._id,
-        { ...updateData, isDeleted: false, verification: { otp: 0, expiresAt: new Date(), status: true }, expireAt: null },
-        { new: true }
+        {
+          ...updateData,
+          isDeleted: false,
+          verification: { otp: 0, expiresAt: new Date(), status: true },
+          expireAt: null,
+        },
+        { new: true },
       )
 
       if (!updatedUser) {
-        throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to reactivate deleted user.')
+        throw new AppError(
+          httpStatus.INTERNAL_SERVER_ERROR,
+          'Failed to reactivate deleted user.',
+        )
       }
 
       return generateTokens(updatedUser)
@@ -207,7 +241,10 @@ const registerWithLinkedin = async (payload: TAppleLoginPayload ) => {
   })
 
   if (!newUser) {
-    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to create user!')
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to create user!',
+    )
   }
 
   return generateTokens(newUser)
@@ -257,7 +294,7 @@ const changePassword = async (
   }
 
   // Send a notification to the user informing them about the successful password change
-  user?.role === 'admin' && await authNotifyUser('PASSWORD_CHANGE', user)
+  user?.role === 'admin' && (await authNotifyUser('PASSWORD_CHANGE', user))
 
   return null
 }
@@ -317,7 +354,7 @@ const forgetPassword = async (payload: { email: string }) => {
     verification: {
       otp,
       expiresAt,
-      status: true
+      status: true,
     },
   })
 
@@ -339,10 +376,10 @@ const forgetPassword = async (payload: { email: string }) => {
           </div>
           <p style="color: #555;">This OTP is valid until: <strong>${expiresAt.toLocaleString()}</strong></p>
           <p style="color: #555;">If you did not request this OTP, please ignore this email.</p>
-          <p style="color: #555;">Thank you,<br/>Save Key App Team</p>
+          <p style="color: #555;">Thank you,<br/>Consultz Team</p>
         </div>
         <div style="text-align: center; margin-top: 20px; font-size: 12px; color: #999;">
-          <p>&copy; ${new Date().getFullYear()} Save Key App. All rights reserved.</p>
+          <p>&copy; ${new Date().getFullYear()} Consultz. All rights reserved.</p>
         </div>
       </div>
     `,

@@ -32,27 +32,37 @@ export const verifyToken = (token: string, secret: string) => {
 
 export const generateTokens = (user: TUser) => {
   const jwtPayload = { _id: user._id, email: user.email, role: user.role }
+  const userResponse = {
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    role: user.role,
+    isProfileSetup: user.isProfileSetup,
+    status: user.status,
+  }
 
   const accessToken = createToken(
     jwtPayload,
     config.jwt_access_secret as string,
-    config.jwt_access_expires_in as TExpiresIn
+    config.jwt_access_expires_in as TExpiresIn,
   )
 
   const refreshToken = createToken(
     jwtPayload,
     config.jwt_refresh_secret as string,
-    config.jwt_refresh_expires_in as TExpiresIn
+    config.jwt_refresh_expires_in as TExpiresIn,
   )
 
-  return { user, accessToken, refreshToken }
+  return { user: userResponse, accessToken, refreshToken }
 }
 
-
+// sent notify to user
 export const authNotifyUser = async (
   action: 'PASSWORD_CHANGE' | 'PASSWORD_FORGET' | 'PASSWORD_RESET',
   user: TUser,
 ) => {
+  if (!user || !user?.fcmToken) return
+
   // Determine the message and description based on the action
   let message
   let description
