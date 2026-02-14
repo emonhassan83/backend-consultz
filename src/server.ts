@@ -7,6 +7,7 @@ import initializeSocketIO from './socket'
 import { seeder } from './app/seeder/seed'
 import colors from 'colors'
 import { transferAmountCron } from './app/modules/withdraw/withdraw.service'
+import { notifyUserToLeaveReviewCorn } from './app/modules/review/review.service'
 
 let server: Server
 export const io = initializeSocketIO(createServer(app))
@@ -25,7 +26,7 @@ async function main() {
     ])
 
     // run the corn job
-    transferAmountCron();
+    await Promise.all([transferAmountCron(), notifyUserToLeaveReviewCorn()])
 
     server = app.listen(Number(config.port), config.ip as string, () => {
       console.log(

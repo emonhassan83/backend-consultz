@@ -18,7 +18,7 @@ const reviewsSchema = new Schema<TReviews>(
     },
     booking: {
       type: Schema.Types.ObjectId,
-      refPath: 'Booking',
+      ref: 'Booking',
       required: true,
     },
     review: {

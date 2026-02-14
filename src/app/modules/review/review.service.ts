@@ -1,3 +1,5 @@
+import cron from 'node-cron'
+import dayjs from 'dayjs'
 import httpStatus from 'http-status'
 import { TReviews } from './review.interface'
 import QueryBuilder from '../../builder/QueryBuilder'
@@ -6,6 +8,68 @@ import { Reviews } from './review.models'
 import AppError from '../../errors/AppError'
 import { User } from '../user/user.model'
 import { Booking } from '../booking/booking.models'
+import { notifyUserToLeaveReview } from './review.utils'
+import { BOOKING_STATUS } from '../booking/booking.constants'
+
+export const notifyUserToLeaveReviewCorn = () => {
+  cron.schedule(
+    '0 0 * * *',
+    async () => {
+      console.log('Daily Review Reminder Job Started (Asia/Dhaka)')
+
+      // find completed booking
+      const twentyFourHoursAgo = dayjs().subtract(24, 'hour').toDate()
+      const fortyEightHoursAgo = dayjs().subtract(48, 'hour').toDate()
+
+      const completedBookings = await Booking.find({
+        status: BOOKING_STATUS.completed,
+        endTime: { $gte: fortyEightHoursAgo, $lte: twentyFourHoursAgo },
+        isDeleted: false,
+      })
+        .select('user consult')
+        .lean()
+
+      console.log(
+        `Found ${completedBookings.length} eligible bookings for review reminder`,
+      )
+
+      for (const booking of completedBookings) {
+        const userId = booking.user.toString()
+        const bookingId = booking._id.toString()
+
+        // check if this user can review or not
+        const existingReview = await Reviews.findOne({
+          user: userId,
+          booking: bookingId,
+          isDeleted: false,
+        })
+          .select('_id')
+          .lean()
+
+        // For review remainder
+        if (!existingReview) {
+          await notifyUserToLeaveReview(
+            bookingId,
+            userId,
+            booking.consult.toString(),
+          )
+          console.log(
+            `Review reminder sent for booking ${bookingId} to user ${userId}`,
+          )
+        } else {
+          console.log(
+            `Review already exists for booking ${bookingId} by user ${userId} — skipping`,
+          )
+        }
+      }
+
+      console.log('Daily Review Reminder Job Completed')
+    },
+    {
+      timezone: 'Europe/London', // UK time (BST/GMT)
+    },
+  )
+}
 
 const createReviews = async (
   payload: Omit<TReviews, 'user' | 'expert'>,
@@ -72,8 +136,12 @@ const createReviews = async (
     await User.findByIdAndUpdate(
       booking.consult,
       {
-        avgRating: Number(newAvgRating.toFixed(2)),
-        $addToSet: { reviews: newReview._id },
+        $set: {
+          avgRating: Number(newAvgRating.toFixed(2)),
+        },
+        $inc: {
+          ratingCount: 1,
+        },
       },
       { session, new: true },
     )
@@ -94,16 +162,19 @@ const createReviews = async (
 }
 
 const getAllReviews = async (query: Record<string, any>) => {
-  const { expert, booking, sort } = query
-
   const reviewsModel = new QueryBuilder(
-    Reviews.find().populate([
-      { path: 'user', select: 'firstName lastName photoUrl' },
-      { path: 'booking', select: 'sessionType' },
-    ]),
+    Reviews.find()
+      .populate([
+        { path: 'user', select: 'firstName lastName photoUrl' },
+        {
+          path: 'booking',
+          select: 'sessionType',
+        },
+      ])
+      .select('user booking review rating createdAt'),
     query,
   )
-    .search(['review'])
+    .search([''])
     .filter()
     .sortReviews() // custom sort (latest, highest, lowest)
     .paginate()
@@ -124,7 +195,7 @@ const getAllReviews = async (query: Record<string, any>) => {
     },
   ])
 
-  // ৫টি ক্যাটাগরিতে কাউন্ট ম্যাপ করা
+  // 5 category with map
   const countMap = {
     excellent: 0, // 5
     veryGood: 0, // 4
