@@ -48,6 +48,14 @@ const bookingsSchema = new Schema<TBookings>(
       type: String,
       required: true,
     },
+    recordDuration: {
+      type: Number,
+      default: 0,
+    },
+    recordFile: {
+      type: String,
+      default: null,
+    },
     paymentStatus: {
       type: String,
       enum: Object.values(PAYMENT_STATUS),

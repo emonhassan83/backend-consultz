@@ -19,7 +19,8 @@ export const sendBookingsNotification = async (
   switch (action) {
     case 'confirmed':
       message = messages.booking.confirmed
-      description = `Your session has been confirmed for ${sessionInfo}. Please be available on time to get the most out of your consultation.`
+      // @ts-ignore
+      description = description = `Your booking with ${booking.consult.firstName} on ${sessionInfo} has been confirmed.`;
       break
 
     case 'cancellation':

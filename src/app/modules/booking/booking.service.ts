@@ -1,5 +1,5 @@
 import dayjs from 'dayjs'
-import mongoose from 'mongoose'
+import mongoose, { ClientSession } from 'mongoose'
 import httpStatus from 'http-status'
 import { TBookings } from './booking.interface'
 import { BOOKING_STATUS, PAYMENT_STATUS } from './booking.constants'
@@ -140,19 +140,32 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
     // Find booking
     const booking = await Booking.findOne({
       _id: bookingId,
-      user: currentUserId,
       isDeleted: false,
+      $or: [{ user: currentUserId }, { consult: currentUserId }],
     }).session(session)
-
     if (!booking) {
       throw new AppError(httpStatus.NOT_FOUND, 'Booking not found or not yours')
     }
 
-    // check if it confirm booking or not
-    if (booking.status !== BOOKING_STATUS.confirmed) {
+    // Single Combined Message with Clear Explanation
+    const canCancel =
+      booking.paymentStatus === PAYMENT_STATUS.paid &&
+      booking.status !== BOOKING_STATUS.completed &&
+      booking.status !== BOOKING_STATUS.cancelled
+
+    if (!canCancel) {
+      let reason = ''
+
+      if (booking.paymentStatus !== PAYMENT_STATUS.paid) {
+        reason = 'The booking has not been paid yet.'
+      } else if (booking.status === BOOKING_STATUS.completed) {
+        reason = 'The booking has already been completed.'
+      } else if (booking.status === BOOKING_STATUS.cancelled) {
+        reason = 'The booking has already been cancelled.'
+      }
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        'Only confirmed bookings can be cancelled',
+        `Cancellation is not allowed. ${reason}`,
       )
     }
 
@@ -249,6 +262,161 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
     throw error
   } finally {
     session.endSession()
+  }
+}
+
+const confirmedBooking = async (bookingId: string, currentUserId: string) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
+
+  try {
+    // Find booking
+    const booking = await Booking.findOne({
+      _id: bookingId,
+      consult: currentUserId,
+      isDeleted: false,
+    })
+      .populate('user consult slot')
+      .session(session)
+    if (!booking) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found or not yours')
+    }
+
+    // check if it valid or not for confirmed
+    if (
+      booking.status === BOOKING_STATUS.completed ||
+      booking.status === BOOKING_STATUS.cancelled
+    ) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        `This booking has already been ${booking.status}. It cannot be confirmed now.`,
+      )
+    }
+    if (booking.status !== BOOKING_STATUS.pending) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Only pending bookings can be confirmed',
+      )
+    }
+    if (booking.paymentStatus !== PAYMENT_STATUS.paid) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'This booking has not been paid yet and cannot be confirmed.',
+      )
+    }
+
+    // Booking status confirmed
+    const result = await Booking.findByIdAndUpdate(
+      bookingId,
+      { status: BOOKING_STATUS.confirmed },
+      { new: true },
+    ).populate('consult slot user')
+    if (!result) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Failed to confirmed bookings')
+    }
+
+    // sent confirmation notify to user
+    await sendBookingsNotification(
+      'confirmed',
+      result,
+      result.user,
+      result.slot,
+    )
+
+    await session.commitTransaction()
+    return result
+  } catch (error) {
+    await session.abortTransaction()
+    throw error
+  } finally {
+    session.endSession()
+  }
+}
+
+const completedBooking = async (
+  bookingId: string,
+  currentUserId: string,
+  payload: { recordDuration: number; recordFile: string },
+) => {
+  const { recordDuration, recordFile } = payload
+
+  const session: ClientSession = await mongoose.startSession()
+  session.startTransaction()
+
+  try {
+    // 1. Find the booking and ensure it belongs to the current user
+    const booking = await Booking.findOne({
+      _id: bookingId,
+      isDeleted: false,
+      $or: [{ user: currentUserId }, { consult: currentUserId }],
+    }).session(session)
+    if (!booking) {
+      throw new AppError(
+        httpStatus.NOT_FOUND,
+        'Booking not found or does not belong to you.',
+      )
+    }
+
+    // 2. Strict validation: only confirmed & paid bookings can be completed
+    if (booking.status === BOOKING_STATUS.completed) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'This booking has already been marked as completed.',
+      )
+    }
+    if (booking.status === BOOKING_STATUS.cancelled) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'This booking has been cancelled and cannot be completed.',
+      )
+    }
+    if (booking.status !== BOOKING_STATUS.confirmed) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Only confirmed bookings can be marked as completed. Current status: ' +
+          booking.status,
+      )
+    }
+    if (booking.paymentStatus !== PAYMENT_STATUS.paid) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'This booking has not been paid yet and cannot be marked as completed.',
+      )
+    }
+
+    // 3. Mark booking as completed + save record details
+    const updatedBooking = await Booking.findByIdAndUpdate(
+      bookingId,
+      {
+        $set: {
+          status: BOOKING_STATUS.completed,
+          recordDuration,
+          recordFile,
+        },
+      },
+      { new: true, session },
+    )
+    if (!updatedBooking) {
+      throw new AppError(
+        httpStatus.INTERNAL_SERVER_ERROR,
+        'Failed to mark booking as completed.',
+      )
+    }
+
+    // 4. Commit transaction
+    await session.commitTransaction()
+    session.endSession()
+
+    return updatedBooking
+  } catch (error: any) {
+    await session.abortTransaction()
+    session.endSession()
+    throw error instanceof AppError
+      ? error
+      : new AppError(
+          httpStatus.INTERNAL_SERVER_ERROR,
+          error.message || 'Failed to complete booking',
+        )
   }
 }
 
@@ -376,5 +544,7 @@ export const bookingsService = {
   getBookingsById,
   deleteBookings,
   cancelBooking,
+  confirmedBooking,
+  completedBooking,
   rescheduleBooking,
 }

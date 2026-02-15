@@ -95,7 +95,7 @@ const confirmPayment = async (payload: IConfirmPayment) => {
       bookingId,
       {
         paymentStatus: PAYMENT_STATUS.paid,
-        status: BOOKING_STATUS.confirmed,
+        // status: BOOKING_STATUS.confirmed,
       },
       { new: true, session },
     )

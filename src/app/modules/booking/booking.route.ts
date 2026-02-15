@@ -17,7 +17,20 @@ router.post(
 router.patch(
   '/canceled/:id',
   auth(USER_ROLE.consult, USER_ROLE.expert),
-  bookingsController.changeBookingStatus,
+  bookingsController.cancelBooking,
+)
+
+router.patch(
+  '/completed/:id',
+  auth(USER_ROLE.consult, USER_ROLE.expert),
+  zodValidationRequest(BookingsValidation.createValidationSchema),
+  bookingsController.completedBooking,
+)
+
+router.patch(
+  '/confirmed/:id',
+  auth(USER_ROLE.expert),
+  bookingsController.confirmedBooking,
 )
 
 router.patch(

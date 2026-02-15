@@ -14,6 +14,8 @@ export interface TBookings {
   challengeQuestion: string
   backgroundQuestion: string
   paymentStatus: TPaymentStatus
+  recordDuration: number
+  recordFile: string
   status: TBookingStatus
   isDeleted: boolean
   createdAt?: Date

@@ -59,7 +59,36 @@ const getBookingsById = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-const changeBookingStatus = catchAsync(async (req: Request, res: Response) => {
+const confirmedBooking = catchAsync(async (req: Request, res: Response) => {
+  const result = await bookingsService.confirmedBooking(
+    req.params.id,
+    req.user._id,
+  )
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Bookings confirmed successfully',
+    data: result,
+  })
+})
+
+const completedBooking = catchAsync(async (req: Request, res: Response) => {
+  const result = await bookingsService.completedBooking(
+    req.params.id,
+    req.user._id,
+    req.body
+  )
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Bookings completed successfully',
+    data: result,
+  })
+})
+
+const cancelBooking = catchAsync(async (req: Request, res: Response) => {
   const result = await bookingsService.cancelBooking(
     req.params.id,
     req.user._id,
@@ -104,6 +133,8 @@ export const bookingsController = {
   deleteBookings,
   getConsultBookings,
   getMyBookings,
-  changeBookingStatus,
+  confirmedBooking,
+  cancelBooking,
+  completedBooking,
   rescheduleBooking,
 }
