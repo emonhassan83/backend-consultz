@@ -14,14 +14,13 @@ const insertIntoDB = catchAsync(async (req, res) => {
 })
 
 const getAllCategory = catchAsync(async (req, res) => {
-  const result = await CategoryService.getAllIntoFromDB(req.query)
+  const result = await CategoryService.getAllIntoFromDB()
 
   sendResponse(res, {
     success: true,
     statusCode: 200,
     message: 'Categories retrieved successfully!',
-    meta: result.meta,
-    data: result.data,
+    data: result,
   })
 })
 

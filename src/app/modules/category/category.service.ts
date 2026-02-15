@@ -32,22 +32,8 @@ const insertIntoDB = async (payload: TCategory): Promise<TCategory> => {
   return result;
 };
 
-const getAllIntoFromDB = async (query: Record<string, unknown>) => {
-  const queryBuilder = new QueryBuilder(
-    Category.find().select('title') as any,
-    query,
-  )
-    // Case-insensitive search on title
-    .search(['title'])
-    .filter()
-    .sort()
-    .paginate()
-    .fields();
-
-  const data = await queryBuilder.modelQuery.lean();
-  const meta = await queryBuilder.countTotal();
-
-  return { meta, data };
+const getAllIntoFromDB = async () => {
+  return await Category.find().select('title')
 };
 
 const getAFromDB = async (id: string): Promise<TCategory> => {
