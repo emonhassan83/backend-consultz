@@ -376,7 +376,7 @@ const getInvestmentExperts = async (query: Record<string, unknown>) => {
 const geUserByIdFromDB = async (id: string) => {
   const user = await User.findById(id)
     .select(
-      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points referredBy referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role',
+      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points referredBy referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role pushNotify emailNotify',
     )
     .lean()
 
