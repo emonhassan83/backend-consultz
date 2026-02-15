@@ -21,9 +21,11 @@ export const messages = {
     add: 'Comment posted in the feed',
   },
   booking: {
-    confirmed: 'Booking confirmed',
-    cancellation: 'Booking cancelled',
-    rescheduled: 'Booking rescheduled',
+    request: 'Booking Request',
+    confirmed: 'Booking Confirmed! 🎉',
+    cancellation: 'Booking Cancelled',
+    rescheduled: 'Booking Rescheduled',
+    reminder: 'Good Morning!',
   },
   paymentManagement: {
     paymentSuccess: 'Payment was successful!',

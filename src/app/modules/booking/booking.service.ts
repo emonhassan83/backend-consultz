@@ -1,5 +1,10 @@
 import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import timezone from 'dayjs/plugin/timezone'
 import mongoose, { ClientSession } from 'mongoose'
+
+dayjs.extend(utc)
+dayjs.extend(timezone)
 import httpStatus from 'http-status'
 import { TBookings } from './booking.interface'
 import { BOOKING_STATUS, PAYMENT_STATUS } from './booking.constants'
@@ -11,12 +16,102 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { BookingSlots } from '../bookingSlots/bookingSlots.model'
 import { Payment } from '../payment/payment.model'
 import Stripe from 'stripe'
+import cron from 'node-cron'
 import config from '../../config'
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2025-02-24.acacia',
   typescript: true,
 })
+
+// UK time 8:00 AM (BST/GMT) = Europe/London
+export const notifyScheduleSessionCorn = () => {
+  cron.schedule(
+    '0 8 * * *',
+    async () => {
+      console.log('Daily Morning Booking Reminder Job Started (UK 8:00 AM)')
+
+      const todayDate = dayjs().tz('Europe/London').format('YYYY-MM-DD')
+
+      // Find todays slot find
+      const todaySlots = await BookingSlots.find({ date: todayDate }).distinct(
+        '_id',
+      )
+
+      // Todays confirmed bookings
+      const todayBookings = await Booking.find({
+        slot: { $in: todaySlots },
+        status: BOOKING_STATUS.confirmed,
+        isDeleted: false,
+      })
+        .populate('user consult slot')
+        .lean()
+
+      // user and consult count group
+      const userSessions: Record<string, { count: number; firstSlot: any }> = {}
+      const consultSessions: Record<string, { count: number; firstSlot: any }> =
+        {}
+
+      todayBookings.forEach((booking) => {
+        const userId = booking.user._id.toString()
+        const consultId = booking.consult._id.toString()
+
+        // for user
+        if (!userSessions[userId]) {
+          userSessions[userId] = { count: 0, firstSlot: booking.slot }
+        }
+        userSessions[userId].count += 1
+
+        // for consult
+        if (!consultSessions[consultId]) {
+          consultSessions[consultId] = { count: 0, firstSlot: booking.slot }
+        }
+        consultSessions[consultId].count += 1
+      })
+
+      // notify to user
+      for (const [userId, info] of Object.entries(userSessions)) {
+        const user = await User.findById(userId)
+          .select('fcmToken pushNotify')
+          .lean()
+        if (user && user.fcmToken && user.pushNotify?.bookingAndSchedule) {
+          await sendBookingsNotification(
+            'morning_reminder',
+            { ...user, sessionCount: info.count },
+            user,
+            info.firstSlot, // first slot time
+          )
+        }
+      }
+
+      // notify to consult
+      for (const [consultId, info] of Object.entries(consultSessions)) {
+        const consult = await User.findById(consultId)
+          .select('fcmToken pushNotify')
+          .lean()
+        if (
+          consult &&
+          consult.fcmToken &&
+          consult.pushNotify?.bookingAndSchedule
+        ) {
+          await sendBookingsNotification(
+            'morning_reminder',
+            { ...consult, sessionCount: info.count },
+            consult,
+            info.firstSlot,
+          )
+        }
+      }
+
+      console.log(
+        `Morning reminders sent to ${Object.keys(userSessions).length} users and ${Object.keys(consultSessions).length} consultants`,
+      )
+    },
+    {
+      timezone: 'Europe/London',
+    },
+  )
+}
 
 const createBookings = async (payload: TBookings, userId: string) => {
   const sessionClient = await mongoose.startSession()
