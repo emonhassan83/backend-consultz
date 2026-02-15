@@ -25,6 +25,17 @@ const getAllCategory = catchAsync(async (req, res) => {
   })
 })
 
+const getACategory = catchAsync(async (req, res) => {
+  const result = await CategoryService.getAFromDB(req.params.id)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Category retrieved successfully!',
+    data: result,
+  })
+})
+
 const updateACategory = catchAsync(async (req, res) => {
   const result = await CategoryService.updateAIntoFromDB(req.params.id, req.body)
 
@@ -36,8 +47,21 @@ const updateACategory = catchAsync(async (req, res) => {
   })
 })
 
+const deleteACategory = catchAsync(async (req, res) => {
+  const result = await CategoryService.deleteFromDB(req.params.id)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Categories deleted successfully!',
+    data: result,
+  })
+})
+
 export const CategoryControllers = {
   insertIntoDB,
   getAllCategory,
-  updateACategory
+  getACategory,
+  updateACategory,
+  deleteACategory
 }

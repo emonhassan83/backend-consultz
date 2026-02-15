@@ -20,7 +20,6 @@ import { BookingSlotsRoutes } from '../modules/bookingSlots/bookingSlots.route'
 import { PaymentRoutes } from '../modules/payment/payment.route'
 import { CardRoutes } from '../modules/card/card.route'
 import { CategoriesRoutes } from '../modules/category/category.route'
-import { SubCategoriesRoutes } from '../modules/subcategory/subcategory.route'
 import { StripeRoute } from '../modules/stripe/stripe.route'
 import { WithdrawRoutes } from '../modules/withdraw/withdraw.route'
 import { CallingRoutes } from '../modules/calling/calling.route'
@@ -125,10 +124,10 @@ const moduleRoutes = [
     path: '/categories',
     route: CategoriesRoutes,
   },
-  {
-    path: '/sub-categories',
-    route: SubCategoriesRoutes,
-  },
+  // {
+  //   path: '/sub-categories',
+  //   route: SubCategoriesRoutes,
+  // },
   {
     path: '/meta',
     route: MetaRoutes,

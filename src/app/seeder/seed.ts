@@ -52,31 +52,28 @@ const seedContents = async () => {
 
 const seedCategories = async () => {
   try {
-    let seededCount = 0;
+  // Step 1: check if category exist or not
+    const existingCount = await Category.countDocuments();
 
-    for (const cat of categories) {
-      // Normalize title for comparison (case-insensitive + trim)
-      const normalizedTitle = cat.title.trim().toLowerCase();
-
-      // Check if category already exists (case-insensitive)
-      const exists = await Category.findOne({
-        $expr: {
-          $eq: [{ $toLower: '$title' }, normalizedTitle],
-        },
-      });
-
-      if (!exists) {
-        // Create only if not found
-        await Category.create({ title: cat.title.trim() });
-        seededCount++;
-      }
+    // if found any category then seed stop
+    if (existingCount > 0) {
+      console.log(
+        `\nℹ️ ${existingCount} categories already exist in the database. Seeding skipped.`
+      );
+      return;
     }
 
-    if (seededCount > 0) {
-      console.log(`\n✅ ${seededCount} new categories seeded successfully!`);
-    } else {
-      console.log('\nℹ️ All categories already exist. No new seeding needed.');
-    }
+    // Step 2: if not found categories then seed categories
+    const formattedCategories = categories.map(cat => ({
+      title: cat.title.trim(),
+      items: cat.items.map(item => item.trim()),
+    }));
+
+    const inserted = await Category.insertMany(formattedCategories);
+
+    console.log(
+      `\n✅ Seeding completed successfully! ${inserted.length} categories inserted.`
+    );
   } catch (error) {
     console.error('❌ Category seeding failed:', error);
   }

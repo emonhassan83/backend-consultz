@@ -26,6 +26,7 @@ const insertIntoDB = async (payload: TCategory): Promise<TCategory> => {
   // Create new category (store original title)
   const result = await Category.create({
     title: payload.title.trim(),
+    items: payload.items
   });
 
   return result;
@@ -48,6 +49,16 @@ const getAllIntoFromDB = async (query: Record<string, unknown>) => {
 
   return { meta, data };
 };
+
+const getAFromDB = async (id: string): Promise<TCategory> => {
+  const result = await Category.findById(id)
+    .lean()
+  if (!result) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Category not found')
+  }
+
+  return result
+}
 
 const updateAIntoFromDB = async (
   id: string,
@@ -94,8 +105,21 @@ const updateAIntoFromDB = async (
   return updated;
 };
 
+const deleteFromDB = async (id: string): Promise<TCategory> => {
+  const result = await Category.findByIdAndDelete(
+    id
+  ).lean()
+  if (!result) {
+    throw new AppError(httpStatus.CONFLICT, 'Category deletion failed!')
+  }
+
+  return result
+}
+
 export const CategoryService = {
   insertIntoDB,
   getAllIntoFromDB,
+  getAFromDB,
   updateAIntoFromDB,
+  deleteFromDB
 }

@@ -14,17 +14,20 @@ router.post(
   CategoryControllers.insertIntoDB,
 )
 
-router.get(
-  '/',
-  auth(USER_ROLE.admin),
-  CategoryControllers.getAllCategory,
-)
-
 router.put(
   '/:id',
   auth(USER_ROLE.admin),
-  zodValidationRequest(CategoryValidation.createValidationSchema),
+  zodValidationRequest(CategoryValidation.updateValidationSchema),
   CategoryControllers.updateACategory,
 )
+
+router.delete(
+  '/:id',
+  auth(USER_ROLE.admin),
+  CategoryControllers.deleteACategory,
+)
+
+router.get('/', CategoryControllers.getAllCategory)
+router.get('/:id', CategoryControllers.getACategory)
 
 export const CategoriesRoutes = router

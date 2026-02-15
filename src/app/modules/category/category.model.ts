@@ -10,6 +10,13 @@ const categorySchema = new Schema<TCategory>(
       minlength: [2, 'Title must be at least 2 characters'],
       maxlength: [100, 'Title cannot exceed 100 characters'],
     },
+    items: {
+      type: [String],
+      validate: {
+        validator: (v: string[]) => v.every(item => typeof item === 'string' && item.trim().length > 0),
+        message: 'All items must be non-empty strings',
+      },
+    },
   }
 );
 
