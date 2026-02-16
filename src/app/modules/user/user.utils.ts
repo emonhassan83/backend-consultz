@@ -120,8 +120,8 @@ export const sendUserStatusNotifYToUser = async (
 ) => {
   if (!user || !user?.fcmToken) return
 
-  let message = ''
-  let description = ''
+  let message
+  let description
 
   if (status === 'active') {
     message = messages.userManagement.accountActivated

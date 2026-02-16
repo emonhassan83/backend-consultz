@@ -376,7 +376,7 @@ const getInvestmentExperts = async (query: Record<string, unknown>) => {
 const geUserByIdFromDB = async (id: string) => {
   const user = await User.findById(id)
     .select(
-      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points referredBy referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role pushNotify emailNotify',
+      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education isTopExpert pushNotify emailNotify status createdAt',
     )
     .lean()
 
@@ -499,90 +499,66 @@ const changeUserNotifyFromDB = async (id: string, payload: any) => {
   return result
 }
 
-const updateUserInfoFromDB = async (
-  userId: string,
-  payload: Partial<TUser>,
-) => {
-  const session = await mongoose.startSession()
-  session.startTransaction()
+const updateUserInfoFromDB = async (userId: string, payload: Partial<TUser>) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
   try {
-    // 1. Find the user
-    const user = await User.findById(userId).session(session)
+    const user = await User.findById(userId).session(session);
     if (!user || user.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
     }
 
-    // 2. sessionDurations update
+    // Session durations logic remains the same (no change needed)
+    let finalPayload = { ...payload };
+
     if (payload.sessionDurations && payload.sessionDurations.length > 0) {
-      // hourlyRate validate
       const effectiveHourlyRate =
-        payload.hourlyRate !== undefined ? payload.hourlyRate : user.hourlyRate
+        payload.hourlyRate !== undefined ? payload.hourlyRate : user.hourlyRate;
 
       if (effectiveHourlyRate <= 0) {
         throw new AppError(
           httpStatus.BAD_REQUEST,
-          'Hourly rate must be greater than 0 to update session durations. Please set a valid hourly rate first.',
-        )
+          'Hourly rate must be greater than 0 to update session durations.'
+        );
       }
-    }
 
-    // 3. If sessionDurations or hourlyRate update → offeredPrice recalculate
-    const updatedSessionDurations =
-      payload.sessionDurations || user.sessionDurations || []
-    const currentHourlyRate =
-      payload.hourlyRate !== undefined ? payload.hourlyRate : user.hourlyRate
-
-    const finalSessionDurations = updatedSessionDurations.map((item) => {
-      const durationMinutes = item.duration || 0
-      const offeredPrice = Number(
-        ((durationMinutes / 60) * currentHourlyRate).toFixed(2),
-      )
-
-      return {
+      const updatedDurations = payload.sessionDurations.map((item) => ({
         ...item,
-        offeredPrice, // Auto-calculated
-      }
-    })
+        offeredPrice: Number(((item.duration / 60) * effectiveHourlyRate).toFixed(2)),
+      }));
 
-    // 4. Final payload create
-    const finalPayload = {
-      ...payload,
-      sessionDurations: finalSessionDurations,
-      hourlyRate: currentHourlyRate,
+      finalPayload = {
+        ...payload,
+        sessionDurations: updatedDurations,
+        hourlyRate: effectiveHourlyRate,
+      };
     }
 
-    // 5. User update
+    // Update user with new payload (availability will now be accepted as grouped)
     const updatedUser = await User.findByIdAndUpdate(userId, finalPayload, {
       new: true,
       runValidators: true,
       session,
     }).select(
-      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt',
-    )
+      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role'
+    );
 
     if (!updatedUser) {
-      throw new AppError(
-        httpStatus.NOT_FOUND,
-        'User not found and failed to update!',
-      )
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found and failed to update!');
     }
 
-    await session.commitTransaction()
-
-    return updatedUser
+    await session.commitTransaction();
+    return updatedUser;
   } catch (error) {
-    await session.abortTransaction()
+    await session.abortTransaction();
     throw error instanceof AppError
       ? error
-      : new AppError(
-          httpStatus.INTERNAL_SERVER_ERROR,
-          'Failed to update user info',
-        )
+      : new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to update user info');
   } finally {
-    session.endSession()
+    session.endSession();
   }
-}
+};
 
 const updateLocationFromDB = async (
   userId: string,

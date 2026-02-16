@@ -6,13 +6,13 @@ const SESSION_TYPES = {
   INTRODUCTION: 'Introduction',
   DISCUSSION: 'Discussion',
   DEEP_DIVE: 'Deep Dive',
-} as const;
+} as const
 
 const SESSION_DURATIONS = {
   [SESSION_TYPES.INTRODUCTION]: 15,
   [SESSION_TYPES.DISCUSSION]: 30,
   [SESSION_TYPES.DEEP_DIVE]: 60,
-} as const;
+} as const
 
 // 🔹 Sub-schemas
 const EducationSchema = z.object({
@@ -27,31 +27,35 @@ const timeSchema = z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, {
 })
 
 // Availability item with strict time validation
-const AvailabilitySchema = z
+const AvailabilitySlotSchema = z
   .object({
-    day: z.enum(Object.values(DAY_MAP) as [string, ...string[]], {
-      required_error: 'Day is required!',
-      invalid_type_error: 'Invalid day',
-    }),
-    from: timeSchema,
+    from: timeSchema, // your existing time validation (e.g. "HH:mm")
     to: timeSchema,
   })
   .refine(
     (data) => {
-      // Convert times to minutes since midnight and compare
       const [fromH, fromM] = data.from.split(':').map(Number)
       const [toH, toM] = data.to.split(':').map(Number)
-
       const fromMinutes = fromH * 60 + fromM
       const toMinutes = toH * 60 + toM
-
       return fromMinutes < toMinutes
     },
     {
       message: '"to" time must be after "from" time',
-      path: ['to'], // error appears on "to" field
+      path: ['to'],
     },
   )
+
+export const AvailabilitySchema = z.object({
+  day: z.enum(Object.values(DAY_MAP) as [string, ...string[]], {
+    required_error: 'Day is required!',
+    invalid_type_error: 'Invalid day',
+  }),
+  slots: z
+    .array(AvailabilitySlotSchema)
+    .min(1, { message: 'At least one time slot is required per day' })
+    .max(10, { message: 'Maximum 10 slots allowed per day' }), // optional limit
+})
 
 const SocialProfileSchema = z.object({
   type: z
@@ -75,35 +79,41 @@ const SocialProfileSchema = z.object({
 })
 
 // Session duration item with strict type-duration mapping
-const SessionDurationSchema = z.object({
-  type: z.enum([
-    SESSION_TYPES.INTRODUCTION,
-    SESSION_TYPES.DISCUSSION,
-    SESSION_TYPES.DEEP_DIVE,
-  ], {
-    required_error: 'Session type is required!',
-    invalid_type_error: 'Invalid session type',
-  }),
+const SessionDurationSchema = z
+  .object({
+    type: z.enum(
+      [
+        SESSION_TYPES.INTRODUCTION,
+        SESSION_TYPES.DISCUSSION,
+        SESSION_TYPES.DEEP_DIVE,
+      ],
+      {
+        required_error: 'Session type is required!',
+        invalid_type_error: 'Invalid session type',
+      },
+    ),
 
-  duration: z.number({
-    required_error: 'Duration is required!',
-    invalid_type_error: 'Duration must be a number',
-  }),
+    duration: z.number({
+      required_error: 'Duration is required!',
+      invalid_type_error: 'Duration must be a number',
+    }),
 
-  isOffered: z.boolean({
-    required_error: 'isOffered must be true or false',
-    invalid_type_error: 'isOffered must be a boolean',
-  }),
-}).refine(
-  (data) => {
-    const expectedDuration = SESSION_DURATIONS[data.type as keyof typeof SESSION_DURATIONS];
-    return data.duration === expectedDuration;
-  },
-  (data) => ({
-    message: `Duration must be exactly ${SESSION_DURATIONS[data.type as keyof typeof SESSION_DURATIONS]} minutes for type "${data.type}"`,
-    path: ['duration'],
+    isOffered: z.boolean({
+      required_error: 'isOffered must be true or false',
+      invalid_type_error: 'isOffered must be a boolean',
+    }),
   })
-);
+  .refine(
+    (data) => {
+      const expectedDuration =
+        SESSION_DURATIONS[data.type as keyof typeof SESSION_DURATIONS]
+      return data.duration === expectedDuration
+    },
+    (data) => ({
+      message: `Duration must be exactly ${SESSION_DURATIONS[data.type as keyof typeof SESSION_DURATIONS]} minutes for type "${data.type}"`,
+      path: ['duration'],
+    }),
+  )
 
 const BankAccountSchema = z.object({
   bankName: z.string().optional(),
@@ -153,20 +163,7 @@ const updateValidationSchema = z.object({
     education: EducationSchema.optional(),
 
     // Strict availability validation
-    availability: z
-      .array(AvailabilitySchema)
-      .optional()
-      .refine(
-        (items) => {
-          if (!items || items.length === 0) return true // empty is allowed
-          // Prevent duplicate days
-          const days = items.map((item) => item.day)
-          return new Set(days).size === days.length
-        },
-        {
-          message: 'Duplicate days are not allowed in availability',
-        },
-      ),
+    availability: z.array(AvailabilitySchema).optional(),
 
     // Strict socialProfiles validation
     socialProfiles: z
@@ -228,7 +225,7 @@ const pushNotifySchema = z.object({
     required_error: 'reviews notification preference is required',
     invalid_type_error: 'reviews must be a boolean (true/false)',
   }),
-});
+})
 
 // Email Notification Settings Schema
 const emailNotifySchema = z.object({
@@ -246,14 +243,16 @@ const emailNotifySchema = z.object({
     required_error: 'payment email notification preference is required',
     invalid_type_error: 'payment must be a boolean (true/false)',
   }),
-});
+})
 
 const updateNotifySettingsValidation = z.object({
-  body: z.object({
-    pushNotify: pushNotifySchema,
-    emailNotify: emailNotifySchema,
-  }).strict(), // Reject any unknown fields
-});
+  body: z
+    .object({
+      pushNotify: pushNotifySchema,
+      emailNotify: emailNotifySchema,
+    })
+    .strict(), // Reject any unknown fields
+})
 
 // ✅ Change Status Validation
 const changeStatusValidationSchema = z.object({
@@ -269,5 +268,5 @@ export const UserValidation = {
   createValidationSchema,
   updateValidationSchema,
   changeStatusValidationSchema,
-  updateNotifySettingsValidation
+  updateNotifySettingsValidation,
 }

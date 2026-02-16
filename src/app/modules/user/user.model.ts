@@ -22,16 +22,6 @@ const EducationSchema = new Schema(
   { _id: false },
 )
 
-// 📅 Availability
-const AvailabilitySchema = new Schema(
-  {
-    day: { type: String, enum: Object.values(DAY_MAP), required: true },
-    from: { type: String, required: true },
-    to: { type: String, required: true },
-  },
-  { _id: false },
-)
-
 // 🌐 Social Profile
 const SocialProfileSchema = new Schema(
   {
@@ -93,7 +83,30 @@ const userSchema = new Schema<TUser, UserModel>(
     advisingStyles: { type: [String], default: [] },
 
     education: { type: EducationSchema, default: {} },
-    availability: { type: [AvailabilitySchema], default: [] },
+
+    // availability field
+   availability: {
+  type: [
+    {
+      day: {
+        type: String,
+        enum: Object.values(DAY_MAP),
+        required: true,
+      },
+      slots: {
+        type: [
+          {
+            from: { type: String, required: true },
+            to: { type: String, required: true },
+          },
+        ],
+        _id: false, // ← disables _id for every slot
+      },
+      _id: false, // ← disables _id for every day object
+    },
+  ],
+  default: [],
+},
     socialProfiles: { type: [SocialProfileSchema], default: [] },
     sessionDurations: { type: [SessionDurationSchema], default: [] },
 
@@ -187,6 +200,10 @@ const userSchema = new Schema<TUser, UserModel>(
         type: Boolean,
         default: true,
       },
+    },
+    isTopExpert: {
+      type: Boolean,
+      default: false,
     },
     isProfileSetup: {
       type: Boolean,

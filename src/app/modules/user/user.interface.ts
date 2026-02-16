@@ -1,11 +1,15 @@
 import { Model, Types } from 'mongoose'
 import { TDaysMap, TUserRole, TUserStatus } from './user.constant'
 
-type TAvailability = {
-  day: TDaysMap
-  from: string
-  to: string
-}
+export type TAvailabilitySlot = {
+  from: string; // "09:00"
+  to: string;   // "11:00"
+};
+
+export type TAvailability = {
+  day: TDaysMap;          
+  slots: TAvailabilitySlot[];
+};
 
 type TSocialProfile = {
   type: string
@@ -93,6 +97,7 @@ export interface TUser {
   balance: number
   status: TUserStatus
   expireAt: Date
+  isTopExpert: boolean
   isProfileSetup: boolean
   isDeleted: boolean
   createdAt?: Date
