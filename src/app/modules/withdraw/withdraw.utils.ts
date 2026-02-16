@@ -10,7 +10,7 @@ export const sendWithdrawNotify = async (
   withdraw: TWithdraw,
   user: TUser
 ) => {
-  if (!user?.fcmToken) return
+  if (!user?.fcmToken || !user.pushNotify.payment) return
   
   let message = ''
   let description = ''
