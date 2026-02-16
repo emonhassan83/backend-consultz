@@ -14,6 +14,11 @@ import { BookingSlots } from '../bookingSlots/bookingSlots.model'
 import { Payment } from '../payment/payment.model'
 import Stripe from 'stripe'
 import config from '../../config'
+import {
+  sendCancellationEmail,
+  sendRescheduleEmail,
+  sendSessionCompletedToConsultant,
+} from '../../utils/emailNotify'
 dayjs.extend(utc)
 dayjs.extend(timezone)
 
@@ -82,13 +87,13 @@ const createBookings = async (payload: TBookings, userId: string) => {
     payload.status = BOOKING_STATUS.pending
 
     // Calculate dmCloseTime (session start + duration + 6 hours)
-    const sessionDurationMinutes = payload.sessionDuration || 60; // fallback
+    const sessionDurationMinutes = payload.sessionDuration || 60 // fallback
     const dmCloseTime = slotDateTime
       .add(sessionDurationMinutes, 'minute')
       .add(6, 'hour')
-      .toDate();
+      .toDate()
 
-    payload.dmCloseTime = dmCloseTime;
+    payload.dmCloseTime = dmCloseTime
 
     // Create booking
     const result = await Booking.create([payload], { session: sessionClient })
@@ -291,6 +296,18 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
       )
     }
 
+    // Email notify to user and consult
+    const cancelledByEmail =
+      currentUserId === booking.user.toString() ? 'user' : 'consult'
+    if (booker && expert) {
+      await sendCancellationEmail(
+        booker,
+        expert,
+        cancelledBooking,
+        slot,
+        cancelledByEmail,
+      )
+    }
     await session.commitTransaction()
 
     return {
@@ -444,10 +461,24 @@ const completedBooking = async (
       )
     }
 
-    // 3.5 sent confirmation notify to user
-    const user = await User.findById(updatedBooking.consult)
-    if (user && user?.fcmToken && user.pushNotify?.payment) {
-      await sendBookingsNotification('completed', updatedBooking, user, updatedBooking.slot)
+    // 3.5 sent completed notify to consult
+    const consult = await User.findById(updatedBooking.consult)
+    if (consult && consult?.fcmToken && consult.pushNotify?.payment) {
+      await sendBookingsNotification(
+        'completed',
+        updatedBooking,
+        consult,
+        updatedBooking.slot,
+      )
+    }
+
+    // sent consult to complete email
+    if (consult && consult.emailNotify.booking) {
+      await sendSessionCompletedToConsultant(
+        consult,
+        updatedBooking,
+        updatedBooking.slot,
+      )
     }
 
     // 4. Commit transaction
@@ -562,6 +593,11 @@ const rescheduleBooking = async (
       consultant.pushNotify?.bookingAndSchedule
     )
       await sendBookingsNotification('reschedule', booking, consultant, newSlot)
+
+    // sent reschedule email
+    if (user && consultant) {
+      await sendRescheduleEmail(user, consultant, booking, newSlot)
+    }
 
     await session.commitTransaction()
     return booking

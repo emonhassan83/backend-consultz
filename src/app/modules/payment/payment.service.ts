@@ -13,6 +13,7 @@ import { User } from '../user/user.model'
 import { BookingSlots } from '../bookingSlots/bookingSlots.model'
 import { IConfirmPayment, IPaymentIntent } from './payment.interface'
 import { sendBookingsNotification } from '../booking/booking.utils'
+import { sendNewBookingToConsultant } from '../../utils/emailNotify'
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2025-02-24.acacia',
@@ -120,10 +121,15 @@ const confirmPayment = async (payload: IConfirmPayment) => {
     ) {
       await sendBookingsNotification('pending', booking, consult, booking.slot)
     }
-    
+
     // sent notify to admin
     await paymentNotifyToAdmin('SUCCESS', payment)
-   
+
+    // sent email to consult
+    if (consult && consult.emailNotify.booking) {
+      await sendNewBookingToConsultant(consult, booking, booking.slot)
+    }
+
     await session.commitTransaction()
     return { payment, booking }
   } catch (error) {
