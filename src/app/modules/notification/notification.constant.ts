@@ -35,7 +35,7 @@ export const messages = {
   },
   paymentManagement: {
     paymentSuccess: 'Payment was successful!',
-    paymentRefunded: 'Refunded proceed',
+    paymentRefunded: 'Refunded complete',
   },
   withdraw: {
     hold: 'Withdrawal Request On Hold',

@@ -81,18 +81,19 @@ const createBookings = async (payload: TBookings, userId: string) => {
     payload.timezone = consult.timeZone || 'UTC'
     payload.status = BOOKING_STATUS.pending
 
+    // Calculate dmCloseTime (session start + duration + 6 hours)
+    const sessionDurationMinutes = payload.sessionDuration || 60; // fallback
+    const dmCloseTime = slotDateTime
+      .add(sessionDurationMinutes, 'minute')
+      .add(6, 'hour')
+      .toDate();
+
+    payload.dmCloseTime = dmCloseTime;
+
+    // Create booking
     const result = await Booking.create([payload], { session: sessionClient })
     if (!result || result.length === 0) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Failed to create booking')
-    }
-
-    // sent notify to consult
-    if (
-      consult &&
-      consult?.fcmToken &&
-      consult.pushNotify?.bookingAndSchedule
-    ) {
-      await sendBookingsNotification('pending', result[0], consult, slotTime)
     }
 
     await sessionClient.commitTransaction()
@@ -441,6 +442,12 @@ const completedBooking = async (
         httpStatus.INTERNAL_SERVER_ERROR,
         'Failed to mark booking as completed.',
       )
+    }
+
+    // 3.5 sent confirmation notify to user
+    const user = await User.findById(updatedBooking.consult)
+    if (user && user?.fcmToken && user.pushNotify?.payment) {
+      await sendBookingsNotification('completed', updatedBooking, user, updatedBooking.slot)
     }
 
     // 4. Commit transaction

@@ -12,6 +12,7 @@ import { BOOKING_STATUS } from '../booking/booking.constants'
 import { User } from '../user/user.model'
 import { BookingSlots } from '../bookingSlots/bookingSlots.model'
 import { IConfirmPayment, IPaymentIntent } from './payment.interface'
+import { sendBookingsNotification } from '../booking/booking.utils'
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2025-02-24.acacia',
@@ -98,7 +99,7 @@ const confirmPayment = async (payload: IConfirmPayment) => {
         // status: BOOKING_STATUS.confirmed,
       },
       { new: true, session },
-    )
+    ).populate('slot')
     if (!booking) {
       throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
     }
@@ -110,13 +111,19 @@ const confirmPayment = async (payload: IConfirmPayment) => {
       { new: true },
     )
 
-    // sent notify
-    const user = await User.findById(userId)
-    if (user) {
-      await paymentNotifyToUser('SUCCESS', payment, user)
-      await paymentNotifyToAdmin('SUCCESS', payment)
+    // sent notify to consult
+    const consult = await User.findById(booking.consult)
+    if (
+      consult &&
+      consult?.fcmToken &&
+      consult.pushNotify?.bookingAndSchedule
+    ) {
+      await sendBookingsNotification('pending', booking, consult, booking.slot)
     }
-
+    
+    // sent notify to admin
+    await paymentNotifyToAdmin('SUCCESS', payment)
+   
     await session.commitTransaction()
     return { payment, booking }
   } catch (error) {

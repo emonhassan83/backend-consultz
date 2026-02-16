@@ -6,6 +6,7 @@ import { TPayment } from './payment.interface'
 import { findAdmin } from '../../utils/findAdmin'
 import { sendNotification } from '../../utils/sentNotification'
 import { Types } from 'mongoose'
+import { TUser } from '../user/user.interface'
 
 const stripe: Stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2025-02-24.acacia',
@@ -85,9 +86,9 @@ export const paymentNotifyToAdmin = async (
 export const paymentNotifyToUser = async (
   type: 'SUCCESS' | 'REFUND',
   payment: TPayment,
-  user: any,
+  user: TUser,
 ) => {
-  if (!user || !user?.fcmToken) return
+  if (!user || !user?.fcmToken || user.pushNotify?.payment === false) return
 
   // Define message and description based on type
   const message =
@@ -97,8 +98,8 @@ export const paymentNotifyToUser = async (
 
   const description =
     type === 'SUCCESS'
-      ? `Your payment of £${payment.amount} has been successfully processed. Transaction ID: ${payment.transactionId}.`
-      : `A refund of £${payment.amount} has been issued to your account. Refund Transaction ID: ${payment.transactionId}.`
+      ? `Your payment of £${payment.amount} has been successfully processed`
+      : `A refund of £${payment.amount} has been issued to your account`
 
   // Create a notification entry
   const notifyPayload = {

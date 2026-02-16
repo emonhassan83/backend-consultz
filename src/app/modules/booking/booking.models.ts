@@ -1,6 +1,10 @@
 import { model, Schema } from 'mongoose'
 import { TBookings, TBookingsModules } from './booking.interface'
-import { BOOKING_STATUS, PAYMENT_STATUS, SESSION_TYPE } from './booking.constants'
+import {
+  BOOKING_STATUS,
+  PAYMENT_STATUS,
+  SESSION_TYPE,
+} from './booking.constants'
 
 const bookingsSchema = new Schema<TBookings>(
   {
@@ -60,6 +64,10 @@ const bookingsSchema = new Schema<TBookings>(
       type: String,
       enum: Object.values(PAYMENT_STATUS),
       default: PAYMENT_STATUS.paid,
+    },
+    dmCloseTime: {
+      type: Date,
+      default: null,
     },
     status: {
       type: String,
