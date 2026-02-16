@@ -2,9 +2,6 @@ import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
 import mongoose, { ClientSession } from 'mongoose'
-
-dayjs.extend(utc)
-dayjs.extend(timezone)
 import httpStatus from 'http-status'
 import { TBookings } from './booking.interface'
 import { BOOKING_STATUS, PAYMENT_STATUS } from './booking.constants'
@@ -16,102 +13,14 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { BookingSlots } from '../bookingSlots/bookingSlots.model'
 import { Payment } from '../payment/payment.model'
 import Stripe from 'stripe'
-import cron from 'node-cron'
 import config from '../../config'
+dayjs.extend(utc)
+dayjs.extend(timezone)
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2025-02-24.acacia',
   typescript: true,
 })
-
-// UK time 8:00 AM (BST/GMT) = Europe/London
-export const notifyScheduleSessionCorn = () => {
-  cron.schedule(
-    '0 8 * * *',
-    async () => {
-      console.log('Daily Morning Booking Reminder Job Started (UK 8:00 AM)')
-
-      const todayDate = dayjs().tz('Europe/London').format('YYYY-MM-DD')
-
-      // Find todays slot find
-      const todaySlots = await BookingSlots.find({ date: todayDate }).distinct(
-        '_id',
-      )
-
-      // Todays confirmed bookings
-      const todayBookings = await Booking.find({
-        slot: { $in: todaySlots },
-        status: BOOKING_STATUS.confirmed,
-        isDeleted: false,
-      })
-        .populate('user consult slot')
-        .lean()
-
-      // user and consult count group
-      const userSessions: Record<string, { count: number; firstSlot: any }> = {}
-      const consultSessions: Record<string, { count: number; firstSlot: any }> =
-        {}
-
-      todayBookings.forEach((booking) => {
-        const userId = booking.user._id.toString()
-        const consultId = booking.consult._id.toString()
-
-        // for user
-        if (!userSessions[userId]) {
-          userSessions[userId] = { count: 0, firstSlot: booking.slot }
-        }
-        userSessions[userId].count += 1
-
-        // for consult
-        if (!consultSessions[consultId]) {
-          consultSessions[consultId] = { count: 0, firstSlot: booking.slot }
-        }
-        consultSessions[consultId].count += 1
-      })
-
-      // notify to user
-      for (const [userId, info] of Object.entries(userSessions)) {
-        const user = await User.findById(userId)
-          .select('fcmToken pushNotify')
-          .lean()
-        if (user && user.fcmToken && user.pushNotify?.bookingAndSchedule) {
-          await sendBookingsNotification(
-            'morning_reminder',
-            { ...user, sessionCount: info.count },
-            user,
-            info.firstSlot, // first slot time
-          )
-        }
-      }
-
-      // notify to consult
-      for (const [consultId, info] of Object.entries(consultSessions)) {
-        const consult = await User.findById(consultId)
-          .select('fcmToken pushNotify')
-          .lean()
-        if (
-          consult &&
-          consult.fcmToken &&
-          consult.pushNotify?.bookingAndSchedule
-        ) {
-          await sendBookingsNotification(
-            'morning_reminder',
-            { ...consult, sessionCount: info.count },
-            consult,
-            info.firstSlot,
-          )
-        }
-      }
-
-      console.log(
-        `Morning reminders sent to ${Object.keys(userSessions).length} users and ${Object.keys(consultSessions).length} consultants`,
-      )
-    },
-    {
-      timezone: 'Europe/London',
-    },
-  )
-}
 
 const createBookings = async (payload: TBookings, userId: string) => {
   const sessionClient = await mongoose.startSession()
@@ -177,6 +86,15 @@ const createBookings = async (payload: TBookings, userId: string) => {
       throw new AppError(httpStatus.BAD_REQUEST, 'Failed to create booking')
     }
 
+    // sent notify to consult
+    if (
+      consult &&
+      consult?.fcmToken &&
+      consult.pushNotify?.bookingAndSchedule
+    ) {
+      await sendBookingsNotification('pending', result[0], consult, slotTime)
+    }
+
     await sessionClient.commitTransaction()
     return result[0]
   } catch (error) {
@@ -237,30 +155,33 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
       _id: bookingId,
       isDeleted: false,
       $or: [{ user: currentUserId }, { consult: currentUserId }],
-    }).session(session)
+    })
+      .populate('slot user consult')
+      .session(session)
     if (!booking) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found or not yours')
+      throw new AppError(
+        httpStatus.NOT_FOUND,
+        'Booking not found or you do not have permission to cancel it.',
+      )
     }
 
     // Single Combined Message with Clear Explanation
-    const canCancel =
-      booking.paymentStatus === PAYMENT_STATUS.paid &&
-      booking.status !== BOOKING_STATUS.completed &&
-      booking.status !== BOOKING_STATUS.cancelled
-
-    if (!canCancel) {
-      let reason = ''
-
-      if (booking.paymentStatus !== PAYMENT_STATUS.paid) {
-        reason = 'The booking has not been paid yet.'
-      } else if (booking.status === BOOKING_STATUS.completed) {
-        reason = 'The booking has already been completed.'
-      } else if (booking.status === BOOKING_STATUS.cancelled) {
-        reason = 'The booking has already been cancelled.'
-      }
+    if (booking.paymentStatus !== PAYMENT_STATUS.paid) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        `Cancellation is not allowed. ${reason}`,
+        'This booking has not been paid yet and cannot be cancelled.',
+      )
+    }
+    if (booking.status === BOOKING_STATUS.completed) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'This booking has already been completed and cannot be cancelled.',
+      )
+    }
+    if (booking.status === BOOKING_STATUS.cancelled) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'This booking has already been cancelled.',
       )
     }
 
@@ -288,12 +209,24 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
     }
 
     // Free the slots
-    slot.isBooked = false
-    await slot.save({ session })
+    await BookingSlots.findByIdAndUpdate(
+      booking.slot,
+      { isBooked: false },
+      { session },
+    )
 
     // Booking status canceled
-    booking.status = BOOKING_STATUS.cancelled
-    await booking.save({ session })
+    const cancelledBooking = await Booking.findByIdAndUpdate(
+      bookingId,
+      { status: BOOKING_STATUS.cancelled },
+      { new: true, session },
+    )
+    if (!cancelledBooking) {
+      throw new AppError(
+        httpStatus.INTERNAL_SERVER_ERROR,
+        'Failed to cancel booking.',
+      )
+    }
 
     // Refund process
     let refundProcessed = false
@@ -331,16 +264,30 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
     }
 
     // user and consult sent notify
-    const [user, consultant] = await Promise.all([
+    const [booker, expert] = await Promise.all([
       User.findById(booking.user).session(session),
       User.findById(booking.consult).session(session),
     ])
 
-    if (user) {
-      await sendBookingsNotification('cancellation', booking, user, slot)
+    const cancelledBy =
+      currentUserId === booking.user.toString() ? 'booker' : 'consult'
+    if (booker && booker?.fcmToken && booker.pushNotify?.bookingAndSchedule) {
+      await sendBookingsNotification(
+        'cancellation',
+        cancelledBooking,
+        booker,
+        slot,
+        { cancelledBy },
+      )
     }
-    if (consultant) {
-      await sendBookingsNotification('cancellation', booking, consultant, slot)
+    if (expert && expert?.fcmToken && expert.pushNotify?.bookingAndSchedule) {
+      await sendBookingsNotification(
+        'cancellation',
+        cancelledBooking,
+        expert,
+        slot,
+        { cancelledBy },
+      )
     }
 
     await session.commitTransaction()
@@ -405,18 +352,16 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
       bookingId,
       { status: BOOKING_STATUS.confirmed },
       { new: true },
-    ).populate('consult slot user')
+    ).populate('slot user')
     if (!result) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Failed to confirmed bookings')
     }
 
     // sent confirmation notify to user
-    await sendBookingsNotification(
-      'confirmed',
-      result,
-      result.user,
-      result.slot,
-    )
+    const user = await User.findById(result.user)
+    if (user && user?.fcmToken && user.pushNotify?.bookingAndSchedule) {
+      await sendBookingsNotification('confirmed', result, user, result.slot)
+    }
 
     await session.commitTransaction()
     return result
@@ -595,14 +540,21 @@ const rescheduleBooking = async (
     newSlot.isBooked = true
     await newSlot.save({ session })
 
-    // 10. Fetch user (for notification)
-    const user = await User.findById(booking.user).session(session)
-    if (!user || user.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'User not found')
-    }
+    // 10. user and consult sent notify
+    const [user, consultant] = await Promise.all([
+      User.findById(booking.user).session(session),
+      User.findById(booking.consult).session(session),
+    ])
 
     // 11. Send notification (reschedule)
-    await sendBookingsNotification('reschedule', booking, user, newSlot)
+    if (user && user?.fcmToken && user.pushNotify?.bookingAndSchedule)
+      await sendBookingsNotification('reschedule', booking, user, newSlot)
+    if (
+      consultant &&
+      consultant?.fcmToken &&
+      consultant.pushNotify?.bookingAndSchedule
+    )
+      await sendBookingsNotification('reschedule', booking, consultant, newSlot)
 
     await session.commitTransaction()
     return booking

@@ -16,6 +16,7 @@ export interface TBookings {
   paymentStatus: TPaymentStatus
   recordDuration: number
   recordFile: string
+  dmCloseTime: Date
   status: TBookingStatus
   isDeleted: boolean
   createdAt?: Date

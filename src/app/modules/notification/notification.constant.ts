@@ -26,14 +26,20 @@ export const messages = {
     cancellation: 'Booking Cancelled',
     rescheduled: 'Booking Rescheduled',
     reminder: 'Good Morning!',
+    complete: 'Session complete',
+  },
+  bookingSchedule: {
+    reminder: '10 Minutes to Go',
+    dms_closing: 'DMs Closing Soon ⏰',
+    join_call: 'Join the Call Now',
   },
   paymentManagement: {
     paymentSuccess: 'Payment was successful!',
-    paymentRefunded: 'Payment refunded successfully.',
+    paymentRefunded: 'Refunded proceed',
   },
   withdraw: {
     hold: 'Withdrawal Request On Hold',
     proceed: 'Withdrawal Processing Started',
-    completed: 'Withdrawal Completed'
+    completed: 'Withdrawal Completed',
   },
 }

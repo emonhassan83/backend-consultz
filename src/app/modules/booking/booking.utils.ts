@@ -1,7 +1,18 @@
 import { messages } from '../notification/notification.constant'
 import { modeType } from '../notification/notification.interface'
 import { sendNotification } from '../../utils/sentNotification'
-import { SESSION_TYPE } from './booking.constants';
+import { SESSION_TYPE } from './booking.constants'
+
+export type TBookingNotifyAction =
+  | 'pending'
+  | 'confirmed'
+  | 'cancellation'
+  | 'reschedule'
+  | 'morning_reminder'
+  | 'completed'
+  | '10min_reminder'
+  | 'dms_closing'
+  | 'join_call'
 
 // Helper to format session type nicely
 const formatSessionType = (type: string) => {
@@ -9,38 +20,54 @@ const formatSessionType = (type: string) => {
     [SESSION_TYPE.introduction]: 'Introduction',
     [SESSION_TYPE.discussion]: 'Discussion',
     [SESSION_TYPE.deep_drive]: 'Deep Drive',
-  };
-  return (formatted as Record<string, string>)[type] || type.charAt(0).toUpperCase() + type.slice(1);
-};
+  }
+  return (
+    (formatted as Record<string, string>)[type] ||
+    type.charAt(0).toUpperCase() + type.slice(1)
+  )
+}
 
 export const sendBookingsNotification = async (
-  action: "pending" |'confirmed' | 'cancellation' | 'reschedule' | 'morning_reminder',
+  action: TBookingNotifyAction,
   booking: any,
   user: any,
-  slot: any
+  slot: any,
+  extra?: { cancelledBy?: 'booker' | 'consult' },
 ) => {
   if (!user?.fcmToken) return
 
-  const sessionTypeFormatted = formatSessionType(booking.sessionType);
-  const sessionInfo = `${slot?.date || 'N/A'} at ${slot?.time || 'N/A'} (${booking.timezone || 'UTC'})`;
-  
+  const sessionTypeFormatted = formatSessionType(booking.sessionType)
+  const sessionInfo = `${slot?.date || 'N/A'} at ${slot?.time || 'N/A'} (${booking.timezone || 'UTC'})`
+
+  // Determine who is the "other party" (the person the receiver is interacting with)
+  const isReceiverUser = user._id.toString() === booking.user?._id?.toString()
+  const otherPartyName = isReceiverUser
+    ? booking.consult?.firstName || 'your expert'
+    : booking.user?.firstName || 'your client'
+
   let message = ''
   let description = ''
 
   switch (action) {
     case 'pending':
-      message = messages.booking.request  
-      description = `${sessionTypeFormatted} session requested with ${user.firstName} on ${sessionInfo}`;
+      message = messages.booking.request
+      description = `${sessionTypeFormatted} session requested with ${booking.user.firstName} on ${sessionInfo}`
       break
 
     case 'confirmed':
       message = messages.booking.confirmed
-      description = `${sessionTypeFormatted} session with ${booking.consult.firstName} on ${sessionInfo}`;
+      description = `${sessionTypeFormatted} session with ${booking.consult.firstName} on ${sessionInfo}`
       break
 
     case 'cancellation':
       message = messages.booking.cancellation
-      description = `${sessionTypeFormatted} session with ${booking.consult.firstName} on ${sessionInfo} cancelled`
+      if (extra?.cancelledBy === 'booker') {
+        description = `${sessionTypeFormatted} session on ${sessionInfo} was cancelled by consult.`
+      } else if (extra?.cancelledBy === 'consult') {
+        description = `${sessionTypeFormatted} session on ${sessionInfo} was cancelled by user.`
+      } else {
+        description = `${sessionTypeFormatted} session with ${booking.consult.firstName} on ${sessionInfo} cancelled`
+      }
       break
 
     case 'reschedule':
@@ -51,6 +78,26 @@ export const sendBookingsNotification = async (
     case 'morning_reminder':
       message = messages.booking.reminder
       description = `You have ${sessionTypeFormatted} session scheduled for today on ${sessionInfo}.`
+      break
+
+    case 'completed':
+      message = messages.booking.complete
+      description = `Your payment will be in your account soon Earnings`
+      break
+
+    case '10min_reminder':
+      message = messages.bookingSchedule.reminder
+      description = `Your ${sessionTypeFormatted} session with ${otherPartyName} starts at ${slot?.time || 'N/A'}`
+      break
+
+    case 'dms_closing':
+      message = messages.bookingSchedule.dms_closing
+      description = `Your contract with ${otherPartyName} will ends in 1 hour`
+      break
+
+    case 'join_call':
+      message = messages.bookingSchedule.join_call
+      description = `Your ${sessionTypeFormatted} session with ${otherPartyName} is starting now`
       break
 
     default:

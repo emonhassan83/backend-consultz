@@ -1,5 +1,3 @@
-import cron from 'node-cron'
-import dayjs from 'dayjs'
 import httpStatus from 'http-status'
 import { TReviews } from './review.interface'
 import QueryBuilder from '../../builder/QueryBuilder'
@@ -8,68 +6,6 @@ import { Reviews } from './review.models'
 import AppError from '../../errors/AppError'
 import { User } from '../user/user.model'
 import { Booking } from '../booking/booking.models'
-import { notifyUserToLeaveReview } from './review.utils'
-import { BOOKING_STATUS } from '../booking/booking.constants'
-
-export const notifyUserToLeaveReviewCorn = () => {
-  cron.schedule(
-    '0 0 * * *',
-    async () => {
-      console.log('Daily Review Reminder Job Started (Asia/Dhaka)')
-
-      // find completed booking
-      const twentyFourHoursAgo = dayjs().subtract(24, 'hour').toDate()
-      const fortyEightHoursAgo = dayjs().subtract(48, 'hour').toDate()
-
-      const completedBookings = await Booking.find({
-        status: BOOKING_STATUS.completed,
-        endTime: { $gte: fortyEightHoursAgo, $lte: twentyFourHoursAgo },
-        isDeleted: false,
-      })
-        .select('user consult')
-        .lean()
-
-      console.log(
-        `Found ${completedBookings.length} eligible bookings for review reminder`,
-      )
-
-      for (const booking of completedBookings) {
-        const userId = booking.user.toString()
-        const bookingId = booking._id.toString()
-
-        // check if this user can review or not
-        const existingReview = await Reviews.findOne({
-          user: userId,
-          booking: bookingId,
-          isDeleted: false,
-        })
-          .select('_id')
-          .lean()
-
-        // For review remainder
-        if (!existingReview) {
-          await notifyUserToLeaveReview(
-            bookingId,
-            userId,
-            booking.consult.toString(),
-          )
-          console.log(
-            `Review reminder sent for booking ${bookingId} to user ${userId}`,
-          )
-        } else {
-          console.log(
-            `Review already exists for booking ${bookingId} by user ${userId} — skipping`,
-          )
-        }
-      }
-
-      console.log('Daily Review Reminder Job Completed')
-    },
-    {
-      timezone: 'Europe/London', // UK time (BST/GMT)
-    },
-  )
-}
 
 const createReviews = async (
   payload: Omit<TReviews, 'user' | 'expert'>,

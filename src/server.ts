@@ -6,8 +6,7 @@ import { errorlogger, logger } from './app/utils/logger'
 import initializeSocketIO from './socket'
 import { seeder } from './app/seeder/seed'
 import colors from 'colors'
-import { transferAmountCron } from './app/modules/withdraw/withdraw.service'
-import { notifyUserToLeaveReviewCorn } from './app/modules/review/review.service'
+import { initializeCronJobs } from './app/utils/initializeCronJobs'
 
 let server: Server
 export const io = initializeSocketIO(createServer(app))
@@ -26,7 +25,7 @@ async function main() {
     ])
 
     // run the corn job
-    await Promise.all([transferAmountCron(), notifyUserToLeaveReviewCorn()])
+    initializeCronJobs()
 
     server = app.listen(Number(config.port), config.ip as string, () => {
       console.log(
