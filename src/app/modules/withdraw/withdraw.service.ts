@@ -8,17 +8,21 @@ import { User } from '../user/user.model'
 import mongoose from 'mongoose'
 import { Booking } from '../booking/booking.models'
 import { Payment } from '../payment/payment.model'
+import { sendWithdrawStatusChangeEmail } from '../../utils/emailNotify'
 
 // Test purpose-এ withdraw request তৈরি
 const addWithdraw = async (payload: { booking: string }, userId: string) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const session = await mongoose.startSession()
+  session.startTransaction()
 
   try {
     // Validate user
-    const user = await User.findById(userId);
+    const user = await User.findById(userId)
     if (!user || user.isDeleted) {
-      throw new AppError(httpStatus.FORBIDDEN, 'Only consultants can create withdrawal requests');
+      throw new AppError(
+        httpStatus.FORBIDDEN,
+        'Only consultants can create withdrawal requests',
+      )
     }
 
     // check booking
@@ -26,9 +30,9 @@ const addWithdraw = async (payload: { booking: string }, userId: string) => {
       _id: payload.booking,
       consult: userId,
       isDeleted: false,
-    }).session(session);
+    }).session(session)
     if (!booking) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found or not yours');
+      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found or not yours')
     }
 
     // Booking of payment found
@@ -36,15 +40,21 @@ const addWithdraw = async (payload: { booking: string }, userId: string) => {
       booking: booking._id,
       isPaid: true,
       isDeleted: false,
-    }).session(session);
+    }).session(session)
     if (!payment) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'No paid payment found for this booking');
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'No paid payment found for this booking',
+      )
     }
 
     // consultAmount find
-    const consultAmount = payment.consultAmount || payment.amount;
+    const consultAmount = payment.consultAmount || payment.amount
     if (consultAmount <= 0) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'No amount available for withdrawal');
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'No amount available for withdrawal',
+      )
     }
 
     // check (duplicate prevent)
@@ -52,36 +62,41 @@ const addWithdraw = async (payload: { booking: string }, userId: string) => {
       booking: booking._id,
       user: userId,
       isDeleted: false,
-    }).session(session);
+    }).session(session)
 
     if (existingWithdraw) {
-      throw new AppError(httpStatus.CONFLICT, 'Withdrawal request already exists for this booking');
+      throw new AppError(
+        httpStatus.CONFLICT,
+        'Withdrawal request already exists for this booking',
+      )
     }
 
     // new withdraw request check
     const [withdraw] = await Withdraw.create(
-      [{
-        user: userId,
-        booking: booking._id,
-        amount: consultAmount,
-        status: WITHDRAW_STATUS.proceed,
-      }],
+      [
+        {
+          user: userId,
+          booking: booking._id,
+          amount: consultAmount,
+          status: WITHDRAW_STATUS.proceed,
+        },
+      ],
       { session },
-    );
+    )
 
-    await session.commitTransaction();
+    await session.commitTransaction()
 
     return {
       withdraw,
       message: `Withdrawal request of $${consultAmount} created successfully (pending)`,
-    };
+    }
   } catch (error) {
-    await session.abortTransaction();
-    throw error;
+    await session.abortTransaction()
+    throw error
   } finally {
-    session.endSession();
+    session.endSession()
   }
-};
+}
 
 const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
   const WithdrawQuery = new QueryBuilder(
@@ -155,6 +170,11 @@ const updateWithdrawFromDB = async (
   const user = await User.findById(withdraw.user)
   if (user) {
     await sendWithdrawNotify(status, withdraw, user)
+  }
+
+  // sent consult email their withdraw status changed
+  if (user && user.emailNotify.payment) {
+    await sendWithdrawStatusChangeEmail(user, result, status)
   }
 
   return result

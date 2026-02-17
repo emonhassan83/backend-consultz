@@ -2,6 +2,8 @@ import emailSender from './emailSender'
 import { TUser } from '../modules/user/user.interface'
 import { TBookingSlots } from '../modules/bookingSlots/bookingSlots.interface'
 import { TBookings } from '../modules/booking/booking.interface'
+import { TWithdraw } from '../modules/withdraw/withdraw.interface'
+import { TWithdrawStatus } from '../modules/withdraw/withdraw.constant'
 
 // 1. Send confirmation email for consult
 export const sendNewBookingToConsultant = async (
@@ -223,3 +225,134 @@ export const createReminderEmailContent = (
   </div>
 `;
 
+// Reusable base email template
+const baseEmailTemplate = (
+  title: string,
+  greetingName: string,
+  content: string,
+  ctaText?: string,
+  ctaLink?: string
+) => `
+  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+    <h2 style="color: #333;">${title}</h2>
+    <p style="color: #555;">Dear ${greetingName},</p>
+    ${content}
+    ${ctaText && ctaLink ? `
+      <p style="text-align: center; margin: 30px 0;">
+        <a href="${ctaLink}" style="background: #0275d8; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+          ${ctaText}
+        </a>
+      </p>
+    ` : ''}
+    <p style="color: #555;">Best regards,<br/><strong>Consultz Team</strong></p>
+    <div style="text-align: center; margin-top: 20px; font-size: 12px; color: #999;">
+      <p>© ${new Date().getFullYear()} Consultz App. All rights reserved.</p>
+    </div>
+  </div>
+`;
+
+// 6. When withdraw is completed → email to consultant
+export const sendWithdrawCompletedEmail = async (
+  consultant: TUser,
+  withdraw: TWithdraw,
+  booking?: any,
+  slot?: any
+) => {
+  if (!consultant?.email || !consultant.emailNotify?.payment) return;
+
+  const sessionInfo = slot && booking
+    ? `${slot.date} • ${slot.time} (${booking.timezone})`
+    : 'N/A';
+
+  const content = `
+    <p style="color: #555;">Great news! Your withdrawal request has been successfully processed.</p>
+    <ul style="color: #555; line-height: 1.6;">
+      <li><strong>Amount:</strong> $${withdraw.amount.toFixed(2)}</li>
+      ${booking ? `
+        <li><strong>From Booking:</strong> ${booking.sessionType} with ${booking.user.firstName} ${booking.user.lastName}</li>
+        <li><strong>Session Date:</strong> ${sessionInfo}</li>
+      ` : ''}
+      <li><strong>Status:</strong> Completed</li>
+    </ul>
+    <p style="color: #555;">The funds should now be available in your connected account.</p>
+    <p style="color: #555;">Please open the Consultz app and check your Earnings section for full details.</p>
+    <p style="color: #555;">Thank you for being part of Consultz!</p>
+  `;
+
+  await emailSender(
+    consultant.email,
+    'Withdrawal Completed – Funds Transferred',
+    baseEmailTemplate(
+      'Withdrawal Completed',
+      consultant.firstName,
+      content
+    )
+  );
+};
+
+// 7. When withdraw status changes → email to consultant
+export const sendWithdrawStatusChangeEmail = async (
+  consultant: TUser,
+  withdraw: TWithdraw,
+  newStatus: TWithdrawStatus
+) => {
+  if (!consultant?.email || !consultant.emailNotify?.payment) return;
+
+  const statusText = 
+    newStatus === 'completed' ? 'Completed' :
+    newStatus === 'proceed'  ? 'Proceed' :
+    newStatus === 'hold'    ? 'Hold' :
+    newStatus;
+
+  const content = `
+    <p style="color: #555;">Your withdrawal request status has been updated:</p>
+    <ul style="color: #555; line-height: 1.6;">
+      <li><strong>Amount:</strong> $${withdraw.amount.toFixed(2)}</li>
+      <li><strong>Current Status:</strong> ${statusText}</li>
+    </ul>
+    <p style="color: #555;">Please open the Consultz app and check your Withdrawals section for more details.</p>
+  `;
+
+  await emailSender(
+    consultant.email,
+    `Withdrawal Status Updated – ${statusText}`,
+    baseEmailTemplate(
+      `Withdrawal ${statusText}`,
+      consultant.firstName,
+      content
+    )
+  );
+};
+
+// 8. When payment is confirmed → email to user (success + waiting for approval)
+export const sendPaymentSuccessToUser = async (
+  user: TUser,
+  booking: any,
+  slot: TBookingSlots
+) => {
+  if (!user?.email || !user.emailNotify?.payment) return;
+
+  const sessionInfo = `${slot.date} • ${slot.time} (${booking.timezone})`;
+
+  const content = `
+    <p style="color: #555;">Your payment of $${booking.price} has been successfully processed!</p>
+    <ul style="color: #555; line-height: 1.6;">
+      <li><strong>Session:</strong> ${booking.sessionType}</li>
+      <li><strong>With:</strong> ${booking.consult.firstName} ${booking.consult.lastName}</li>
+      <li><strong>Date & Time:</strong> ${sessionInfo}</li>
+    </ul>
+    <p style="color: #555;">Your booking is now awaiting approval from the consultant. You will be notified once it's confirmed.</p>
+    <p style="color: #555;">Please open the Consultz app to view your booking details.</p>
+    <p style="color: #555;">Thank you for choosing Consultz!</p>
+  `;
+
+  await emailSender(
+    user.email,
+    'Payment Successful – Booking Pending Approval',
+    baseEmailTemplate(
+      'Payment Successful',
+      user.firstName,
+      content
+    )
+  );
+};

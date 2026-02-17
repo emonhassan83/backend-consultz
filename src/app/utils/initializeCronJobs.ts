@@ -17,7 +17,7 @@ import { BOOKING_STATUS } from '../modules/booking/booking.constants'
 import { Reviews } from '../modules/review/review.models'
 import { notifyUserToLeaveReview } from '../modules/review/review.utils'
 import emailSender from './emailSender'
-import { createReminderEmailContent } from './emailNotify'
+import { createReminderEmailContent, sendWithdrawCompletedEmail } from './emailNotify'
 
 /**
  * Initializes and starts all scheduled cron jobs.
@@ -83,6 +83,15 @@ export const initializeCronJobs = () => {
                 withdraw,
                 consultant,
               )
+
+              // here also sent email
+              const consult = await User.findById(withdraw.user)
+
+              // find booking
+              const booking = await Booking.findById(withdraw.booking).populate('slot')
+              if (consult && booking && consult.emailNotify.payment) {
+                await sendWithdrawCompletedEmail(consult, withdraw, booking, booking.slot)
+              }
 
               console.log(
                 `Transferred $${withdraw.amount} to ${consultant.stripeAccountId}`,
