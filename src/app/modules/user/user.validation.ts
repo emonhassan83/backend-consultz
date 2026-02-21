@@ -157,7 +157,7 @@ const updateValidationSchema = z.object({
     priceRange: z.string().optional(),
     interests: z.array(z.string()).optional(),
     learningStyles: z.array(z.string()).optional(),
-    expertise: z.string().optional(),
+    expertise: z.array(z.string()).optional(),
     languages: z.array(z.string()).optional(),
     skills: z.array(z.string()).optional(),
     education: EducationSchema.optional(),

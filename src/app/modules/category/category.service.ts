@@ -1,4 +1,3 @@
-import QueryBuilder from '../../builder/QueryBuilder';
 import AppError from '../../errors/AppError';
 import { TCategory } from './category.interface';
 import { Category } from './category.model';
@@ -33,7 +32,7 @@ const insertIntoDB = async (payload: TCategory): Promise<TCategory> => {
 };
 
 const getAllIntoFromDB = async () => {
-  return await Category.find().select('title')
+  return await Category.find().select('title items')
 };
 
 const getAFromDB = async (id: string): Promise<TCategory> => {

@@ -47,7 +47,7 @@ export interface TUser {
   priceRange: string
   interests: string[]
   learningStyles: string[]
-  expertise: string
+  expertise: string[]
   languages: string[]
   skills: string[]
   education: {

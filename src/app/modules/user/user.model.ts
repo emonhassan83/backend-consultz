@@ -77,7 +77,7 @@ const userSchema = new Schema<TUser, UserModel>(
 
     interests: { type: [String], default: [] },
     learningStyles: { type: [String], default: [] },
-    expertise: { type: String, default: '' },
+    expertise: { type: [String], default: [] },
     languages: { type: [String], default: [] },
     skills: { type: [String], default: [] },
     advisingStyles: { type: [String], default: [] },
