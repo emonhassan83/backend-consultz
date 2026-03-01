@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 export const generateCryptoString = (length: number): string => {
   length += 1
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
