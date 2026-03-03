@@ -124,10 +124,6 @@ const moduleRoutes = [
     path: '/categories',
     route: CategoriesRoutes,
   },
-  // {
-  //   path: '/sub-categories',
-  //   route: SubCategoriesRoutes,
-  // },
   {
     path: '/meta',
     route: MetaRoutes,

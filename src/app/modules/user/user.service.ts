@@ -82,10 +82,10 @@ const registerUserIntoDB = async (
       await newUser.save()
 
       // Points add
-      referrer.points += 50 //! TODO: referrer gets 50 points
+      referrer.points += 500 // referrer gets 500 points
       await referrer.save()
 
-      newUser.points += 25 //! TODO: new user gets 25 bonus
+      newUser.points += 500 //new user gets 500 bonus
       await newUser.save()
     } else if (referrer) {
       throw new AppError(
@@ -103,7 +103,7 @@ const registerUserIntoDB = async (
 const getAllUsersFromDB = async (query: Record<string, unknown>) => {
   const usersQuery = new QueryBuilder(
     User.find({ isDeleted: false, role: { $ne: USER_ROLE.admin } }).select(
-      '_id id firstName lastName email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status isProfileSetup createdAt',
+      '_id id firstName lastName email phoneNumber photoUrl role headline following followers points avgRating skills languages expertise status isProfileSetup createdAt',
     ),
     query,
   )
