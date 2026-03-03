@@ -6,37 +6,38 @@ import { Reviews } from './review.models'
 import AppError from '../../errors/AppError'
 import { User } from '../user/user.model'
 import { Booking } from '../booking/booking.models'
+import { sendNotification } from '../../utils/sentNotification'
 
 const createReviews = async (
   payload: Omit<TReviews, 'user' | 'expert'>,
   userId: string,
 ) => {
-  const session: ClientSession = await startSession()
-  session.startTransaction()
+  const session: ClientSession = await startSession();
+  session.startTransaction();
 
   try {
     // 1. Validate user (single lean query - faster)
     const user = await User.findOne(
       { _id: userId, isDeleted: false },
-      { _id: 1 },
+      { _id: 1, points: 1, pushNotify: 1, fcmToken: 1 }
     )
       .session(session)
-      .lean()
+      .lean();
 
     if (!user) {
-      throw new AppError(httpStatus.NOT_FOUND, 'User not found or deleted!')
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found or deleted!');
     }
 
     // 2. Validate booking & get expert (populate expert in one query)
     const booking = await Booking.findOne(
       { _id: payload.booking, isDeleted: false },
-      { consult: 1 },
+      { consult: 1 }
     )
       .session(session)
-      .lean()
+      .lean();
 
     if (!booking || !booking.consult) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found or invalid!')
+      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found or invalid!');
     }
 
     // 3. Prepare final payload
@@ -44,13 +45,12 @@ const createReviews = async (
       ...payload,
       user: user._id,
       expert: booking.consult,
-    }
+    };
 
     // 4. Create review in transaction
-    const [newReview] = await Reviews.create([finalPayload], { session })
-
+    const [newReview] = await Reviews.create([finalPayload], { session });
     if (!newReview) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Failed to create review')
+      throw new AppError(httpStatus.BAD_REQUEST, 'Failed to create review');
     }
 
     // 5. Calculate new average rating (optimized aggregation)
@@ -63,12 +63,12 @@ const createReviews = async (
           count: { $sum: 1 },
         },
       },
-    ]).session(session)
+    ]).session(session);
 
-    const { totalRating = 0, count = 0 } = ratingStats[0] || {}
-    const newAvgRating = count > 0 ? totalRating / count : 0
+    const { totalRating = 0, count = 0 } = ratingStats[0] || {};
+    const newAvgRating = count > 0 ? totalRating / count : 0;
 
-    // 6. Update expert's avgRating & push review ID (atomic update)
+    // 6. Update expert's avgRating & ratingCount (atomic update)
     await User.findByIdAndUpdate(
       booking.consult,
       {
@@ -80,22 +80,47 @@ const createReviews = async (
         },
       },
       { session, new: true },
-    )
+    );
 
-    // 7. Commit transaction
-    await session.commitTransaction()
-    session.endSession()
+    // 7. Award points to the user who left the review
+    const pointsToAdd = 100; // Base points for verified review
+    let additionalPoints = 0;
 
-    return newReview
+    // Bonus 50 points if rating is 4 or above
+    if (payload.rating >= 4) {
+      additionalPoints = 50;
+    }
+
+    const totalPointsAwarded = pointsToAdd + additionalPoints;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      { $inc: { points: totalPointsAwarded } },
+      { new: true, session }
+    );
+
+    // 8. Send push notification if enabled
+    if (updatedUser?.fcmToken && updatedUser.pushNotify?.points) {
+      await sendNotification([updatedUser.fcmToken], {
+        message: 'Review Submitted Successfully!',
+        description: `You earned ${totalPointsAwarded} points for leaving a verified review. Thank you! 🎉`,
+      });
+    }
+
+    // 9. Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    return newReview;
   } catch (error: any) {
-    await session.abortTransaction()
-    session.endSession()
+    await session.abortTransaction();
+    session.endSession();
     throw new AppError(
       httpStatus.BAD_REQUEST,
       error?.message || 'Review creation failed',
-    )
+    );
   }
-}
+};
 
 const getAllReviews = async (query: Record<string, any>) => {
   const reviewsModel = new QueryBuilder(
