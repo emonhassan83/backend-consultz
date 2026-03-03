@@ -19,6 +19,7 @@ import {
   sendRescheduleEmail,
   sendSessionCompletedToConsultant,
 } from '../../utils/emailNotify'
+import { sendNotification } from '../../utils/sentNotification'
 dayjs.extend(utc)
 dayjs.extend(timezone)
 
@@ -28,88 +29,126 @@ const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
 })
 
 const createBookings = async (payload: TBookings, userId: string) => {
-  const sessionClient = await mongoose.startSession()
-  sessionClient.startTransaction()
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
   try {
-    const { consult: consultId, slot: slotId } = payload
+    const { consult: consultId, slot: slotId } = payload;
 
-    // user checked
-    const userData = await User.findById(userId).session(sessionClient)
+    // 1. User validation
+    const userData = await User.findById(userId).session(session);
     if (!userData || userData.isDeleted) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'User not found!')
+      throw new AppError(httpStatus.BAD_REQUEST, 'User not found!');
     }
 
-    // consult checked
-    const consult = await User.findById(consultId).session(sessionClient)
+    // 2. Consultant validation
+    const consult = await User.findById(consultId).session(session);
     if (!consult || consult.isDeleted) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Consult not found!')
+      throw new AppError(httpStatus.BAD_REQUEST, 'Consultant not found!');
     }
 
-    // check slot
+    // 3. Slot validation
     const slotTime = await BookingSlots.findOne({
       _id: slotId,
       author: consultId,
-    }).session(sessionClient)
+    }).session(session);
     if (!slotTime) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Slot not found!')
+      throw new AppError(httpStatus.BAD_REQUEST, 'Slot not found!');
     }
-
     if (slotTime.isBooked) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Slot already booked!')
+      throw new AppError(httpStatus.BAD_REQUEST, 'Slot already booked!');
     }
 
-    // date time validation
-    const slotDateTimeStr = `${slotTime.date} ${slotTime.time}` // e.g., "2025-02-10 14:00"
-    const slotDateTime = dayjs(slotDateTimeStr, 'YYYY-MM-DD HH:mm')
+    // 4. Date/time validation (buffer time check)
+    const slotDateTimeStr = `${slotTime.date} ${slotTime.time}`;
+    const slotDateTime = dayjs(slotDateTimeStr, 'YYYY-MM-DD HH:mm');
 
     if (!slotDateTime.isValid()) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'Invalid slot date/time format',
-      )
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid slot date/time format');
     }
 
-    const now = dayjs()
-    const minBufferMinutes = 60 // checked booking slots buffer time
+    const now = dayjs();
+    const minBufferMinutes = 60;
 
     if (slotDateTime.isBefore(now.add(minBufferMinutes, 'minute'))) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        `Booking must be made at least ${minBufferMinutes} minutes in advance. Slot time: ${slotDateTime.format('YYYY-MM-DD HH:mm')}`,
-      )
+        `Booking must be made at least ${minBufferMinutes} minutes in advance. Slot time: ${slotDateTime.format('YYYY-MM-DD HH:mm')}`
+      );
     }
 
-    // logic assign
-    payload.user = new mongoose.Types.ObjectId(userData._id)
-    payload.slot = new mongoose.Types.ObjectId(slotTime._id)
-    payload.timezone = consult.timeZone || 'UTC'
-    payload.status = BOOKING_STATUS.pending
+    // 5. Assign payload values
+    payload.user = new mongoose.Types.ObjectId(userData._id);
+    payload.slot = new mongoose.Types.ObjectId(slotTime._id);
+    payload.timezone = consult.timeZone || 'UTC';
+    payload.status = BOOKING_STATUS.pending;
 
-    // Calculate dmCloseTime (session start + duration + 6 hours)
-    const sessionDurationMinutes = payload.sessionDuration || 60 // fallback
+    // Calculate DM close time
+    const sessionDurationMinutes = payload.sessionDuration || 60;
     const dmCloseTime = slotDateTime
       .add(sessionDurationMinutes, 'minute')
       .add(6, 'hour')
-      .toDate()
+      .toDate();
 
-    payload.dmCloseTime = dmCloseTime
+    payload.dmCloseTime = dmCloseTime;
 
-    // Create booking
-    const result = await Booking.create([payload], { session: sessionClient })
-    if (!result || result.length === 0) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Failed to create booking')
+    // 6. Check if this is the user's VERY FIRST booking
+    const previousBookingsCount = await Booking.countDocuments(
+      {
+        user: userId,
+        isDeleted: false,
+      },
+      { session }
+    );
+
+    const isFirstBooking = previousBookingsCount === 0;
+
+    // 7. Create the booking
+    const [createdBooking] = await Booking.create([payload], { session });
+    if (!createdBooking) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Failed to create booking');
     }
 
-    await sessionClient.commitTransaction()
-    return result[0]
+    // 8. Award 300 points ONLY if this is the first booking ever
+    if (isFirstBooking) {
+      const pointsToAdd = 300;
+      userData.points = (userData.points || 0) + pointsToAdd;
+
+      // Update user's points
+      await User.findByIdAndUpdate(
+        userId,
+        { points: userData.points },
+        { session }
+      );
+
+      // Send push notification (if enabled)
+      if (userData.fcmToken && userData.pushNotify?.points) {
+        await sendNotification([userData.fcmToken], {
+          message: 'First Consultation Booked!',
+          description: 'Congratulations! You have earned 300 points for booking your first consultation. 🎉 Keep exploring!',
+        });
+      }
+    }
+
+    // 9. Mark slot as booked
+    await BookingSlots.findByIdAndUpdate(
+      slotId,
+      { isBooked: true },
+      { session }
+    );
+
+    await session.commitTransaction();
+
+    return createdBooking;
   } catch (error) {
-    await sessionClient.abortTransaction()
-    throw error
+    await session.abortTransaction();
+    throw error instanceof AppError
+      ? error
+      : new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to create booking');
   } finally {
-    sessionClient.endSession()
+    session.endSession();
   }
-}
+};
 
 const getAllBookings = async (query: Record<string, any>) => {
   const bookingModel = new QueryBuilder(

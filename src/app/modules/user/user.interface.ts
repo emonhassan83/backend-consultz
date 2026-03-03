@@ -99,6 +99,7 @@ export interface TUser {
   expireAt: Date
   isTopExpert: boolean
   isProfileSetup: boolean
+  profileCompletionBonusClaimed: boolean
   isDeleted: boolean
   createdAt?: Date
   updatedAt?: Date

@@ -209,6 +209,10 @@ const userSchema = new Schema<TUser, UserModel>(
       type: Boolean,
       default: false,
     },
+    profileCompletionBonusClaimed: {
+      type: Boolean,
+      default: false,
+    },
     isDeleted: { type: Boolean, default: false },
   },
   {

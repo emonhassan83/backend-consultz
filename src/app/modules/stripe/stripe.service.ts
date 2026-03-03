@@ -3,6 +3,8 @@ import httpStatus from 'http-status';
 import { User } from '../user/user.model';
 import AppError from '../../errors/AppError';
 import StripeService from '../../class/stripe/stripe';
+import { sendNotification } from '../../utils/sentNotification';
+import mongoose from 'mongoose';
 
 // Create Stripe Express account and return onboarding link
 const stripLinkAccount = async (userId: string) => {
@@ -98,7 +100,6 @@ const refresh = async (accountId: string, query: Record<string, any>) => {
   return accountLink.url;
 };
 
-// Handle return URL after onboarding
 const returnUrl = async (query: Record<string, any>) => {
   const userId = query.userId as string;
   const stripeAccountId = query.stripeAccountId as string;
@@ -107,15 +108,48 @@ const returnUrl = async (query: Record<string, any>) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Missing userId or stripeAccountId');
   }
 
-  const user = await User.findByIdAndUpdate(userId, {
-    stripeAccountId,
-  });
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-  if (!user) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  try {
+    const user = await User.findById(userId).session(session);
+    if (!user) {
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+    }
+
+    // Check if this is the FIRST time Stripe account is being linked
+    const isFirstTimeConnect = !user.stripeAccountId;
+
+    // Update Stripe account ID
+    user.stripeAccountId = stripeAccountId;
+
+    // Award 200 points ONLY on first successful connection
+    const pointsToAdd = 200;
+    if (isFirstTimeConnect) {
+      user.points = (user.points || 0) + pointsToAdd;
+
+      // 1. Send push notification (if enabled)
+      if (user.fcmToken && user.pushNotify?.points) {
+        await sendNotification([user.fcmToken], {
+          message: 'Payment Method Added!',
+          description: `Congratulations! You have earned 200 points for successfully adding your payment method via Stripe. 🎉`,
+        });
+      }
+    }
+
+    // Save all changes
+    await user.save({ session });
+
+    await session.commitTransaction();
+
+    return { url: `${config.payment_success_url}/account?success=true` };
+  } catch (error) {
+    await session.abortTransaction();
+    console.error('Stripe return URL failed:', error);
+    throw error instanceof AppError ? error : new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to process Stripe return');
+  } finally {
+    session.endSession();
   }
-
-  return { url: `${config.payment_success_url}/account?success=true` };
 };
 
 export const stripeService = {

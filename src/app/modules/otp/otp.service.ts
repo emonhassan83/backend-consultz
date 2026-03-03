@@ -11,6 +11,7 @@ import { Types } from 'mongoose'
 import twilio from 'twilio'
 import { USER_ROLE } from '../user/user.constant'
 import { sendExpertPendingEmail } from '../user/user.utils'
+import { sendNotification } from '../../utils/sentNotification'
 
 const verifyWithEmail = async (token: string, otp: string | number) => {
   if (!token) {
@@ -110,6 +111,10 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'OTP did not match')
   }
 
+  // If OTP is correct, update verification status and return access token
+  const pointsToAdd = 100
+  const newPoints = (user.points || 0) + pointsToAdd
+
   const updateUser = await User.findByIdAndUpdate(
     user?._id,
     {
@@ -120,10 +125,20 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
           status: true,
         },
         expireAt: null, // set null to prevent verify user deletion data
+        points: newPoints,
       },
     },
     { new: true },
   )
+
+  // Send push notification to the user
+  if (user.fcmToken && user.pushNotify?.points) {
+    await sendNotification([user.fcmToken], {
+      message: 'Earn Points!',
+      description:
+        'Congratulations! You have earned 100 points for fully completing your profile. 🎉',
+    })
+  }
 
   // Send pending review email to expert
   if (user.role === USER_ROLE.expert) {

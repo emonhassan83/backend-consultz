@@ -19,6 +19,7 @@ import mongoose, { Types } from 'mongoose'
 import { Booking } from '../booking/booking.models'
 import { BOOKING_STATUS } from '../booking/booking.constants'
 import config from '../../config'
+import { sendNotification } from '../../utils/sentNotification'
 
 const registerUserIntoDB = async (
   payload: TUser & { referralCode?: string },
@@ -509,7 +510,7 @@ const updateUserInfoFromDB = async (userId: string, payload: Partial<TUser>) => 
       throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
     }
 
-    // Session durations logic remains the same (no change needed)
+    // Step 1: Handle session durations logic (unchanged)
     let finalPayload = { ...payload };
 
     if (payload.sessionDurations && payload.sessionDurations.length > 0) {
@@ -535,15 +536,55 @@ const updateUserInfoFromDB = async (userId: string, payload: Partial<TUser>) => 
       };
     }
 
-    // Update user with new payload (availability will now be accepted as grouped)
+    // Step 2: Profile completion bonus logic (150 points – one-time reward)
+    const requiredFieldsForRole = user.role === USER_ROLE.consult
+      ? [
+          'firstName', 'lastName', 'email', 'password', 'dob', 'photoUrl',
+          'coverPhoto', 'phoneNumber', 'timeZone', 'priceRange',
+          'interests', 'learningStyles', 'availability',
+        ]
+      : [
+          'firstName', 'lastName', 'email', 'password', 'dob', 'photoUrl',
+          'coverPhoto', 'phoneNumber', 'socialProfiles', 'hourlyRate',
+          'expertise', 'skills', 'advisingStyles', 'bio', 'timeZone',
+          'sessionDurations', 'availability',
+        ];
+
+    // Check if all required fields are now filled in the current payload
+    const isProfileComplete = requiredFieldsForRole.every(field => {
+      const value = (payload as Record<string, any>)[field];
+      // For arrays: check if array exists and has at least one item
+      if (Array.isArray(value)) {
+        return (value?.length ?? 0) > 0;
+      }
+      // For other fields: check if value exists and is not empty/null
+      return value !== undefined && value !== null && value !== '';
+    });
+
+    // Award 150 points only if profile is now complete and bonus was never claimed before
+    if (isProfileComplete && !user.profileCompletionBonusClaimed) {
+      user.points += 150;
+      user.profileCompletionBonusClaimed = true;
+      finalPayload.points = user.points;
+      finalPayload.profileCompletionBonusClaimed = true;
+
+      // Send push notification to the user
+      if (user.fcmToken && user.pushNotify.points) {
+        await sendNotification([user.fcmToken], {
+          message: 'Profile Completed!',
+          description: 'Congratulations! You have earned 150 points for fully completing your profile. 🎉',
+        });
+      }
+    }
+
+    // Step 3: Update the user document
     const updatedUser = await User.findByIdAndUpdate(userId, finalPayload, {
       new: true,
       runValidators: true,
       session,
     }).select(
-      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role'
+      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role profileCompletionBonusClaimed'
     );
-
     if (!updatedUser) {
       throw new AppError(httpStatus.NOT_FOUND, 'User not found and failed to update!');
     }
@@ -554,7 +595,7 @@ const updateUserInfoFromDB = async (userId: string, payload: Partial<TUser>) => 
     await session.abortTransaction();
     throw error instanceof AppError
       ? error
-      : new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to update user info');
+      : new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to update user information');
   } finally {
     session.endSession();
   }
