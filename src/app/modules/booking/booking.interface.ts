@@ -19,6 +19,7 @@ export interface TBookings {
   dmCloseTime: Date
   status: TBookingStatus
   isDeleted: boolean
+  respondedAt?: Date
   createdAt?: Date
   updatedAt?: Date
 }

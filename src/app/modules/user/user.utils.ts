@@ -86,7 +86,7 @@ export const calculateProfileSetupProgress = (user: any): number => {
 }
 
 export const sendUserStatusNotifYToAdmin = async (
-  status: 'active' | 'blocked',
+  status: 'active' | 'blocked' | 'pending',
   user: TUser,
 ) => {
   const admin = await findAdmin()
@@ -115,7 +115,7 @@ export const sendUserStatusNotifYToAdmin = async (
 }
 
 export const sendUserStatusNotifYToUser = async (
-  status: 'active' | 'blocked',
+  status: 'active' | 'blocked' | 'pending',
   user: TUser,
 ) => {
   if (!user || !user?.fcmToken) return

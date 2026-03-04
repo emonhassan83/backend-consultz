@@ -16,19 +16,19 @@ const createReviews = async (
   session.startTransaction();
 
   try {
-    // 1. Validate user (single lean query - faster)
-    const user = await User.findOne(
+    // 1. Validate reviewer (user who is leaving the review)
+    const reviewer = await User.findOne(
       { _id: userId, isDeleted: false },
       { _id: 1, points: 1, pushNotify: 1, fcmToken: 1 }
     )
       .session(session)
       .lean();
 
-    if (!user) {
+    if (!reviewer) {
       throw new AppError(httpStatus.NOT_FOUND, 'User not found or deleted!');
     }
 
-    // 2. Validate booking & get expert (populate expert in one query)
+    // 2. Validate booking & get expert (who is receiving the review)
     const booking = await Booking.findOne(
       { _id: payload.booking, isDeleted: false },
       { consult: 1 }
@@ -40,20 +40,20 @@ const createReviews = async (
       throw new AppError(httpStatus.NOT_FOUND, 'Booking not found or invalid!');
     }
 
-    // 3. Prepare final payload
+    // 3. Prepare final review payload
     const finalPayload = {
       ...payload,
-      user: user._id,
+      user: reviewer._id,
       expert: booking.consult,
     };
 
-    // 4. Create review in transaction
+    // 4. Create the review
     const [newReview] = await Reviews.create([finalPayload], { session });
     if (!newReview) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Failed to create review');
     }
 
-    // 5. Calculate new average rating (optimized aggregation)
+    // 5. Calculate new average rating for the expert
     const ratingStats = await Reviews.aggregate([
       { $match: { expert: booking.consult } },
       {
@@ -68,22 +68,60 @@ const createReviews = async (
     const { totalRating = 0, count = 0 } = ratingStats[0] || {};
     const newAvgRating = count > 0 ? totalRating / count : 0;
 
-    // 6. Update expert's avgRating & ratingCount (atomic update)
-    await User.findByIdAndUpdate(
-      booking.consult,
-      {
-        $set: {
-          avgRating: Number(newAvgRating.toFixed(2)),
-        },
-        $inc: {
-          ratingCount: 1,
-        },
-      },
-      { session, new: true },
-    );
+    // 6. Update expert's avgRating & ratingCount
+    const expert = await User.findById(booking.consult).session(session);
+    if (expert) {
+      expert.avgRating = Number(newAvgRating.toFixed(2));
+      expert.ratingCount = (expert.ratingCount || 0) + 1;
 
-    // 7. Award points to the user who left the review
-    const pointsToAdd = 100; // Base points for verified review
+      // Reward #1: Expert gets 200 points for each 5-star review
+      if (payload.rating === 5) {
+        expert.points = (expert.points || 0) + 200;
+
+        // Send push notification to expert (if enabled)
+        if (expert.fcmToken && expert.pushNotify?.points) {
+          await sendNotification([expert.fcmToken], {
+            message: '5-Star Review Received!',
+            description: 'Congratulations! You earned 200 points for receiving a 5-star review. Keep up the great work! 🎉',
+          });
+        }
+      }
+
+      // Reward #2: Expert gets 500 points if average rating is 4.7+ over last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      // Get all reviews in last 30 days for this expert
+      const recentReviews = await Reviews.find(
+        {
+          expert: expert._id,
+          createdAt: { $gte: thirtyDaysAgo },
+        },
+        { rating: 1 }
+      ).session(session).lean();
+
+      const recentCount = recentReviews.length;
+      const recentTotal = recentReviews.reduce((sum, r) => sum + r.rating, 0);
+      const recentAvg = recentCount > 0 ? recentTotal / recentCount : 0;
+
+      if (recentAvg >= 4.7 && recentCount >= 1) { // at least 1 review in 30 days
+        expert.points = (expert.points || 0) + 500;
+
+        // Send bonus notification
+        if (expert.fcmToken && expert.pushNotify?.points) {
+          await sendNotification([expert.fcmToken], {
+            message: 'High Rating Streak Bonus!',
+            description: 'You maintained 4.7+ average rating over the last 30 days and earned 500 bonus points! Excellent work! 🎉',
+          });
+        }
+      }
+
+      // Save expert updates (points, avgRating, ratingCount)
+      await expert.save({ session });
+    }
+
+    // 7. Award points to reviewer (user who left the review) - existing logic
+    const pointsToAdd = 100; // Base for verified review
     let additionalPoints = 0;
 
     // Bonus 50 points if rating is 4 or above
@@ -93,15 +131,15 @@ const createReviews = async (
 
     const totalPointsAwarded = pointsToAdd + additionalPoints;
 
-    const updatedUser = await User.findByIdAndUpdate(
-      user._id,
+    const updatedReviewer = await User.findByIdAndUpdate(
+      reviewer._id,
       { $inc: { points: totalPointsAwarded } },
       { new: true, session }
     );
 
-    // 8. Send push notification if enabled
-    if (updatedUser?.fcmToken && updatedUser.pushNotify?.points) {
-      await sendNotification([updatedUser.fcmToken], {
+    // 8. Send push notification to reviewer (if enabled)
+    if (updatedReviewer?.fcmToken && updatedReviewer.pushNotify?.points) {
+      await sendNotification([updatedReviewer.fcmToken], {
         message: 'Review Submitted Successfully!',
         description: `You earned ${totalPointsAwarded} points for leaving a verified review. Thank you! 🎉`,
       });

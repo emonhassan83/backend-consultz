@@ -29,68 +29,71 @@ const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
 })
 
 const createBookings = async (payload: TBookings, userId: string) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const session = await mongoose.startSession()
+  session.startTransaction()
 
   try {
-    const { consult: consultId, slot: slotId } = payload;
+    const { consult: consultId, slot: slotId } = payload
 
     // 1. User validation
-    const userData = await User.findById(userId).session(session);
+    const userData = await User.findById(userId).session(session)
     if (!userData || userData.isDeleted) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'User not found!');
+      throw new AppError(httpStatus.BAD_REQUEST, 'User not found!')
     }
 
     // 2. Consultant validation
-    const consult = await User.findById(consultId).session(session);
+    const consult = await User.findById(consultId).session(session)
     if (!consult || consult.isDeleted) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Consultant not found!');
+      throw new AppError(httpStatus.BAD_REQUEST, 'Consultant not found!')
     }
 
     // 3. Slot validation
     const slotTime = await BookingSlots.findOne({
       _id: slotId,
       author: consultId,
-    }).session(session);
+    }).session(session)
     if (!slotTime) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Slot not found!');
+      throw new AppError(httpStatus.BAD_REQUEST, 'Slot not found!')
     }
     if (slotTime.isBooked) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Slot already booked!');
+      throw new AppError(httpStatus.BAD_REQUEST, 'Slot already booked!')
     }
 
     // 4. Date/time validation (buffer time check)
-    const slotDateTimeStr = `${slotTime.date} ${slotTime.time}`;
-    const slotDateTime = dayjs(slotDateTimeStr, 'YYYY-MM-DD HH:mm');
+    const slotDateTimeStr = `${slotTime.date} ${slotTime.time}`
+    const slotDateTime = dayjs(slotDateTimeStr, 'YYYY-MM-DD HH:mm')
 
     if (!slotDateTime.isValid()) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid slot date/time format');
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Invalid slot date/time format',
+      )
     }
 
-    const now = dayjs();
-    const minBufferMinutes = 60;
+    const now = dayjs()
+    const minBufferMinutes = 60
 
     if (slotDateTime.isBefore(now.add(minBufferMinutes, 'minute'))) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        `Booking must be made at least ${minBufferMinutes} minutes in advance. Slot time: ${slotDateTime.format('YYYY-MM-DD HH:mm')}`
-      );
+        `Booking must be made at least ${minBufferMinutes} minutes in advance. Slot time: ${slotDateTime.format('YYYY-MM-DD HH:mm')}`,
+      )
     }
 
     // 5. Assign payload values
-    payload.user = new mongoose.Types.ObjectId(userData._id);
-    payload.slot = new mongoose.Types.ObjectId(slotTime._id);
-    payload.timezone = consult.timeZone || 'UTC';
-    payload.status = BOOKING_STATUS.pending;
+    payload.user = new mongoose.Types.ObjectId(userData._id)
+    payload.slot = new mongoose.Types.ObjectId(slotTime._id)
+    payload.timezone = consult.timeZone || 'UTC'
+    payload.status = BOOKING_STATUS.pending
 
     // Calculate DM close time
-    const sessionDurationMinutes = payload.sessionDuration || 60;
+    const sessionDurationMinutes = payload.sessionDuration || 60
     const dmCloseTime = slotDateTime
       .add(sessionDurationMinutes, 'minute')
       .add(6, 'hour')
-      .toDate();
+      .toDate()
 
-    payload.dmCloseTime = dmCloseTime;
+    payload.dmCloseTime = dmCloseTime
 
     // 6. Check if this is the user's VERY FIRST booking
     const previousBookingsCount = await Booking.countDocuments(
@@ -98,35 +101,36 @@ const createBookings = async (payload: TBookings, userId: string) => {
         user: userId,
         isDeleted: false,
       },
-      { session }
-    );
+      { session },
+    )
 
-    const isFirstBooking = previousBookingsCount === 0;
+    const isFirstBooking = previousBookingsCount === 0
 
     // 7. Create the booking
-    const [createdBooking] = await Booking.create([payload], { session });
+    const [createdBooking] = await Booking.create([payload], { session })
     if (!createdBooking) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Failed to create booking');
+      throw new AppError(httpStatus.BAD_REQUEST, 'Failed to create booking')
     }
 
     // 8. Award 300 points ONLY if this is the first booking ever
     if (isFirstBooking) {
-      const pointsToAdd = 300;
-      userData.points = (userData.points || 0) + pointsToAdd;
+      const pointsToAdd = 300
+      userData.points = (userData.points || 0) + pointsToAdd
 
       // Update user's points
       await User.findByIdAndUpdate(
         userId,
         { points: userData.points },
-        { session }
-      );
+        { session },
+      )
 
       // Send push notification (if enabled)
       if (userData.fcmToken && userData.pushNotify?.points) {
         await sendNotification([userData.fcmToken], {
           message: 'First Consultation Booked!',
-          description: 'Congratulations! You have earned 300 points for booking your first consultation. 🎉 Keep exploring!',
-        });
+          description:
+            'Congratulations! You have earned 300 points for booking your first consultation. 🎉 Keep exploring!',
+        })
       }
     }
 
@@ -134,21 +138,24 @@ const createBookings = async (payload: TBookings, userId: string) => {
     await BookingSlots.findByIdAndUpdate(
       slotId,
       { isBooked: true },
-      { session }
-    );
+      { session },
+    )
 
-    await session.commitTransaction();
+    await session.commitTransaction()
 
-    return createdBooking;
+    return createdBooking
   } catch (error) {
-    await session.abortTransaction();
+    await session.abortTransaction()
     throw error instanceof AppError
       ? error
-      : new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to create booking');
+      : new AppError(
+          httpStatus.INTERNAL_SERVER_ERROR,
+          'Failed to create booking',
+        )
   } finally {
-    session.endSession();
+    session.endSession()
   }
-};
+}
 
 const getAllBookings = async (query: Record<string, any>) => {
   const bookingModel = new QueryBuilder(
@@ -365,8 +372,8 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
 }
 
 const confirmedBooking = async (bookingId: string, currentUserId: string) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const session = await mongoose.startSession()
+  session.startTransaction()
 
   try {
     // 1. Find the booking (only the consultant is allowed to confirm)
@@ -376,58 +383,67 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
       isDeleted: false,
     })
       .populate('user consult slot')
-      .session(session);
+      .session(session)
 
     if (!booking) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found or not yours');
+      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found or not yours')
     }
 
     // 2. Strict validation checks
-    if (booking.status === BOOKING_STATUS.completed || booking.status === BOOKING_STATUS.cancelled) {
+    if (
+      booking.status === BOOKING_STATUS.completed ||
+      booking.status === BOOKING_STATUS.cancelled
+    ) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        `This booking has already been ${booking.status}. It cannot be confirmed now.`
-      );
+        `This booking has already been ${booking.status}. It cannot be confirmed now.`,
+      )
     }
 
     if (booking.status !== BOOKING_STATUS.pending) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Only pending bookings can be confirmed');
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Only pending bookings can be confirmed',
+      )
     }
 
     if (booking.paymentStatus !== PAYMENT_STATUS.paid) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'This booking has not been paid yet and cannot be confirmed.');
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'This booking has not been paid yet and cannot be confirmed.',
+      )
     }
 
     // 3. Mark booking as confirmed
     const updatedBooking = await Booking.findByIdAndUpdate(
       bookingId,
-      { status: BOOKING_STATUS.confirmed },
-      { new: true, session }
-    ).populate('slot user');
+      { status: BOOKING_STATUS.confirmed, respondedAt: new Date() },
+      { new: true, session },
+    ).populate('slot user')
 
     if (!updatedBooking) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Failed to confirm booking');
+      throw new AppError(httpStatus.BAD_REQUEST, 'Failed to confirm booking')
     }
 
     // 4. Award 50 points to the USER (booker)
-    const user = await User.findById(updatedBooking.user).session(session);
+    const user = await User.findById(updatedBooking.user).session(session)
     if (user) {
-      const pointsToAdd = 50;
-      user.points = (user.points || 0) + pointsToAdd;
-      await user.save({ session });
+      const pointsToAdd = 50
+      user.points = (user.points || 0) + pointsToAdd
+      await user.save({ session })
 
       // Send push notification (if enabled)
       if (user.fcmToken && user.pushNotify?.points) {
         await sendNotification([user.fcmToken], {
           message: 'Booking Confirmed!',
           description: `You have earned 50 points for booking a consultation. Keep booking more! 🎉`,
-        });
+        })
       }
     }
 
     // 5. New Reward #1: Rebook same expert within 30 days → 150 points for user
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
     const previousBookingsWithSameExpert = await Booking.countDocuments({
       user: updatedBooking.user,
@@ -435,100 +451,120 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
       status: BOOKING_STATUS.completed,
       createdAt: { $gte: thirtyDaysAgo, $lt: updatedBooking.createdAt },
       isDeleted: false,
-    }).session(session);
+    }).session(session)
 
     if (previousBookingsWithSameExpert > 0) {
       // This is a repeat booking → award 150 points
-      user!.points = (user!.points || 0) + 150;
-      await user!.save({ session });
+      user!.points = (user!.points || 0) + 150
+      await user!.save({ session })
 
       if (user!.fcmToken && user!.pushNotify?.points) {
         await sendNotification([user!.fcmToken], {
           message: 'Repeat Booking Bonus!',
           description: `You have earned 150 points for re-booking the same expert within 30 days!`,
-        });
+        })
       }
     }
 
     // 6. New Reward #2: 3 bookings within 30 days → 300 bonus points for user
-    const thirtyDaysAgoForBonus = new Date();
-    thirtyDaysAgoForBonus.setDate(thirtyDaysAgoForBonus.getDate() - 30);
+    const thirtyDaysAgoForBonus = new Date()
+    thirtyDaysAgoForBonus.setDate(thirtyDaysAgoForBonus.getDate() - 30)
 
     const bookingsInLast30Days = await Booking.countDocuments({
       user: updatedBooking.user,
       status: { $in: [BOOKING_STATUS.completed, BOOKING_STATUS.confirmed] },
       createdAt: { $gte: thirtyDaysAgoForBonus },
       isDeleted: false,
-    }).session(session);
+    }).session(session)
 
     // If this booking makes it 3 or more
     if (bookingsInLast30Days >= 3) {
-      user!.points = (user!.points || 0) + 300;
-      await user!.save({ session });
+      user!.points = (user!.points || 0) + 300
+      await user!.save({ session })
 
       if (user!.fcmToken && user!.pushNotify?.points) {
         await sendNotification([user!.fcmToken], {
           message: 'Booking Streak Bonus!',
           description: `Congratulations! You have earned 300 bonus points for booking 3 sessions within 30 days!`,
-        });
+        })
       }
     }
 
     // 7. Send confirmation notification to user (existing logic)
     if (user && user.fcmToken && user.pushNotify?.bookingAndSchedule) {
-      await sendBookingsNotification('confirmed', updatedBooking, user, updatedBooking.slot);
+      await sendBookingsNotification(
+        'confirmed',
+        updatedBooking,
+        user,
+        updatedBooking.slot,
+      )
     }
 
-    await session.commitTransaction();
+    await session.commitTransaction()
 
-    return updatedBooking;
+    return updatedBooking
   } catch (error) {
-    await session.abortTransaction();
-    throw error;
+    await session.abortTransaction()
+    throw error
   } finally {
-    session.endSession();
+    session.endSession()
   }
-};
+}
 
 const completedBooking = async (
   bookingId: string,
   currentUserId: string,
   payload: { recordDuration: number; recordFile: string },
 ) => {
-  const { recordDuration, recordFile } = payload;
+  const { recordDuration, recordFile } = payload
 
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const session = await mongoose.startSession()
+  session.startTransaction()
 
   try {
-    // Find booking (either user or consult can complete)
+    // 1. Find booking (either user or consult can complete)
     const booking = await Booking.findOne({
       _id: bookingId,
       isDeleted: false,
       $or: [{ user: currentUserId }, { consult: currentUserId }],
-    }).session(session);
+    })
+      .populate('user consult slot')
+      .session(session)
+
     if (!booking) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found or does not belong to you.');
+      throw new AppError(
+        httpStatus.NOT_FOUND,
+        'Booking not found or does not belong to you.',
+      )
     }
 
-    // Strict validation
+    // 2. Strict validation
     if (booking.status === BOOKING_STATUS.completed) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'This booking has already been marked as completed.');
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'This booking has already been marked as completed.',
+      )
     }
     if (booking.status === BOOKING_STATUS.cancelled) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'This booking has been cancelled and cannot be completed.');
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'This booking has been cancelled and cannot be completed.',
+      )
     }
     if (booking.status !== BOOKING_STATUS.confirmed) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        `Only confirmed bookings can be marked as completed. Current status: ${booking.status}`
-      );
+        `Only confirmed bookings can be marked as completed. Current status: ${booking.status}`,
+      )
     }
     if (booking.paymentStatus !== PAYMENT_STATUS.paid) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'This booking has not been paid yet and cannot be marked as completed.');
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'This booking has not been paid yet and cannot be marked as completed.',
+      )
     }
 
-    // Mark booking as completed + save record details
+    // 3. Mark booking as completed + save record details
     const updatedBooking = await Booking.findByIdAndUpdate(
       bookingId,
       {
@@ -538,56 +574,111 @@ const completedBooking = async (
           recordFile,
         },
       },
-      { new: true, session }
-    );
+      { new: true, session },
+    )
 
     if (!updatedBooking) {
-      throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to mark booking as completed.');
+      throw new AppError(
+        httpStatus.INTERNAL_SERVER_ERROR,
+        'Failed to mark booking as completed.',
+      )
     }
 
-    // Award 100 points to the USER (booker) for attending/completing the session
-    const user = await User.findById(updatedBooking.user).session(session);
-    if (user) {
-      const pointsToAdd = 100;
-      user.points = (user.points || 0) + pointsToAdd;
+    // 4. Award 100 points to the USER (booker) for attending/completing the session (existing)
+    const booker = await User.findById(updatedBooking.user).session(session)
+    if (booker) {
+      const pointsToAdd = 100
+      booker.points = (booker.points || 0) + pointsToAdd
 
       await User.findByIdAndUpdate(
-        user._id,
-        { points: user.points },
-        { session }
-      );
+        booker._id,
+        { points: booker.points },
+        { session },
+      )
 
-      // Send push notification (if enabled)
-      if (user.fcmToken && user.pushNotify?.points) {
-        await sendNotification([user.fcmToken], {
+      // Send push notification to booker (if enabled)
+      if (booker.fcmToken && booker.pushNotify?.points) {
+        await sendNotification([booker.fcmToken], {
           message: 'Session Completed!',
           description: `You have earned 100 points for attending and completing your consultation. Great job! 🎉`,
-        });
+        })
       }
     }
 
-    // Send completed notification to consultant (existing)
-    const consult = await User.findById(updatedBooking.consult).session(session);
-    if (consult && consult.fcmToken && consult.pushNotify?.payment) {
-      await sendBookingsNotification('completed', updatedBooking, consult, updatedBooking.slot);
+    // 5. Award points to the CONSULTANT (expert)
+    const consultant = await User.findById(updatedBooking.consult).session(
+      session,
+    )
+    if (consultant) {
+      // Reward #1: 100 points per completed session (always)
+      const basePoints = 100
+      consultant.points = (consultant.points || 0) + basePoints
+
+      // Reward #2: 300 bonus points if 5+ completed sessions in last 7 days
+      const sevenDaysAgo = new Date()
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+      const completedInLastWeek = await Booking.countDocuments({
+        consult: consultant._id,
+        status: BOOKING_STATUS.completed,
+        updatedAt: { $gte: sevenDaysAgo }, // use updatedAt since completion time
+        isDeleted: false,
+      }).session(session)
+
+      let bonusPoints = 0
+      if (completedInLastWeek >= 5) {
+        bonusPoints = 300
+        consultant.points += bonusPoints
+
+        // Send bonus notification
+        if (consultant.fcmToken && consultant.pushNotify?.points) {
+          await sendNotification([consultant.fcmToken], {
+            message: 'Weekly Performance Bonus!',
+            description: `Congratulations! You completed 5+ sessions this week and earned 300 bonus points! Keep it up! 🎉`,
+          })
+        }
+      }
+
+      await User.findByIdAndUpdate(
+        consultant._id,
+        { points: consultant.points },
+        { session },
+      )
+
+      // Send base completion notification to consultant
+      if (consultant.fcmToken && consultant.pushNotify?.payment) {
+        await sendBookingsNotification(
+          'completed',
+          updatedBooking,
+          consultant,
+          updatedBooking.slot,
+        )
+      }
+
+      // Send completed email to consultant (if enabled)
+      if (consultant.emailNotify?.booking) {
+        await sendSessionCompletedToConsultant(
+          consultant,
+          updatedBooking,
+          updatedBooking.slot,
+        )
+      }
     }
 
-    // Send completed email to consultant (existing)
-    if (consult && consult.emailNotify?.booking) {
-      await sendSessionCompletedToConsultant(consult, updatedBooking, updatedBooking.slot);
-    }
-
-    await session.commitTransaction();
-    return updatedBooking;
+    await session.commitTransaction()
+    return updatedBooking
   } catch (error: any) {
-    await session.abortTransaction();
+    await session.abortTransaction()
     throw error instanceof AppError
       ? error
-      : new AppError(httpStatus.INTERNAL_SERVER_ERROR, error.message || 'Failed to complete booking');
+      : new AppError(
+          httpStatus.INTERNAL_SERVER_ERROR,
+          error.message || 'Failed to complete booking',
+        )
   } finally {
-    session.endSession();
+    session.endSession()
   }
-};
+}
 
 const rescheduleBooking = async (
   id: string,

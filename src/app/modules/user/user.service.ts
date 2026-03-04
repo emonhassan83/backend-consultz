@@ -6,6 +6,7 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import {
   PROPERTY_EXPERTISE,
   PROPERTY_SKILLS,
+  TUserStatus,
   USER_ROLE,
   USER_STATUS,
 } from './user.constant'
@@ -442,40 +443,53 @@ const geUserByIdFromDB = async (id: string) => {
   }
 }
 
-const changeUserStatusFromDB = async (payload: any) => {
-  const { userId, status } = payload
+const changeUserStatusFromDB = async (payload: { userId: string; status: TUserStatus }) => {
+  const { userId, status } = payload;
 
-  //* if the user is is not exist
-  const user = await User.findById(userId)
-  if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+  // 1. User find
+  const user = await User.findById(userId);
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
   }
 
-  const result = await User.findByIdAndUpdate(
+  // 2.status updated
+  const updatedUser = await User.findByIdAndUpdate(
     userId,
     { status },
-    { new: true },
-  ).select(
-    '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline status createdAt',
-  )
-  if (!result) {
-    throw new AppError(
-      httpStatus.NOT_FOUND,
-      'User not found and failed to update status!',
-    )
+    { new: true }
+  ).select('_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline status createdAt');
+
+  if (!updatedUser) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found and failed to update status!');
   }
 
-  // Send notification to both user and admin
-  await sendUserStatusNotifYToUser(status, result)
-  await sendUserStatusNotifYToAdmin(status, result)
+  // 3. expert account approved
+  if (status === USER_STATUS.active && user.status === USER_STATUS.pending && user.role === USER_ROLE.expert) {
+    // Award 300 points to the expert
+    const pointsToAdd = 300;
+    updatedUser.points = (updatedUser.points || 0) + pointsToAdd;
+    await updatedUser.save();
 
-  // sent email as well
+    // Send push notification to expert (if enabled)
+    if (updatedUser.fcmToken && updatedUser.pushNotify?.points) {
+      await sendNotification([updatedUser.fcmToken], {
+        message: 'Expert Account Approved!',
+        description: `You have earned 300 points. Start accepting bookings now! 🎉`,
+      });
+    }
+  }
+
+  // 4. notify to admin and user
+  await sendUserStatusNotifYToUser(status, updatedUser);
+  await sendUserStatusNotifYToAdmin(status, updatedUser);
+
+  // 5. Blocked or Active email sent to user
   if (status === USER_STATUS.blocked || status === USER_STATUS.active) {
-    await generateUserStatusEmail(user, status)
+    await generateUserStatusEmail(user, status);
   }
 
-  return result
-}
+  return updatedUser;
+};
 
 const changeUserNotifyFromDB = async (id: string, payload: any) => {
   // 1️⃣ Validate user
@@ -510,9 +524,9 @@ const updateUserInfoFromDB = async (userId: string, payload: Partial<TUser>) => 
       throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
     }
 
-    // Step 1: Handle session durations logic (unchanged)
     let finalPayload = { ...payload };
 
+    // Step 1: Handle session durations logic (unchanged)
     if (payload.sessionDurations && payload.sessionDurations.length > 0) {
       const effectiveHourlyRate =
         payload.hourlyRate !== undefined ? payload.hourlyRate : user.hourlyRate;
@@ -536,55 +550,84 @@ const updateUserInfoFromDB = async (userId: string, payload: Partial<TUser>) => 
       };
     }
 
-    // Step 2: Profile completion bonus logic (150 points – one-time reward)
-    const requiredFieldsForRole = user.role === USER_ROLE.consult
-      ? [
-          'firstName', 'lastName', 'email', 'password', 'dob', 'photoUrl',
-          'coverPhoto', 'phoneNumber', 'timeZone', 'priceRange',
-          'interests', 'learningStyles', 'availability',
-        ]
-      : [
-          'firstName', 'lastName', 'email', 'password', 'dob', 'photoUrl',
-          'coverPhoto', 'phoneNumber', 'socialProfiles', 'hourlyRate',
-          'expertise', 'skills', 'advisingStyles', 'bio', 'timeZone',
-          'sessionDurations', 'availability',
-        ];
+    // Step 2: Social profile addition reward (only for expert, one-time)
+    const isExpert = user.role === USER_ROLE.expert;
 
-    // Check if all required fields are now filled in the current payload
-    const isProfileComplete = requiredFieldsForRole.every(field => {
-      const value = (payload as Record<string, any>)[field];
-      // For arrays: check if array exists and has at least one item
-      if (Array.isArray(value)) {
-        return (value?.length ?? 0) > 0;
-      }
-      // For other fields: check if value exists and is not empty/null
-      return value !== undefined && value !== null && value !== '';
-    });
+    if (isExpert && payload.socialProfiles && payload.socialProfiles.length > 0) {
+      // Check if this is the FIRST time socialProfiles are being added
+      const previouslyEmpty = !user.socialProfiles || user.socialProfiles.length === 0;
 
-    // Award 150 points only if profile is now complete and bonus was never claimed before
-    if (isProfileComplete && !user.profileCompletionBonusClaimed) {
-      user.points += 150;
-      user.profileCompletionBonusClaimed = true;
-      finalPayload.points = user.points;
-      finalPayload.profileCompletionBonusClaimed = true;
+      if (previouslyEmpty) {
+        // Award 150 points (one-time)
+        user.points = (user.points || 0) + 150;
+        finalPayload.points = user.points;
 
-      // Send push notification to the user
-      if (user.fcmToken && user.pushNotify.points) {
-        await sendNotification([user.fcmToken], {
-          message: 'Profile Completed!',
-          description: 'Congratulations! You have earned 150 points for fully completing your profile. 🎉',
-        });
+        // Mark that this reward has been claimed (prevents multiple claims)
+        finalPayload.socialProofBonusClaimed = true;
+
+        // Send push notification if enabled
+        if (user.fcmToken && user.pushNotify?.points) {
+          await sendNotification([user.fcmToken], {
+            message: 'Social Profiles Added!',
+            description: 'Congratulations! You earned 150 points for adding your social profiles. 🎉',
+          });
+        }
       }
     }
 
-    // Step 3: Update the user document
+    // Step 3: Existing profile completion bonus logic (role-based, unchanged)
+    const isConsult = user.role === USER_ROLE.consult;
+
+    const requiredFields = isConsult
+      ? [
+          'firstName', 'lastName', 'email', 'phoneNumber', 'dob', 'photoUrl',
+          'coverPhoto', 'timeZone', 'priceRange', 'interests', 'learningStyles',
+          'availability',
+        ]
+      : [
+          'firstName', 'lastName', 'email', 'phoneNumber', 'dob', 'photoUrl',
+          'coverPhoto', 'bio', 'socialProfiles', 'hourlyRate', 'expertise',
+          'skills', 'advisingStyles', 'sessionDurations', 'availability',
+        ];
+
+    const isProfileNowComplete = requiredFields.every((field) => {
+      const value = (payload as any)[field] !== undefined
+        ? (payload as any)[field]
+        : (user as any)[field];
+
+      if (Array.isArray(value)) {
+        return value.length > 0;
+      }
+
+      return value !== undefined && value !== null && value !== '';
+    });
+
+    if (isProfileNowComplete && !user.profileCompletionBonusClaimed) {
+      const pointsToAdd = isExpert ? 300 : isConsult ? 150 : 0;
+
+      if (pointsToAdd > 0) {
+        user.points = (user.points || 0) + pointsToAdd;
+        finalPayload.points = user.points;
+        finalPayload.profileCompletionBonusClaimed = true;
+
+        if (user.fcmToken && user.pushNotify?.points) {
+          await sendNotification([user.fcmToken], {
+            message: 'Profile Completed!',
+            description: `Congratulations! You have earned ${pointsToAdd} points for fully completing your ${isExpert ? 'expert' : 'consult'} profile. 🎉`,
+          });
+        }
+      }
+    }
+
+    // Step 4: Apply the final update
     const updatedUser = await User.findByIdAndUpdate(userId, finalPayload, {
       new: true,
       runValidators: true,
       session,
     }).select(
-      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role profileCompletionBonusClaimed'
+      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role profileCompletionBonusClaimed socialProfileBonusClaimed'
     );
+
     if (!updatedUser) {
       throw new AppError(httpStatus.NOT_FOUND, 'User not found and failed to update!');
     }

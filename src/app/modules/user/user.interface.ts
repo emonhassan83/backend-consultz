@@ -100,6 +100,7 @@ export interface TUser {
   isTopExpert: boolean
   isProfileSetup: boolean
   profileCompletionBonusClaimed: boolean
+  socialProofBonusClaimed: boolean
   isDeleted: boolean
   createdAt?: Date
   updatedAt?: Date

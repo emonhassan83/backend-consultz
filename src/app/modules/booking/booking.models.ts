@@ -74,6 +74,9 @@ const bookingsSchema = new Schema<TBookings>(
       enum: Object.values(BOOKING_STATUS),
       default: BOOKING_STATUS.pending,
     },
+    respondedAt: {
+      type: Date,
+    },
     isDeleted: { type: Boolean, default: false },
   },
   {
