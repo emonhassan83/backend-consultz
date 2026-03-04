@@ -27,48 +27,64 @@ const unfollowUser = catchAsync(async (req: Request, res: Response) => {
 })
 
 const getMyFollowers = catchAsync(async (req: Request, res: Response) => {
-  const result = await FollowService.getAllFollowers(req.user._id, req.query)
+  const result = await FollowService.getAllFollowers(
+    req.user._id, // target = current user
+    req.user._id, // current logged-in user
+    req.query,
+  )
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'All followers fetched successfully',
+    message: 'My followers fetched successfully',
     meta: result.meta,
     data: result.result,
   })
 })
 
 const getUserFollowers = catchAsync(async (req: Request, res: Response) => {
-  const result = await FollowService.getAllFollowers(req.params.userId, req.query)
+  const result = await FollowService.getAllFollowers(
+    req.params.userId, // target user
+    req.user._id, // logged-in user (to check isFollowing)
+    req.query,
+  )
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'All followers fetched successfully',
+    message: 'User followers fetched successfully',
     meta: result.meta,
     data: result.result,
   })
 })
 
 const getMyFollowing = catchAsync(async (req: Request, res: Response) => {
-  const result = await FollowService.getAllFollowing(req.user._id, req.query)
+  const result = await FollowService.getAllFollowing(
+    req.user._id, // target = current user
+    req.user._id, // current logged-in user
+    req.query,
+  )
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'All following fetched successfully',
+    message: 'My following fetched successfully',
     meta: result.meta,
     data: result.result,
   })
 })
 
 const getUserFollowing = catchAsync(async (req: Request, res: Response) => {
-  const result = await FollowService.getAllFollowing(req.params.id, req.query)
+  const result = await FollowService.getAllFollowing(
+    req.params.userId, // target user
+    req.user._id, // logged-in user (to check isFollowing)
+    req.query,
+  )
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'All following fetched successfully',
+    message: 'User following fetched successfully',
     meta: result.meta,
     data: result.result,
   })

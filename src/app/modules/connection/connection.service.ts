@@ -90,20 +90,24 @@ const unfollowUser = async (followerId: string, followingId: string) => {
   return result;
 };
 
-const getAllFollowers = async (userId: string, query: Record<string, unknown>) => {
-  const user = await User.findById(userId);
-  if (!user || user.isDeleted) {
+// src/modules/follow/follow.service.ts
+
+const getAllFollowers = async (targetUserId: string, currentUserId: string, query: Record<string, unknown>) => {
+  const targetUser = await User.findById(targetUserId);
+  if (!targetUser || targetUser.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found or inactive');
   }
 
-  const followDocs = await Follow.find({ following: userId }).select('follower');
+  // Get all follower IDs
+  const followDocs = await Follow.find({ following: targetUserId }).select('follower');
   const followerIds = followDocs.map(doc => doc.follower);
 
+  // Build base query
   const userQuery = new QueryBuilder(
     User.find({
       _id: { $in: followerIds },
     }).select('firstName lastName headline photoUrl'),
-    query,
+    query
   )
     .search(['firstName', 'lastName'])
     .sortByCustom({
@@ -114,26 +118,44 @@ const getAllFollowers = async (userId: string, query: Record<string, unknown>) =
     .paginate()
     .fields();
 
-  const result = await userQuery.modelQuery;
+  let result = await userQuery.modelQuery;
+
+  // Add isFollowing field: check if current user follows each follower
+  const currentFollowings = await Follow.find({
+    follower: currentUserId,
+    following: { $in: followerIds },
+  }).select('following');
+
+  const followingSet = new Set(currentFollowings.map(f => f.following.toString()));
+
+  // Map result with isFollowing
+  // @ts-ignore
+  result = result.map(userDoc => ({
+    ...userDoc.toObject(),
+    isFollowing: followingSet.has(userDoc._id.toString()),
+  }));
+
   const meta = await userQuery.countTotal();
 
   return { meta, result };
 };
 
-const getAllFollowing = async (userId: string, query: Record<string, unknown>) => {
-  const user = await User.findById(userId);
-  if (!user || user.isDeleted || user.status === 'blocked') {
+const getAllFollowing = async (targetUserId: string, currentUserId: string, query: Record<string, unknown>) => {
+  const targetUser = await User.findById(targetUserId);
+  if (!targetUser || targetUser.isDeleted || targetUser.status === 'blocked') {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found or inactive');
   }
 
-  const followDocs = await Follow.find({ follower: userId }).select('following');
+  // Get all following IDs
+  const followDocs = await Follow.find({ follower: targetUserId }).select('following');
   const followingIds = followDocs.map(doc => doc.following);
 
+  // Build base query
   const userQuery = new QueryBuilder(
     User.find({
       _id: { $in: followingIds },
     }).select('firstName lastName headline photoUrl'),
-    query,
+    query
   )
     .search(['firstName', 'lastName'])
     .sortByCustom({
@@ -144,7 +166,23 @@ const getAllFollowing = async (userId: string, query: Record<string, unknown>) =
     .paginate()
     .fields();
 
-  const result = await userQuery.modelQuery;
+  let result = await userQuery.modelQuery;
+
+  // Add isFollowing field: check if current user follows each followed user
+  const currentFollowings = await Follow.find({
+    follower: currentUserId,
+    following: { $in: followingIds },
+  }).select('following');
+
+  const followingSet = new Set(currentFollowings.map(f => f.following.toString()));
+
+  // Map result with isFollowing
+  // @ts-ignore
+  result = result.map(userDoc => ({
+    ...userDoc.toObject(),
+    isFollowing: followingSet.has(userDoc._id.toString()),
+  }));
+
   const meta = await userQuery.countTotal();
 
   return { meta, result };
