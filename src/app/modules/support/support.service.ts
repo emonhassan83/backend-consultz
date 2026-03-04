@@ -5,8 +5,7 @@ import { TSupport, TSupportMessage } from './support.interface'
 import { Support } from './support.model'
 import { User } from '../user/user.model'
 import emailSender from '../../utils/emailSender'
-import { SUPPORT_STATUS, TSupportStatus } from './support.constant'
-import { sendSupportNotifyToUser } from './support.utils'
+import { SUPPORT_STATUS } from './support.constant'
 
 const createSupportIntoDB = async (payload: TSupport) => {
   const { author: authorId } = payload
@@ -61,11 +60,6 @@ const sentSupportMessageIntoDB = async (
     },
     { new: true },
   )
-
-  // 4️⃣ support notification sent notification
-  await User.findById(support.author).then((user) => {
-    sendSupportNotifyToUser(updatedSupport as TSupport, user as any)
-  })
 
   return updatedSupport
 }

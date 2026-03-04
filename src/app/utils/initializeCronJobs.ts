@@ -17,7 +17,12 @@ import { BOOKING_STATUS } from '../modules/booking/booking.constants'
 import { Reviews } from '../modules/review/review.models'
 import { notifyUserToLeaveReview } from '../modules/review/review.utils'
 import emailSender from './emailSender'
-import { createReminderEmailContent, sendWithdrawCompletedEmail } from './emailNotify'
+import {
+  createReminderEmailContent,
+  sendWithdrawCompletedEmail,
+} from './emailNotify'
+import { USER_ROLE, USER_STATUS } from '../modules/user/user.constant'
+import { sendNotification } from './sentNotification'
 
 /**
  * Initializes and starts all scheduled cron jobs.
@@ -88,9 +93,16 @@ export const initializeCronJobs = () => {
               const consult = await User.findById(withdraw.user)
 
               // find booking
-              const booking = await Booking.findById(withdraw.booking).populate('slot')
+              const booking = await Booking.findById(withdraw.booking).populate(
+                'slot',
+              )
               if (consult && booking && consult.emailNotify.payment) {
-                await sendWithdrawCompletedEmail(consult, withdraw, booking, booking.slot)
+                await sendWithdrawCompletedEmail(
+                  consult,
+                  withdraw,
+                  booking,
+                  booking.slot,
+                )
               }
 
               console.log(
@@ -171,7 +183,109 @@ export const initializeCronJobs = () => {
     { timezone: 'Europe/London' },
   )
 
-  // 3. Time-sensitive booking notifications (every 5 minutes)
+  // 3. expertReliabilityReward.job.ts (daily at midnight)
+  cron.schedule(
+    '0 0 * * *',
+    async () => {
+      const thirtyDaysAgo = new Date()
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+      // Find all experts
+      const experts = await User.find({
+        role: USER_ROLE.expert,
+        status: USER_STATUS.active,
+        isDeleted: false,
+      }).select('_id points fcmToken pushNotify')
+
+      for (const expert of experts) {
+        // Check no-show in last 30 days
+        const noShowCount = await Booking.countDocuments({
+          consult: expert._id,
+          status: BOOKING_STATUS.not_responded, // assuming you have this status
+          updatedAt: { $gte: thirtyDaysAgo },
+          isDeleted: false,
+        })
+
+        if (noShowCount === 0) {
+          // Award 300 points
+          expert.points = (expert.points || 0) + 300
+          await expert.save()
+
+          // Send push notification (if enabled)
+          if (expert.fcmToken && expert.pushNotify?.points) {
+            await sendNotification([expert.fcmToken], {
+              message: 'Reliability Bonus Awarded!',
+              description:
+                'Congratulations! You had zero no-shows in the last 30 days and earned 300 points. Keep it up! 🎉',
+            })
+          }
+        }
+      }
+    },
+    { timezone: 'Europe/London' },
+  )
+
+  // 4. expertResponseTimeReward.job.ts (weekly, e.g., every Sunday midnight)
+  cron.schedule(
+    '0 0 * * 0',
+    async () => {
+      const sevenDaysAgo = new Date()
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+      const experts = await User.find({
+        role: USER_ROLE.expert,
+        status: USER_STATUS.active,
+        isDeleted: false,
+      }).select('_id points fcmToken pushNotify')
+
+      for (const expert of experts) {
+        // Find all pending booking requests in last 7 days
+        const pendingRequests = await Booking.find({
+          consult: expert._id,
+          status: BOOKING_STATUS.pending,
+          createdAt: { $gte: sevenDaysAgo },
+          isDeleted: false,
+        }).select('_id createdAt')
+
+        const totalRequests = pendingRequests.length
+        if (totalRequests === 0) continue
+
+        // Count how many were responded within 30 minutes
+        let fastResponses = 0
+
+        for (const req of pendingRequests) {
+          // Assuming you have a field 'respondedAt' or use updatedAt when status changed
+          const responseTimeMinutes = dayjs(req.updatedAt).diff(
+            req.createdAt,
+            'minute',
+          )
+
+          if (responseTimeMinutes <= 30) {
+            fastResponses++
+          }
+        }
+
+        // If 80% or more requests were fast
+        const fastResponseRate = (fastResponses / totalRequests) * 100
+        if (fastResponseRate >= 80) {
+          expert.points = (expert.points || 0) + 50
+          await expert.save()
+
+          // Send push notification
+          if (expert.fcmToken && expert.pushNotify?.points) {
+            await sendNotification([expert.fcmToken], {
+              message: 'Fast Response Reward!',
+              description:
+                'You earned 50 points this week for maintaining fast response time to booking requests. Excellent! 🎉',
+            })
+          }
+        }
+      }
+    },
+    { timezone: 'Europe/London' },
+  )
+
+  // 5. Time-sensitive booking notifications (every 5 minutes)
   cron.schedule(
     '*/5 * * * *',
     async () => {
