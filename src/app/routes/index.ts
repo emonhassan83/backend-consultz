@@ -24,6 +24,7 @@ import { StripeRoute } from '../modules/stripe/stripe.route'
 import { WithdrawRoutes } from '../modules/withdraw/withdraw.route'
 import { CallingRoutes } from '../modules/calling/calling.route'
 import { MetaRoutes } from '../modules/meta/meta.route'
+import { SupportRoutes } from '../modules/support/support.route'
 
 const router = Router()
 
@@ -119,6 +120,10 @@ const moduleRoutes = [
   {
     path: '/contents',
     route: contentsRoutes,
+  },
+  {
+    path: '/supports',
+    route: SupportRoutes,
   },
   {
     path: '/categories',
