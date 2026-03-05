@@ -14,6 +14,7 @@ import { Withdraw } from '../withdraw/withdraw.model'
 import { WITHDRAW_STATUS } from '../withdraw/withdraw.constant'
 import { sendWithdrawNotify } from '../withdraw/withdraw.utils'
 import { Payment } from '../payment/payment.model'
+import { Contents } from '../contents/contents.models'
 
 const startCalling = async (userId: string, payload: ICalling) => {
   const session = await mongoose.startSession()
@@ -154,11 +155,14 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
     // Find the payment record
     const payment = await Payment.findOne({
       booking: booking._id,
-      isDeleted: false
+      isDeleted: false,
     }).session(session)
     if (!payment) {
       throw new AppError(httpStatus.NOT_FOUND, 'Related payment not found')
     }
+
+    const contents = await Contents.findOne({ isDeleted: false }).lean()
+    const holdDays = contents?.paymentHoldDays || 7
 
     // Atomic Withdraw request create
     const withdraw = await Withdraw.create(
@@ -168,6 +172,7 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
           booking: booking._id,
           amount: payment.consultAmount,
           status: WITHDRAW_STATUS.proceed,
+          proceedAt: new Date(),
         },
       ],
       { session },

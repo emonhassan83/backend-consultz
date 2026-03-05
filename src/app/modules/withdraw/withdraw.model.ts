@@ -13,6 +13,7 @@ const withdrawSchema = new Schema<TWithdraw>(
       enum: Object.values(WITHDRAW_STATUS),
       default: WITHDRAW_STATUS.proceed,
     },
+    proceedAt: { type: Date },
   },
   {
     timestamps: true,

@@ -8,6 +8,7 @@ export type TWithdraw = {
   amount: number
   stripeTransferId?: string
   status: TWithdrawStatus
+  proceedAt?: Date
   createdAt?: Date
 }
 
