@@ -1,12 +1,17 @@
 import { Schema, model } from 'mongoose'
 import { TSupport, TSupportModel } from './support.interface'
-import { SUPPORT_STATUS } from './support.constant'
+import { AUDIENCE, SUPPORT_STATUS } from './support.constant'
 
 const supportSchema = new Schema<TSupport>(
   {
     author: {
       type: Schema.Types.ObjectId,
       ref: 'User',
+      required: true,
+    },
+    audience: {
+      type: String,
+      enum: Object.values(AUDIENCE),
       required: true,
     },
     email: { type: String, required: true },

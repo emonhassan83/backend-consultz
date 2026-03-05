@@ -1,9 +1,10 @@
 import { Model, Types } from 'mongoose'
-import { TSupportStatus } from './support.constant'
+import { TAudience, TSupportStatus } from './support.constant'
 
 export type TSupport = {
   _id?: string
   author: Types.ObjectId | string
+  audience: TAudience
   email: string
   subject: string
   messages: string

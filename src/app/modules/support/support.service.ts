@@ -5,15 +5,24 @@ import { TSupport, TSupportMessage } from './support.interface'
 import { Support } from './support.model'
 import { User } from '../user/user.model'
 import emailSender from '../../utils/emailSender'
-import { SUPPORT_STATUS } from './support.constant'
+import { SUPPORT_STATUS, TAudience } from './support.constant'
 
-const createSupportIntoDB = async (payload: TSupport) => {
-  const { author: authorId } = payload
-
-  // find author
-  const author = await User.findById(authorId)
+const createSupportIntoDB = async (payload: TSupport, userId: string) => {
+  // find user by id
+  const author = await User.findById(userId)
   if (!author || author?.isDeleted) {
     throw new AppError(httpStatus.FORBIDDEN, 'This user is not found !')
+  }
+
+  // assign author id to support payload
+  payload.author = author._id
+  payload.email = author.email
+
+  // assign support audience based on user role
+  if (author.role === 'consult' || author.role === 'expert') {
+    payload.audience = author.role as TAudience
+  } else {
+    throw new AppError(httpStatus.FORBIDDEN, 'Invalid support role for user!')
   }
 
   const support = await Support.create(payload)

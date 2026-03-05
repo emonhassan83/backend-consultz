@@ -4,7 +4,7 @@ import sendResponse from '../../utils/sendResponse'
 import { SupportService } from './support.service'
 
 const createSupport = catchAsync(async (req, res) => {
-  const result = await SupportService.createSupportIntoDB(req.body)
+  const result = await SupportService.createSupportIntoDB(req.body, req.user._id)
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
