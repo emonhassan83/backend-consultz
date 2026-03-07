@@ -14,13 +14,25 @@ const addWithdraw = catchAsync(async (req, res) => {
   })
 })
 
-const getAllMyWithdraw = catchAsync(async (req, res) => {
+const getConsultWithdraw = catchAsync(async (req, res) => {
+  const result = await WithdrawService.getConsultWithdrawsFromDB(req.query, req.user._id)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Consult withdraw retrieved successfully!',
+    meta: result.meta,
+    data: result.result,
+  })
+})
+
+const getAllWithdraw = catchAsync(async (req, res) => {
   const result = await WithdrawService.getAllWithdrawsFromDB(req.query)
 
   sendResponse(res, {
     success: true,
     statusCode: 200,
-    message: 'My Withdraw retrieved successfully!',
+    message: 'All Withdraw retrieved successfully!',
     meta: result.meta,
     data: result.result,
   })
@@ -53,7 +65,8 @@ const updateWithdraw = catchAsync(async (req, res) => {
 
 export const WithdrawControllers = {
   addWithdraw,
-  getAllMyWithdraw,
+  getAllWithdraw,
+  getConsultWithdraw,
   getAWithdraw,
   updateWithdraw
 }

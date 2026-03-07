@@ -120,6 +120,28 @@ const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
   }
 }
 
+const getConsultWithdrawsFromDB = async (query: Record<string, unknown>, userId: string) => {
+  const WithdrawQuery = new QueryBuilder(
+    Withdraw.find().populate([
+      { path: 'user', select: 'firstName lastName email photoUrl' },
+    ]),
+    query,
+  )
+    .search([])
+    .filter()
+    .sort()
+    .paginate()
+    .fields()
+
+  const result = await WithdrawQuery.modelQuery
+  const meta = await WithdrawQuery.countTotal()
+
+  return {
+    meta,
+    result,
+  }
+}
+
 const getAWithdrawFromDB = async (id: string) => {
   const result = await Withdraw.findById(id).populate([
     { path: 'user', select: 'firstName lastName email photoUrl' },
@@ -183,6 +205,7 @@ const updateWithdrawFromDB = async (
 export const WithdrawService = {
   addWithdraw,
   getAllWithdrawsFromDB,
+  getConsultWithdrawsFromDB,
   getAWithdrawFromDB,
   updateWithdrawFromDB,
 }

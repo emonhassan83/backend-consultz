@@ -134,7 +134,7 @@ const getAllFeedsFromDB = async (
       ...feedFilter,
       status: FEED_STATUS.active, // By default return only active feeds in the list
     }).populate([
-      { path: 'author', select: 'firstName lastName expertise photoUrl' },
+      { path: 'author', select: 'firstName lastName headline photoUrl' },
       { path: 'contentMeta', select: 'like comment likeBy' },
     ]),
     query,
@@ -168,7 +168,7 @@ const getAllFeedsFromDB = async (
 
 const getAFeedFromDB = async (id: string, userId: string) => {
   const result = await Feed.findById(id).populate([
-    { path: 'author', select: 'firstName lastName expertise photoUrl' },
+    { path: 'author', select: 'firstName lastName headline photoUrl' },
     { path: 'contentMeta', select: 'like comment likeBy' },
   ])
 

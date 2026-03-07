@@ -21,7 +21,13 @@ router.patch(
   WithdrawControllers.updateWithdraw,
 )
 
-router.get('/', auth(USER_ROLE.admin), WithdrawControllers.getAllMyWithdraw)
+router.get(
+  '/my-withdraws',
+  auth(USER_ROLE.consult),
+  WithdrawControllers.getConsultWithdraw,
+)
+
+router.get('/', auth(USER_ROLE.admin), WithdrawControllers.getAllWithdraw)
 
 router.get('/:id', auth(USER_ROLE.admin), WithdrawControllers.getAWithdraw)
 
