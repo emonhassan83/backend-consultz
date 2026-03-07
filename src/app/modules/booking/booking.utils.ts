@@ -7,6 +7,7 @@ export type TBookingNotifyAction =
   | 'pending'
   | 'confirmed'
   | 'cancellation'
+  | 'not_responded'
   | 'reschedule'
   | 'morning_reminder'
   | 'completed'
@@ -68,6 +69,11 @@ export const sendBookingsNotification = async (
       } else {
         description = `${sessionTypeFormatted} session with ${booking.consult.firstName} on ${sessionInfo} cancelled`
       }
+      break
+
+    case 'not_responded':
+      message = messages.booking.not_responded
+      description = `${sessionTypeFormatted} session with ${booking.consult.firstName} was not completed.`
       break
 
     case 'reschedule':

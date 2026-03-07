@@ -497,5 +497,116 @@ export const initializeCronJobs = () => {
     { timezone: 'Europe/London' },
   )
 
+  // 6. Auto-mark old confirmed bookings as "not_responded" (daily at midnight UK time)
+  cron.schedule(
+    '0 0 * * *',
+    async () => {
+      console.log('Auto-mark Not Responded Job Started at 12:00 AM UK time')
+
+      const session = await mongoose.startSession()
+      session.startTransaction()
+
+      try {
+        // Current time in UK timezone
+        const now = dayjs().tz('Europe/London')
+
+        // Threshold: bookings older than 24 hours from slot time
+        const thresholdTime = now.subtract(24, 'hour')
+
+        // Find confirmed bookings where slot time + threshold passed and still not completed
+        const oldConfirmedBookings = await Booking.find({
+          status: BOOKING_STATUS.confirmed,
+          isDeleted: false,
+          respondedAt: { $exists: false }, // optional: only if not responded yet
+        })
+          .populate('slot user consult')
+          .session(session)
+
+        let updatedCount = 0
+
+        for (const booking of oldConfirmedBookings) {
+          const slot = booking.slot as any // populated slot
+
+          // Calculate actual booking start time in user's timezone
+          const bookingStart = dayjs.tz(
+            `${slot.date} ${slot.time}`,
+            'YYYY-MM-DD HH:mm',
+            booking.timezone,
+          )
+
+          // If booking time + 24 hours has passed and still not completed
+          if (bookingStart.isBefore(thresholdTime)) {
+            // Update status to not_responded
+            await Booking.findByIdAndUpdate(
+              booking._id,
+              {
+                status: BOOKING_STATUS.not_responded,
+                respondedAt: new Date(), // mark when it was auto-updated
+              },
+              { session },
+            )
+
+            // Notify both user and consultant
+            const notifications = []
+            const user = await User.findById(booking.user)
+              .select('fcmToken pushNotify')
+              .lean()
+            const consult = await User.findById(booking.consult)
+              .select('fcmToken pushNotify')
+              .lean()
+
+            // To user (booker)
+            if (user?.fcmToken && user.pushNotify?.bookingAndSchedule) {
+              notifications.push({
+                userId: user._id.toString(),
+                fcmToken: user.fcmToken,
+                action: 'not_responded',
+                booking,
+                slot,
+              })
+            }
+
+            // To consultant
+            if (consult?.fcmToken && consult.pushNotify?.bookingAndSchedule) {
+              notifications.push({
+                userId: consult._id.toString(),
+                fcmToken: consult.fcmToken,
+                action: 'not_responded',
+                booking,
+                slot,
+              })
+            }
+
+            // Batch send notifications
+            for (const n of notifications) {
+              await sendBookingsNotification(
+                'not_responded',
+                n.booking,
+                await User.findById(n.userId)
+                  .select('fcmToken pushNotify')
+                  .lean(),
+                n.slot,
+              )
+            }
+
+            updatedCount++
+            console.log(`Marked booking ${booking._id} as not_responded`)
+          }
+        }
+
+        await session.commitTransaction()
+        console.log(
+          `Auto-mark Not Responded Job Completed - ${updatedCount} bookings updated`,
+        )
+      } catch (error) {
+        await session.abortTransaction()
+        console.error('Auto-mark Not Responded Job Failed:', error)
+      } finally {
+        session.endSession()
+      }
+    },
+    { timezone: 'Europe/London' },
+  )
+
   console.log('All cron jobs initialized successfully')
 }

@@ -27,6 +27,7 @@ export const messages = {
     rescheduled: 'Booking Rescheduled',
     reminder: 'Good Morning!',
     complete: 'Session complete',
+    not_responded: 'Booking Not Responded',
   },
   bookingSchedule: {
     reminder: '10 Minutes to Go',
