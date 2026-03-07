@@ -23,7 +23,7 @@ router.patch(
 
 router.get(
   '/my-withdraws',
-  auth(USER_ROLE.consult),
+  auth(USER_ROLE.expert),
   WithdrawControllers.getConsultWithdraw,
 )
 

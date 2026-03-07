@@ -3,7 +3,11 @@ import AppError from '../../errors/AppError'
 import QueryBuilder from '../../builder/QueryBuilder'
 import { Withdraw } from './withdraw.model'
 import { TWithdrawStatus, WITHDRAW_STATUS } from './withdraw.constant'
-import { sendWithdrawNotify } from './withdraw.utils'
+import {
+  getThisMonthWithdraw,
+  getWithdrawMonthlyOverview,
+  sendWithdrawNotify,
+} from './withdraw.utils'
 import { User } from '../user/user.model'
 import mongoose from 'mongoose'
 import { Booking } from '../booking/booking.models'
@@ -120,25 +124,48 @@ const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
   }
 }
 
-const getConsultWithdrawsFromDB = async (query: Record<string, unknown>, userId: string) => {
-  const WithdrawQuery = new QueryBuilder(
-    Withdraw.find().populate([
-      { path: 'user', select: 'firstName lastName email photoUrl' },
-    ]),
+const getConsultWithdrawsFromDB = async (
+  query: Record<string, unknown>,
+  userId: string,
+) => {
+  const expert = await User.findById(userId)
+  if (!expert || expert.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Expert profile not found!')
+  }
+
+  // 1. This month total (always current month)
+  const thisMonthWithdraw = await getThisMonthWithdraw(userId)
+
+  // 2. Monthly overview (year filterable via query.year)
+  const withdrawOverview = await getWithdrawMonthlyOverview(
+    userId,
+    query.year ? parseInt(query.year as string, 10) : undefined,
+  )
+
+  // 3. Paginated withdraw list (supports year/month via QueryBuilder)
+  const withdrawQuery = new QueryBuilder(
+    Withdraw.find({ user: userId })
+      .populate([
+        {
+          path: 'booking',
+          select: 'sessionType user',
+          populate: { path: 'user', select: 'firstName lastName' },
+        },
+      ])
+      .sort({ createdAt: -1 }),
     query,
   )
-    .search([])
-    .filter()
+    .filter() // Your QueryBuilder already supports year/month filtering
     .sort()
     .paginate()
     .fields()
 
-  const result = await WithdrawQuery.modelQuery
-  const meta = await WithdrawQuery.countTotal()
+  const result = await withdrawQuery.modelQuery
+  const meta = await withdrawQuery.countTotal()
 
   return {
     meta,
-    result,
+    result: { thisMonthWithdraw, withdrawOverview, withdrawList: result },
   }
 }
 
