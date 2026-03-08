@@ -95,27 +95,17 @@ const getAllFeedsFromDB = async (
 
   // 3. Apply follow/block logic only for non-admin users
   if (currentUser.role !== USER_ROLE.admin) {
-    const followingDocs = await Follow.find({ follower: currentUserId }).select(
-      'following',
-    )
-    const blockedDocs = await BlockProfile.find({
-      blocker: currentUserId,
-    }).select('blocked')
+  const blockedDocs = await BlockProfile.find({
+    blocker: currentUserId,
+  }).select('blocked')
 
-    const followingIds = followingDocs.map((doc) => doc.following)
-    const blockedIds = blockedDocs.map((doc) => doc.blocked)
+  const blockedIds = blockedDocs.map((doc) => doc.blocked)
 
-    if (followingIds.length === 0) {
-      // No one followed → show all except blocked
-      feedFilter.author = { $nin: blockedIds }
-    } else {
-      // Show only followed users' posts, exclude blocked
-      feedFilter.author = {
-        $in: followingIds,
-        $nin: blockedIds,
-      }
-    }
+  // শুধু blocked users বাদ, follow filter নেই
+  if (blockedIds.length > 0) {
+    feedFilter.author = { $nin: blockedIds }
   }
+}
 
   // 4. Get counts for active and restricted feeds (for the filtered scope)
   const activeCount = await Feed.countDocuments({
@@ -132,7 +122,6 @@ const getAllFeedsFromDB = async (
   const feedQuery = new QueryBuilder(
     Feed.find({
       ...feedFilter,
-      status: FEED_STATUS.active, // By default return only active feeds in the list
     }).populate([
       { path: 'author', select: 'firstName lastName headline photoUrl' },
       { path: 'contentMeta', select: 'like comment likeBy' },
