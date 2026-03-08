@@ -6,7 +6,7 @@ import { Request, Response } from 'express'
 import { uploadToS3 } from '../../utils/s3'
 import { otpServices } from '../otp/otp.service'
 import { UploadedFiles } from '../../interface/common.interface'
-import { USER_ROLE } from './user.constant'
+import { USER_ROLE, USER_STATUS } from './user.constant'
 
 const registerUser = catchAsync(async (req, res) => {
   const result = await UserService.registerUserIntoDB(req?.body)
@@ -88,6 +88,20 @@ const getAllUsers = catchAsync(async (req, res) => {
     message: 'Users retrieved successfully!',
     meta: result.meta,
     data: result.data,
+  })
+})
+
+const getAllExperts = catchAsync(async (req, res) => {
+  req.query['role'] = USER_ROLE.expert;
+  req.query['status'] = USER_STATUS.active;
+  const result = await UserService.getAllUsersFromDB(req.query)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Experts retrieved successfully!',
+    meta: result.meta,
+    data: result.data.userList,
   })
 })
 
@@ -184,6 +198,7 @@ const deleteMyProfile = catchAsync(async (req, res) => {
 export const UserControllers = {
   registerUser,
   getAllUsers,
+  getAllExperts,
   getInvestmentExperts,
   getInterestExpert,
   getTopExperts,

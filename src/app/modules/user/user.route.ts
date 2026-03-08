@@ -49,6 +49,12 @@ router.delete(
 )
 
 router.get(
+  '/experts',
+  auth(USER_ROLE.expert, USER_ROLE.consult),
+  UserControllers.getAllExperts,
+)
+
+router.get(
   '/investment-experts',
   auth(USER_ROLE.expert, USER_ROLE.consult),
   UserControllers.getInvestmentExperts,

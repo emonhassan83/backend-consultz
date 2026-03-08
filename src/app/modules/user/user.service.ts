@@ -16,7 +16,7 @@ import {
   sendUserStatusNotifYToAdmin,
   sendUserStatusNotifYToUser,
 } from './user.utils'
-import mongoose, { Types } from 'mongoose'
+import mongoose, { FilterQuery, Types } from 'mongoose'
 import { Booking } from '../booking/booking.models'
 import { BOOKING_STATUS } from '../booking/booking.constants'
 import config from '../../config'
@@ -103,19 +103,83 @@ const registerUserIntoDB = async (
 }
 
 const getAllUsersFromDB = async (query: Record<string, unknown>) => {
+  // Base query: only experts, active, not deleted
+  let baseQuery: FilterQuery<TUser> = {
+    isDeleted: false,
+    role: USER_ROLE.expert,
+    status: USER_STATUS.active,
+  };
+
+  // 1. priceRange filter (e.g., 100-120)
+  if (query.priceRange) {
+    const [minStr, maxStr] = (query.priceRange as string).split('-');
+    const min = Number(minStr);
+    const max = Number(maxStr);
+    if (!isNaN(min) && !isNaN(max)) {
+      baseQuery.hourlyRate = { $gte: min, $lte: max };
+    }
+  }
+
+  // 2. interests filter (any match in array)
+  if (query.interests) {
+    const interests = (query.interests as string).split(',');
+    baseQuery.interests = { $in: interests.map(i => i.trim()) };
+  }
+
+  // 3. learningStyles filter (any match in array)
+  if (query.learningStyles) {
+    const styles = (query.learningStyles as string).split(',');
+    baseQuery.learningStyles = { $in: styles.map(s => s.trim()) };
+  }
+
+  // 4. availability filter (any day match)
+  if (query.availability) {
+    const days = (query.availability as string).split(',');
+    baseQuery['availability.day'] = { $in: days.map(d => d.trim().toLowerCase()) };
+  }
+
+  // 5. rating filter (range e.g., 3,4 → >=3 and <=4)
+  if (query.rating) {
+    const [minRatingStr, maxRatingStr] = (query.rating as string).split(',');
+    const minRating = Number(minRatingStr);
+    const maxRating = Number(maxRatingStr) || Infinity;
+    if (!isNaN(minRating)) {
+      baseQuery.avgRating = { $gte: minRating };
+      if (isFinite(maxRating)) {
+        baseQuery.avgRating.$lte = maxRating;
+      }
+    }
+  }
+
+  // 6. sessionDurations filter (any duration match in array)
+  if (query.sessionDurations) {
+    const durations = (query.sessionDurations as string)
+      .split(',')
+      .map(d => Number(d.trim()))
+      .filter(n => !isNaN(n));
+
+    if (durations.length > 0) {
+      baseQuery['sessionDurations.duration'] = { $in: durations };
+    }
+  }
+
+  // Build QueryBuilder with the final filter
   const usersQuery = new QueryBuilder(
-    User.find({ isDeleted: false, role: { $ne: USER_ROLE.admin } }).select(
-      '_id id firstName lastName email phoneNumber photoUrl role headline following followers points avgRating skills languages expertise status isProfileSetup createdAt',
+    User.find(baseQuery).select(
+      '_id id firstName lastName email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status isProfileSetup createdAt hourlyRate sessionDurations availability interests learningStyles'
     ),
     query,
   )
-    .search(['firstName', 'lastName'])
-    .filter()
+    .search(['firstName', 'lastName', 'headline', 'expertise'])
+    .filter() // your existing filter for other params
     .sort()
     .paginate()
-    .fields()
+    .fields();
 
-  // 3. Get counts for active consult and expert (independent of pagination)
+  const result = await usersQuery.modelQuery;
+  const meta = await usersQuery.countTotal();
+
+  // Get active counts (independent of filters)
   const activeCounts = await User.aggregate([
     {
       $match: {
@@ -130,16 +194,10 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
         count: { $sum: 1 },
       },
     },
-  ])
+  ]);
 
-  // Extract counts safely
-  const activeConsult =
-    activeCounts.find((item) => item._id === USER_ROLE.consult)?.count || 0
-  const activeExpert =
-    activeCounts.find((item) => item._id === USER_ROLE.expert)?.count || 0
-
-  const result = await usersQuery.modelQuery
-  const meta = await usersQuery.countTotal()
+  const activeConsult = activeCounts.find(item => item._id === USER_ROLE.consult)?.count || 0;
+  const activeExpert = activeCounts.find(item => item._id === USER_ROLE.expert)?.count || 0;
 
   return {
     meta,
@@ -149,8 +207,8 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
       activeExpert,
       userList: result,
     },
-  }
-}
+  };
+};
 
 const getInterestExpertsFromDB = async (
   userId: string,
