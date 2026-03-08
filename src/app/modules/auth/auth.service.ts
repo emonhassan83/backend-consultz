@@ -37,11 +37,6 @@ const loginUser = async (payload: TLoginUser) => {
     throw new AppError(httpStatus.FORBIDDEN, 'Your profile is not verified')
   }
 
-  // If user profile not active
-  if (user.status !== USER_STATUS.active) {
-    throw new AppError(httpStatus.FORBIDDEN, 'Your profile is not active now!')
-  }
-
   //* create token and sent to the  client
   const jwtPayload = {
     _id: user._id,
