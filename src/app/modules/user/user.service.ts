@@ -4,7 +4,7 @@ import { TUser } from './user.interface'
 import { User } from './user.model'
 import QueryBuilder from '../../builder/QueryBuilder'
 import {
-  PROPERTY_EXPERTISE,
+  INVESTMENT_SKILLS,
   PROPERTY_SKILLS,
   TUserStatus,
   USER_ROLE,
@@ -205,31 +205,12 @@ const getPropertyExpertsFromDB = async (query: Record<string, unknown>) => {
     status: USER_STATUS.active,
     isDeleted: false,
 
-    // 🎯 4-Level Taxonomy based on matching
+    // Property based on matching
     $or: [
-      // Level 1 + Level 4 → Domain + Specialism
+      // match any of the property expertise categories
       {
         expertise: {
-          $in: PROPERTY_EXPERTISE,
-        },
-      },
-
-      // Level 3 + Level 4 → Role + Specialism
-      {
-        expertise: {
-          $in: [
-            'Property Strategy Coaches',
-            'Property Deal Mentors',
-            'Property Systems Consultants',
-            'Property Marketing Advisors',
-          ],
-        },
-      },
-
-      // Level 2 → Service Type level
-      {
-        expertise: {
-          $in: ['Property Education & Mentoring', 'Property Business Coaching'],
+          $in: ['Property & Real Estate'],
         },
       },
 
@@ -301,54 +282,12 @@ const getInvestmentExperts = async (query: Record<string, unknown>) => {
     $or: [
       {
         expertise: {
-          $in: [
-            'Property Investment & Development',
-            'Buy to Let',
-            'HMOs',
-            'Rent to Rent',
-            'Sourcing',
-            'Negotiation',
-            'Deal Structuring',
-            'Lead Generation',
-            'Deal Pipelines',
-            'Investor Branding',
-            'Deal Packaging',
-          ],
-        },
-      },
-      {
-        expertise: {
-          $in: [
-            'Property Strategy Coaches',
-            'Property Deal Mentors',
-            'Property Systems Consultants',
-            'Property Marketing Advisors',
-          ],
-        },
-      },
-      {
-        expertise: {
-          $in: ['Property Education & Mentoring', 'Property Business Coaching'],
+          $in: ['Property Investment & Development'],
         },
       },
       {
         skills: {
-          $in: [
-            'Real Estate',
-            'Property Law',
-            'Investment',
-            'Real Estate Development',
-            'Buy-to-Let Strategy',
-            'HMO Management',
-            'Rent-to-Rent',
-            'Property Sourcing',
-            'Property Negotiation',
-            'Deal Packaging',
-            'Property Lead Generation',
-            'Investor Marketing',
-            'Property Systems',
-            'Real Estate Marketing',
-          ],
+          $in: INVESTMENT_SKILLS,
         },
       },
     ],
@@ -443,53 +382,65 @@ const geUserByIdFromDB = async (id: string) => {
   }
 }
 
-const changeUserStatusFromDB = async (payload: { userId: string; status: TUserStatus }) => {
-  const { userId, status } = payload;
+const changeUserStatusFromDB = async (payload: {
+  userId: string
+  status: TUserStatus
+}) => {
+  const { userId, status } = payload
 
   // 1. User find
-  const user = await User.findById(userId);
+  const user = await User.findById(userId)
   if (!user || user.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
 
   // 2.status updated
   const updatedUser = await User.findByIdAndUpdate(
     userId,
     { status },
-    { new: true }
-  ).select('_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline status createdAt');
+    { new: true },
+  ).select(
+    '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline status createdAt',
+  )
 
   if (!updatedUser) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found and failed to update status!');
+    throw new AppError(
+      httpStatus.NOT_FOUND,
+      'User not found and failed to update status!',
+    )
   }
 
   // 3. expert account approved
-  if (status === USER_STATUS.active && user.status === USER_STATUS.pending && user.role === USER_ROLE.expert) {
+  if (
+    status === USER_STATUS.active &&
+    user.status === USER_STATUS.pending &&
+    user.role === USER_ROLE.expert
+  ) {
     // Award 300 points to the expert
-    const pointsToAdd = 300;
-    updatedUser.points = (updatedUser.points || 0) + pointsToAdd;
-    await updatedUser.save();
+    const pointsToAdd = 300
+    updatedUser.points = (updatedUser.points || 0) + pointsToAdd
+    await updatedUser.save()
 
     // Send push notification to expert (if enabled)
     if (updatedUser.fcmToken && updatedUser.pushNotify?.points) {
       await sendNotification([updatedUser.fcmToken], {
         message: 'Expert Account Approved!',
         description: `You have earned 300 points. Start accepting bookings now! 🎉`,
-      });
+      })
     }
   }
 
   // 4. notify to admin and user
-  await sendUserStatusNotifYToUser(status, updatedUser);
-  await sendUserStatusNotifYToAdmin(status, updatedUser);
+  await sendUserStatusNotifYToUser(status, updatedUser)
+  await sendUserStatusNotifYToAdmin(status, updatedUser)
 
   // 5. Blocked or Active email sent to user
   if (status === USER_STATUS.blocked || status === USER_STATUS.active) {
-    await generateUserStatusEmail(user, status);
+    await generateUserStatusEmail(user, status)
   }
 
-  return updatedUser;
-};
+  return updatedUser
+}
 
 const changeUserNotifyFromDB = async (id: string, payload: any) => {
   // 1️⃣ Validate user
@@ -514,107 +465,140 @@ const changeUserNotifyFromDB = async (id: string, payload: any) => {
   return result
 }
 
-const updateUserInfoFromDB = async (userId: string, payload: Partial<TUser>) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+const updateUserInfoFromDB = async (
+  userId: string,
+  payload: Partial<TUser>,
+) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
 
   try {
-    const user = await User.findById(userId).session(session);
+    const user = await User.findById(userId).session(session)
     if (!user || user.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
     }
 
-    let finalPayload = { ...payload };
+    let finalPayload = { ...payload }
 
     // Step 1: Handle session durations logic (unchanged)
     if (payload.sessionDurations && payload.sessionDurations.length > 0) {
       const effectiveHourlyRate =
-        payload.hourlyRate !== undefined ? payload.hourlyRate : user.hourlyRate;
+        payload.hourlyRate !== undefined ? payload.hourlyRate : user.hourlyRate
 
       if (effectiveHourlyRate <= 0) {
         throw new AppError(
           httpStatus.BAD_REQUEST,
-          'Hourly rate must be greater than 0 to update session durations.'
-        );
+          'Hourly rate must be greater than 0 to update session durations.',
+        )
       }
 
       const updatedDurations = payload.sessionDurations.map((item) => ({
         ...item,
-        offeredPrice: Number(((item.duration / 60) * effectiveHourlyRate).toFixed(2)),
-      }));
+        offeredPrice: Number(
+          ((item.duration / 60) * effectiveHourlyRate).toFixed(2),
+        ),
+      }))
 
       finalPayload = {
         ...payload,
         sessionDurations: updatedDurations,
         hourlyRate: effectiveHourlyRate,
-      };
+      }
     }
 
     // Step 2: Social profile addition reward (only for expert, one-time)
-    const isExpert = user.role === USER_ROLE.expert;
+    const isExpert = user.role === USER_ROLE.expert
 
-    if (isExpert && payload.socialProfiles && payload.socialProfiles.length > 0) {
+    if (
+      isExpert &&
+      payload.socialProfiles &&
+      payload.socialProfiles.length > 0
+    ) {
       // Check if this is the FIRST time socialProfiles are being added
-      const previouslyEmpty = !user.socialProfiles || user.socialProfiles.length === 0;
+      const previouslyEmpty =
+        !user.socialProfiles || user.socialProfiles.length === 0
 
       if (previouslyEmpty) {
         // Award 150 points (one-time)
-        user.points = (user.points || 0) + 150;
-        finalPayload.points = user.points;
+        user.points = (user.points || 0) + 150
+        finalPayload.points = user.points
 
         // Mark that this reward has been claimed (prevents multiple claims)
-        finalPayload.socialProofBonusClaimed = true;
+        finalPayload.socialProofBonusClaimed = true
 
         // Send push notification if enabled
         if (user.fcmToken && user.pushNotify?.points) {
           await sendNotification([user.fcmToken], {
             message: 'Social Profiles Added!',
-            description: 'Congratulations! You earned 150 points for adding your social profiles. 🎉',
-          });
+            description:
+              'Congratulations! You earned 150 points for adding your social profiles. 🎉',
+          })
         }
       }
     }
 
     // Step 3: Existing profile completion bonus logic (role-based, unchanged)
-    const isConsult = user.role === USER_ROLE.consult;
+    const isConsult = user.role === USER_ROLE.consult
 
     const requiredFields = isConsult
       ? [
-          'firstName', 'lastName', 'email', 'phoneNumber', 'dob', 'photoUrl',
-          'coverPhoto', 'timeZone', 'priceRange', 'interests', 'learningStyles',
+          'firstName',
+          'lastName',
+          'email',
+          'phoneNumber',
+          'dob',
+          'photoUrl',
+          'coverPhoto',
+          'timeZone',
+          'priceRange',
+          'interests',
+          'learningStyles',
           'availability',
         ]
       : [
-          'firstName', 'lastName', 'email', 'phoneNumber', 'dob', 'photoUrl',
-          'coverPhoto', 'bio', 'socialProfiles', 'hourlyRate', 'expertise',
-          'skills', 'advisingStyles', 'sessionDurations', 'availability',
-        ];
+          'firstName',
+          'lastName',
+          'email',
+          'phoneNumber',
+          'dob',
+          'photoUrl',
+          'coverPhoto',
+          'bio',
+          'socialProfiles',
+          'hourlyRate',
+          'expertise',
+          'skills',
+          'advisingStyles',
+          'sessionDurations',
+          'availability',
+        ]
 
     const isProfileNowComplete = requiredFields.every((field) => {
-      const value = (payload as any)[field] !== undefined
-        ? (payload as any)[field]
-        : (user as any)[field];
+      const value =
+        (payload as any)[field] !== undefined
+          ? (payload as any)[field]
+          : (user as any)[field]
 
       if (Array.isArray(value)) {
-        return value.length > 0;
+        return value.length > 0
       }
 
-      return value !== undefined && value !== null && value !== '';
-    });
+      return value !== undefined && value !== null && value !== ''
+    })
 
     if (isProfileNowComplete && !user.profileCompletionBonusClaimed) {
-      const pointsToAdd = isExpert ? 300 : isConsult ? 150 : 0;
+      const pointsToAdd = isExpert ? 300 : isConsult ? 150 : 0
 
       if (pointsToAdd > 0) {
-        user.points = (user.points || 0) + pointsToAdd;
-        finalPayload.points = user.points;
-        finalPayload.profileCompletionBonusClaimed = true;
+        user.points = (user.points || 0) + pointsToAdd
+        finalPayload.points = user.points
+        finalPayload.profileCompletionBonusClaimed = true
 
         if (user.fcmToken && user.pushNotify?.points) {
           await sendNotification([user.fcmToken], {
             message: 'Profile Completed!',
             description: `Congratulations! You have earned ${pointsToAdd} points for fully completing your ${isExpert ? 'expert' : 'consult'} profile. 🎉`,
-          });
+          })
         }
       }
     }
@@ -625,24 +609,30 @@ const updateUserInfoFromDB = async (userId: string, payload: Partial<TUser>) => 
       runValidators: true,
       session,
     }).select(
-      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role profileCompletionBonusClaimed socialProfileBonusClaimed'
-    );
+      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role profileCompletionBonusClaimed socialProfileBonusClaimed',
+    )
 
     if (!updatedUser) {
-      throw new AppError(httpStatus.NOT_FOUND, 'User not found and failed to update!');
+      throw new AppError(
+        httpStatus.NOT_FOUND,
+        'User not found and failed to update!',
+      )
     }
 
-    await session.commitTransaction();
-    return updatedUser;
+    await session.commitTransaction()
+    return updatedUser
   } catch (error) {
-    await session.abortTransaction();
+    await session.abortTransaction()
     throw error instanceof AppError
       ? error
-      : new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to update user information');
+      : new AppError(
+          httpStatus.INTERNAL_SERVER_ERROR,
+          'Failed to update user information',
+        )
   } finally {
-    session.endSession();
+    session.endSession()
   }
-};
+}
 
 const updateLocationFromDB = async (
   userId: string,

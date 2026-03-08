@@ -40,27 +40,10 @@ export type TUserStatus = keyof typeof USER_STATUS
 export const UserSearchableFields = ['name']
 
 // Property & Real Estate Related category
-export const PROPERTY_EXPERTISE = [
-  'Property Investment & Development',
-  'Property Strategy',
-  'Buy to Let',
-  'HMOs',
-  'Rent to Rent',
-  'Property Deal Sourcing',
-  'Property Negotiation',
-  'Deal Structuring',
-  'Property Lead Generation',
-  'Property Deal Pipelines',
-  'Property CRM Setup',
-  'Investor Branding',
-  'Deal Packaging',
-  'Property Social Media Marketing',
-]
-
-export const PROPERTY_SKILLS = [
-  'Property Investment',
+export const INVESTMENT_SKILLS = [
   'Real Estate',
   'Property Law',
+  'Investment',
   'Real Estate Development',
   'Buy-to-Let Strategy',
   'HMO Management',
@@ -72,4 +55,14 @@ export const PROPERTY_SKILLS = [
   'Investor Marketing',
   'Property Systems',
   'Real Estate Marketing',
+]
+
+export const PROPERTY_SKILLS = [
+  'Property Strategy & Portfolio',
+  'Deal Making',
+  'Rental Strategies',
+  'Finance & Funding',
+  'Joint Ventures & Partnerships',
+  'Property Business Growth',
+  'Property Marketing & Lead Generation',
 ]
