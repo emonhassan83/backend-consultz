@@ -11,7 +11,8 @@ import { Types } from 'mongoose'
 export const sendWithdrawNotify = async (
   action: TWithdrawStatus,
   withdraw: TWithdraw,
-  user: TUser
+  user: TUser,
+  note?: string
 ) => {
   if (!user?.fcmToken || !user.pushNotify.payment) return
   

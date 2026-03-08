@@ -15,6 +15,7 @@ import { WITHDRAW_STATUS } from '../withdraw/withdraw.constant'
 import { sendWithdrawNotify } from '../withdraw/withdraw.utils'
 import { Payment } from '../payment/payment.model'
 import { Contents } from '../contents/contents.models'
+import dayjs from 'dayjs'
 
 const startCalling = async (userId: string, payload: ICalling) => {
   const session = await mongoose.startSession()
@@ -164,19 +165,22 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
     const contents = await Contents.findOne({ isDeleted: false }).lean()
     const holdDays = contents?.paymentHoldDays || 7
 
-    // Atomic Withdraw request create
-    const withdraw = await Withdraw.create(
+    // Calculate future proceedAt date (now + holdDays)
+    const proceedAtDate = dayjs(now).add(holdDays, 'day').toDate();
+
+    // Atomic Withdraw request creation with future proceedAt
+    const [withdraw] = await Withdraw.create(
       [
         {
           user: booking.consult,
           booking: booking._id,
           amount: payment.consultAmount,
           status: WITHDRAW_STATUS.proceed,
-          proceedAt: new Date(),
+          proceedAt: proceedAtDate, // ← This is the key change: now + holdDays
         },
       ],
       { session },
-    )
+    );
 
     // Both particles send notification
     const [caller, receiver] = await Promise.all([
@@ -201,7 +205,7 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
 
     // sent notify to consult
     if (caller?._id.toString() === booking.consult.toString()) {
-      await sendWithdrawNotify(WITHDRAW_STATUS.proceed, withdraw[0], caller)
+      await sendWithdrawNotify(WITHDRAW_STATUS.proceed, withdraw, caller)
     }
 
     await session.commitTransaction()

@@ -13,6 +13,7 @@ import mongoose from 'mongoose'
 import { Booking } from '../booking/booking.models'
 import { Payment } from '../payment/payment.model'
 import { sendWithdrawStatusChangeEmail } from '../../utils/emailNotify'
+import dayjs from 'dayjs'
 
 // Test purpose-এ withdraw request তৈরি
 const addWithdraw = async (payload: { booking: string }, userId: string) => {
@@ -195,39 +196,75 @@ const getAWithdrawFromDB = async (id: string) => {
 
 const updateWithdrawFromDB = async (
   id: string,
-  payload: { status: TWithdrawStatus },
+  payload: { status: TWithdrawStatus; note?: string }
 ) => {
-  const { status } = payload
+  const { status, note } = payload;
 
-  const withdraw = await Withdraw.findById(id)
-  if (!withdraw) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Withdraw not found')
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const withdraw = await Withdraw.findById(id).session(session);
+    if (!withdraw) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Withdraw not found');
+    }
+
+    const currentStatus = withdraw.status;
+
+    // Validate allowed status transitions
+    if (currentStatus === WITHDRAW_STATUS.completed) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Completed withdrawals cannot be updated');
+    }
+
+    // Case 1: proceed → hold → clear proceedAt
+    if (currentStatus === WITHDRAW_STATUS.proceed && status === WITHDRAW_STATUS.hold) {
+      withdraw.proceedAt = undefined;
+      withdraw.status = WITHDRAW_STATUS.hold;
+    }
+
+    // Case 2: hold → proceed → set proceedAt = now + 3 days
+    else if (currentStatus === WITHDRAW_STATUS.hold && status === WITHDRAW_STATUS.proceed) {
+      const now = new Date();
+      const proceedAtDate = dayjs(now).add(3, 'day').toDate();
+
+      withdraw.proceedAt = proceedAtDate;
+      withdraw.status = WITHDRAW_STATUS.proceed;
+    }
+
+    // Other status changes (e.g., rejected, etc.) → just update status
+    else {
+      withdraw.status = status;
+    }
+
+
+    await withdraw.save({ session });
+
+    // Send notification to user
+    const user = await User.findById(withdraw.user).session(session);
+    if (user) {
+      await sendWithdrawNotify(status, withdraw, user, note);
+    }
+
+    // Send email to user about status change
+    if (user && user.emailNotify?.payment) {
+      await sendWithdrawStatusChangeEmail(user, withdraw, status);
+    }
+
+    // Optional: Log admin action (if you have AuditLog model)
+    // await AuditLog.create({ action: 'update_withdraw', adminId, withdrawId: id, oldStatus: currentStatus, newStatus: status, note });
+
+    await session.commitTransaction();
+
+    return withdraw;
+  } catch (error) {
+    await session.abortTransaction();
+    throw error instanceof AppError
+      ? error
+      : new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to update withdraw status');
+  } finally {
+    session.endSession();
   }
-
-  const result = await Withdraw.findByIdAndUpdate(
-    id,
-    { status },
-    {
-      new: true,
-    },
-  )
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Withdraw status not updated')
-  }
-
-  // send notify to user
-  const user = await User.findById(withdraw.user)
-  if (user) {
-    await sendWithdrawNotify(status, withdraw, user)
-  }
-
-  // sent consult email their withdraw status changed
-  if (user && user.emailNotify.payment) {
-    await sendWithdrawStatusChangeEmail(user, result, status)
-  }
-
-  return result
-}
+};
 
 export const WithdrawService = {
   addWithdraw,

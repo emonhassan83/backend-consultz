@@ -39,81 +39,86 @@ export const initializeCronJobs = () => {
       session.startTransaction()
 
       try {
-        // Retrieve platform hold days from Contents model
-        const contents = await Contents.findOne({ isDeleted: false }).lean()
-        const holdDays = contents?.paymentHoldDays || 7
-
-        // Find all pending withdrawals
+        // Find all pending withdrawals (status: proceed)
         const pendingWithdraws = await Withdraw.find({
           status: WITHDRAW_STATUS.proceed,
           isDeleted: false,
+          proceedAt: { $exists: true }, // Ensure proceedAt is set
         }).session(session)
 
+        console.log(
+          `Found ${pendingWithdraws.length} pending withdrawals to process`,
+        )
+
         for (const withdraw of pendingWithdraws) {
+          // Skip if proceedAt is in the future
+          if (!dayjs().isAfter(withdraw.proceedAt)) {
+            console.log(
+              `Withdraw ${withdraw._id} not yet eligible (proceedAt: ${withdraw.proceedAt})`,
+            )
+            continue
+          }
+
           const booking = await Booking.findById(withdraw.booking).session(
             session,
           )
-          if (!booking) continue
+          if (!booking) {
+            console.warn(`Booking not found for withdraw ${withdraw._id}`)
+            continue
+          }
 
-          // Check if hold period has passed
-          const requestDate = dayjs(withdraw.createdAt)
-          const holdEndDate = requestDate.add(holdDays, 'day')
+          const consultant = await User.findById(booking.consult).session(
+            session,
+          )
+          if (!consultant || !consultant.stripeAccountId) {
+            console.warn(`No Stripe account for consultant ${booking.consult}`)
+            continue
+          }
 
-          if (dayjs().isAfter(holdEndDate, 'day')) {
-            const consultant = await User.findById(booking.consult).session(
-              session,
+          try {
+            // Perform Stripe transfer
+            const transfer = await StripeService.transfer(
+              withdraw.amount * 100, // amount in cents
+              consultant.stripeAccountId,
+              'usd',
             )
-            if (!consultant || !consultant.stripeAccountId) {
-              console.warn(
-                `No Stripe account for consultant ${booking.consult}`,
-              )
-              continue
-            }
 
-            try {
-              const transfer = await StripeService.transfer(
-                withdraw.amount * 100, // amount in cents
-                consultant.stripeAccountId,
-                'usd',
-              )
+            // Update withdrawal to completed
+            withdraw.status = WITHDRAW_STATUS.completed
+            withdraw.stripeTransferId = transfer.id
+            await withdraw.save({ session })
 
-              // Update withdrawal status
-              withdraw.status = WITHDRAW_STATUS.completed
-              withdraw.stripeTransferId = transfer.id
-              await withdraw.save({ session })
+            // Send completion notification (push/in-app)
+            await sendWithdrawNotify(
+              WITHDRAW_STATUS.completed,
+              withdraw,
+              consultant,
+            )
 
-              // Send completion notification
-              await sendWithdrawNotify(
-                WITHDRAW_STATUS.completed,
+            // Send completion email to consultant
+            const consult = consultant // already fetched
+            const populatedBooking = await Booking.findById(withdraw.booking)
+              .populate('slot')
+              .session(session)
+
+            if (consult && populatedBooking && consult.emailNotify?.payment) {
+              await sendWithdrawCompletedEmail(
+                consult,
                 withdraw,
-                consultant,
-              )
-
-              // here also sent email
-              const consult = await User.findById(withdraw.user)
-
-              // find booking
-              const booking = await Booking.findById(withdraw.booking).populate(
-                'slot',
-              )
-              if (consult && booking && consult.emailNotify.payment) {
-                await sendWithdrawCompletedEmail(
-                  consult,
-                  withdraw,
-                  booking,
-                  booking.slot,
-                )
-              }
-
-              console.log(
-                `Transferred $${withdraw.amount} to ${consultant.stripeAccountId}`,
-              )
-            } catch (transferError: any) {
-              console.error(
-                `Transfer failed for withdraw ${withdraw._id}:`,
-                transferError.message,
+                populatedBooking,
+                populatedBooking.slot,
               )
             }
+
+            console.log(
+              `Transferred $${withdraw.amount} to ${consultant.stripeAccountId} for withdraw ${withdraw._id}`,
+            )
+          } catch (transferError: any) {
+            console.error(
+              `Transfer failed for withdraw ${withdraw._id}:`,
+              transferError.message,
+            )
+            // Optionally mark as failed or retry later — for now just log
           }
         }
 
