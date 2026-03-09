@@ -86,6 +86,6 @@ router.get(
 
 router.get('/', auth(USER_ROLE.admin), UserControllers.getAllUsers)
 
-router.get('/:id', auth(USER_ROLE.admin), UserControllers.getUserById)
+router.get('/:id', auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult), UserControllers.getUserById)
 
 export const UserRoutes = router
