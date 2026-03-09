@@ -210,109 +210,142 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
   };
 };
 
+// 1. Interest-based experts
 const getInterestExpertsFromDB = async (
   userId: string,
   query: Record<string, unknown>,
 ) => {
-  // 1️⃣ Get current user
-  const currentUser = await User.findById(userId).select('interests')
+  const currentUser = await User.findById(userId).select('interests');
   if (!currentUser) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
   }
 
-  const { interests } = currentUser
+  const { interests } = currentUser;
 
-  // 2️⃣ Build interest matching logic
-  const matchConditions: any[] = []
+  const matchConditions: any[] = [];
   if (interests?.length) {
-    matchConditions.push({ interests: { $in: interests } })
+    matchConditions.push({ interests: { $in: interests } });
   }
 
-  // 3️⃣ Base expert filter
   const baseFilter = {
     _id: { $ne: new Types.ObjectId(userId) },
     isDeleted: false,
     status: USER_STATUS.active,
     role: USER_ROLE.expert,
     $or: matchConditions,
-  }
+  };
 
-  // 4️⃣ Query Builder (same standard you already use)
   const usersQuery = new QueryBuilder(
     User.find(baseFilter).select(
-      '_id firstName lastName photoUrl headline followers avgRating ratingCount',
+      '_id firstName lastName photoUrl headline followers avgRating ratingCount'
     ),
     query,
   )
     .sort()
     .paginate()
-    .fields()
+    .fields();
 
-  const result = await usersQuery.modelQuery
-  const meta = await usersQuery.countTotal()
+  const experts = await usersQuery.modelQuery;
 
-  return {
-    meta,
-    result,
-  }
-}
+  // Batch calculate totalBookings for all fetched experts
+  const expertIds = experts.map(e => e._id);
+  const completedCounts = await Booking.aggregate([
+    {
+      $match: {
+        consult: { $in: expertIds },
+        status: BOOKING_STATUS.completed,
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: '$consult',
+        totalBookings: { $sum: 1 },
+      },
+    },
+  ]);
 
+  // Map counts to experts
+  const countMap = new Map(completedCounts.map(c => [c._id.toString(), c.totalBookings]));
+  const result = experts.map(expert => ({
+    ...expert.toObject(),
+    totalBookings: countMap.get(expert._id.toString()) || 0,
+  }));
+
+  const meta = await usersQuery.countTotal();
+
+  return { meta, result };
+};
+
+// 2. Property experts
 const getPropertyExpertsFromDB = async (query: Record<string, unknown>) => {
   const filter = {
     role: USER_ROLE.expert,
     status: USER_STATUS.active,
     isDeleted: false,
-
-    // Property based on matching
     $or: [
-      // match any of the property expertise categories
-      {
-        expertise: {
-          $in: ['Property & Real Estate'],
-        },
-      },
-
-      // Skills level
-      {
-        skills: {
-          $in: PROPERTY_SKILLS,
-        },
-      },
+      { expertise: { $in: ['Property & Real Estate'] } },
+      { skills: { $in: PROPERTY_SKILLS } },
     ],
-  }
+  };
 
   const usersQuery = new QueryBuilder(
     User.find(filter).select(
-      '_id firstName lastName photoUrl headline followers avgRating ratingCount',
+      '_id firstName lastName photoUrl headline followers avgRating ratingCount'
     ),
     query,
   )
-    // sorting
     .sortByCustom({
       avgRating: -1,
       followers: -1,
       points: -1,
     })
     .paginate()
-    .fields()
+    .fields();
 
-  const result = await usersQuery.modelQuery
-  const meta = await usersQuery.countTotal()
+  const experts = await usersQuery.modelQuery;
 
-  return { meta, result }
-}
+  // Batch totalBookings
+  const expertIds = experts.map(e => e._id);
+  const completedCounts = await Booking.aggregate([
+    {
+      $match: {
+        consult: { $in: expertIds },
+        status: BOOKING_STATUS.completed,
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: '$consult',
+        totalBookings: { $sum: 1 },
+      },
+    },
+  ]);
 
+  const countMap = new Map(completedCounts.map(c => [c._id.toString(), c.totalBookings]));
+  const result = experts.map(expert => ({
+    ...expert.toObject(),
+    totalBookings: countMap.get(expert._id.toString()) || 0,
+  }));
+
+  const meta = await usersQuery.countTotal();
+
+  return { meta, result };
+};
+
+// 3. Top experts
 const getTopExpertsFromDB = async (query: Record<string, unknown>) => {
   const filter = {
     role: USER_ROLE.expert,
     status: USER_STATUS.active,
     isDeleted: false,
     avgRating: { $gte: 4 },
-  }
+  };
 
   const usersQuery = new QueryBuilder(
     User.find(filter).select(
-      '_id firstName lastName photoUrl headline avgRating ratingCount followers',
+      '_id firstName lastName photoUrl headline avgRating ratingCount followers'
     ),
     query,
   )
@@ -322,38 +355,53 @@ const getTopExpertsFromDB = async (query: Record<string, unknown>) => {
       followers: -1,
     })
     .paginate()
-    .fields()
+    .fields();
 
-  const result = await usersQuery.modelQuery
-  const meta = await usersQuery.countTotal()
+  const experts = await usersQuery.modelQuery;
 
-  return { meta, result }
-}
+  const expertIds = experts.map(e => e._id);
+  const completedCounts = await Booking.aggregate([
+    {
+      $match: {
+        consult: { $in: expertIds },
+        status: BOOKING_STATUS.completed,
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: '$consult',
+        totalBookings: { $sum: 1 },
+      },
+    },
+  ]);
 
+  const countMap = new Map(completedCounts.map(c => [c._id.toString(), c.totalBookings]));
+  const result = experts.map(expert => ({
+    ...expert.toObject(),
+    totalBookings: countMap.get(expert._id.toString()) || 0,
+  }));
+
+  const meta = await usersQuery.countTotal();
+
+  return { meta, result };
+};
+
+// 4. Investment experts
 const getInvestmentExperts = async (query: Record<string, unknown>) => {
   const filter = {
     role: USER_ROLE.expert,
     status: USER_STATUS.active,
     isDeleted: false,
-
-    // Fixed categories only — no query params dependency
     $or: [
-      {
-        expertise: {
-          $in: ['Property Investment & Development'],
-        },
-      },
-      {
-        skills: {
-          $in: INVESTMENT_SKILLS,
-        },
-      },
+      { expertise: { $in: ['Property Investment & Development'] } },
+      { skills: { $in: INVESTMENT_SKILLS } },
     ],
-  }
+  };
 
   const queryBuilder = new QueryBuilder(
     User.find(filter).select(
-      '_id firstName lastName photoUrl headline avgRating ratingCount followers',
+      '_id firstName lastName photoUrl headline avgRating ratingCount followers'
     ),
     query,
   )
@@ -364,13 +412,37 @@ const getInvestmentExperts = async (query: Record<string, unknown>) => {
       createdAt: -1,
     })
     .paginate()
-    .fields()
+    .fields();
 
-  const result = await queryBuilder.modelQuery
-  const meta = await queryBuilder.countTotal()
+  const experts = await queryBuilder.modelQuery;
 
-  return { meta, result }
-}
+  const expertIds = experts.map(e => e._id);
+  const completedCounts = await Booking.aggregate([
+    {
+      $match: {
+        consult: { $in: expertIds },
+        status: BOOKING_STATUS.completed,
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: '$consult',
+        totalBookings: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const countMap = new Map(completedCounts.map(c => [c._id.toString(), c.totalBookings]));
+  const result = experts.map(expert => ({
+    ...expert.toObject(),
+    totalBookings: countMap.get(expert._id.toString()) || 0,
+  }));
+
+  const meta = await queryBuilder.countTotal();
+
+  return { meta, result };
+};
 
 const geUserByIdFromDB = async (id: string) => {
   const user = await User.findById(id)
