@@ -24,6 +24,7 @@ import { BOOKING_STATUS } from '../booking/booking.constants'
 import config from '../../config'
 import { sendNotification } from '../../utils/sentNotification'
 import { Follow } from '../connection/connection.models'
+import { ProfileView } from '../profileView/profileView.model'
 
 const registerUserIntoDB = async (
   payload: TUser & { referralCode?: string },
@@ -410,80 +411,101 @@ const getInvestmentExperts = async (userId: string, query: Record<string, unknow
   return { meta, result };
 };
 
-const geUserByIdFromDB = async (userId: string, id: string) => {
-  const user = await User.findById(id)
-    .select(
-      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education isTopExpert pushNotify emailNotify status createdAt',
-    )
-    .lean()
+const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-  if (!user || user.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
-  }
+  try {
+    // 1. Fetch the viewed user
+    const user = await User.findById(viewedUserId)
+      .select(
+        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education isTopExpert pushNotify emailNotify status createdAt'
+      )
+      .lean();
 
-  // Generate referral link
-  const referralLink = `${config.client_url}/signup?ref=${user.referralCode}`
+    if (!user || user.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
+    }
 
-  // Total bookings (all statuses)
-  const totalBookingsCount = await Booking.countDocuments({
-    consult: id,
-  })
-
-  // Completed bookings only
-  const completedBookingsCount = await Booking.countDocuments({
-    consult: id,
-    status: BOOKING_STATUS.completed,
-  })
-
-  // Advising time in hours (only for expert role)
-  let advisingTimeInHours = 0
-  if (user.role === USER_ROLE.expert) {
-    const totalMinutesResult = await Booking.aggregate([
-      {
-        $match: {
-          consult: id,
-          status: BOOKING_STATUS.completed,
+    // 2. Skip view count for the user's own profile
+    if (viewerId === viewedUserId) {
+      // No view count increment for self-view
+    } else {
+      // 3. Increment profile view count (only once per unique viewer)
+      await ProfileView.findOneAndUpdate(
+        {
+          viewer: viewerId,
+          viewedUser: viewedUserId,
         },
-      },
-      {
-        $group: {
-          _id: null,
-          totalMinutes: { $sum: '$sessionDuration' },
+        {
+          $setOnInsert: { viewedAt: new Date() }, // only create if not exists
         },
-      },
-    ])
+        {
+          upsert: true,
+          new: true,
+          session,
+        }
+      );
+    }
 
-    const minutes = totalMinutesResult[0]?.totalMinutes || 0
-    advisingTimeInHours = Number((minutes / 60).toFixed(2))
+    // 4. Calculate other stats (unchanged)
+    const referralLink = `${config.client_url}/signup?ref=${user.referralCode}`;
+
+    const completedBookingsCount = await Booking.countDocuments({
+      consult: viewedUserId,
+      status: BOOKING_STATUS.completed,
+    });
+
+    let advisingTimeInHours = 0;
+    if (user.role === USER_ROLE.expert) {
+      const totalMinutesResult = await Booking.aggregate([
+        { $match: { consult: viewedUserId, status: BOOKING_STATUS.completed } },
+        { $group: { _id: null, totalMinutes: { $sum: '$sessionDuration' } } },
+      ]);
+
+      const minutes = totalMinutesResult[0]?.totalMinutes || 0;
+      advisingTimeInHours = Number((minutes / 60).toFixed(2));
+    }
+
+    const totalBookingsCountAll = await Booking.countDocuments({ consult: viewedUserId });
+    const avgAttendance =
+      totalBookingsCountAll > 0
+        ? Math.min(Math.round((completedBookingsCount / totalBookingsCountAll) * 100), 100)
+        : 0;
+
+    const profileSetupProgress = calculateProfileSetupProgress(user);
+
+    const isFollowing = await Follow.exists({
+      follower: viewerId,
+      following: viewedUserId,
+    });
+
+    // 5. Get total unique profile views (for display)
+    const profileViewCount = await ProfileView.countDocuments({
+      viewedUser: viewedUserId,
+    });
+
+    await session.commitTransaction();
+
+    return {
+      ...user,
+      referralLink,
+      totalBookings: completedBookingsCount,
+      profileSetupProgress,
+      advisingTimeInHours,
+      avgAttendance,
+      isFollowing: !!isFollowing,
+      profileViewCount, // ← New field: total unique views
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    throw error instanceof AppError
+      ? error
+      : new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to fetch user profile');
+  } finally {
+    session.endSession();
   }
-
-  // Average attendance percentage
-  const avgAttendance =
-    totalBookingsCount > 0
-      ? Math.min(
-          Math.round((completedBookingsCount / totalBookingsCount) * 100),
-          100,
-        )
-      : 0
-
-  const profileSetupProgress = calculateProfileSetupProgress(user)
-
-  // Check isFollowing (single check)
-  const isFollowing = await Follow.exists({
-    follower: userId,
-    following: id,
-  });
-
-  return {
-    ...user,
-    referralLink, // added for frontend sharing
-    totalBookings: completedBookingsCount,
-    profileSetupProgress,
-    advisingTimeInHours,
-    avgAttendance,
-    isFollowing: !!isFollowing,
-  }
-}
+};
 
 const changeUserStatusFromDB = async (payload: {
   userId: string

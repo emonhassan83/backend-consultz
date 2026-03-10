@@ -14,7 +14,6 @@ import {
 import { FEED_STATUS, TFeedStatus } from './feed.constant'
 import { TUser } from '../user/user.interface'
 import { USER_ROLE } from '../user/user.constant'
-import { Follow } from '../connection/connection.models'
 import { BlockProfile } from '../blockProfile/blockProfile.models'
 
 const createFeedIntoDB = async (
@@ -82,69 +81,65 @@ const getAllFeedsFromDB = async (
   query: Record<string, unknown>,
   currentUserId: string,
 ) => {
-  // 1. Get current user role to handle admin bypass
   const currentUser = await User.findById(currentUserId).select('role')
   if (!currentUser) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found')
   }
 
-  // 2. Prepare base filter
-  let feedFilter: any = {
-    isDeleted: false,
-  }
+  let feedFilter: any = { isDeleted: false }
 
-  // 3. Apply follow/block logic only for non-admin users
   if (currentUser.role !== USER_ROLE.admin) {
-  const blockedDocs = await BlockProfile.find({
-    blocker: currentUserId,
-  }).select('blocked')
-
-  const blockedIds = blockedDocs.map((doc) => doc.blocked)
-
-  // শুধু blocked users বাদ, follow filter নেই
-  if (blockedIds.length > 0) {
-    feedFilter.author = { $nin: blockedIds }
+    const blockedDocs = await BlockProfile.find({ blocker: currentUserId }).select('blocked')
+    const blockedIds = blockedDocs.map((doc) => doc.blocked)
+    if (blockedIds.length > 0) {
+      feedFilter.author = { $nin: blockedIds }
+    }
   }
-}
 
-  // 4. Get counts for active and restricted feeds (for the filtered scope)
-  const activeCount = await Feed.countDocuments({
-    ...feedFilter,
-    status: FEED_STATUS.active,
-  })
+  // 🔍 Author name search — searchTerm দিয়ে user খুঁজে author filter করো
+  const searchTerm = query?.searchTerm as string
+  if (searchTerm) {
+    const matchingAuthors = await User.find({
+      $or: [
+        { firstName: { $regex: searchTerm, $options: 'i' } },
+        { lastName: { $regex: searchTerm, $options: 'i' } },
+      ],
+    }).select('_id')
 
-  const restrictCount = await Feed.countDocuments({
-    ...feedFilter,
-    status: FEED_STATUS.restrict,
-  })
+    const authorIds = matchingAuthors.map((u) => u._id)
 
-  // 5. Build main query for paginated list
+    // description search + author name search একসাথে
+    feedFilter.$or = [
+      { description: { $regex: searchTerm, $options: 'i' } },
+      { author: { $in: authorIds } },
+    ]
+  }
+
+  const activeCount = await Feed.countDocuments({ ...feedFilter, status: FEED_STATUS.active })
+  const restrictCount = await Feed.countDocuments({ ...feedFilter, status: FEED_STATUS.restrict })
+
+  // searchTerm query থেকে সরিয়ে দাও, নইলে QueryBuilder আবার search করবে
+  const { searchTerm: _, ...restQuery } = query
+
   const feedQuery = new QueryBuilder(
-    Feed.find({
-      ...feedFilter,
-    }).populate([
+    Feed.find({ ...feedFilter }).populate([
       { path: 'author', select: 'firstName lastName headline photoUrl' },
       { path: 'contentMeta', select: 'like comment likeBy' },
     ]),
-    query,
+    restQuery,
   )
-    .search(['description'])
     .filter()
-    .sortByCustom({
-      createdAt: -1,
-    })
+    .sortByCustom({ createdAt: -1 })
     .paginate()
     .fields()
 
   const feedList = await feedQuery.modelQuery
   const meta = await feedQuery.countTotal()
 
-  // 6. Enrich feeds with user-specific info (likes, etc.)
   const enrichedFeedList = await Promise.all(
     feedList.map((feed) => enrichFeedWithUserInfo(feed, currentUserId)),
   )
 
-  // 7. Final response structure
   return {
     meta,
     data: {
