@@ -8,6 +8,7 @@ import { ContentMeta } from '../contentMeta/contentMeta.model'
 import { Feed } from '../feed/feed.model'
 import { User } from '../user/user.model'
 import { Reply } from '../reply/reply.models'
+import { canDeleteComment, canDeleteCommentsBatch } from './comments.utils'
 
 const createComments = async (payload: TComments, userId: string) => {
   const user = await User.findById(userId);
@@ -89,46 +90,108 @@ const createComments = async (payload: TComments, userId: string) => {
   }
 };
 
-const getAllComments = async (query: Record<string, any>) => {
+const getAllComments = async (userId: string, query: Record<string, any>) => {
   const commentsModel = new QueryBuilder(
-    Comments.find().populate([
-      { path: 'user',select: 'firstName lastName photoUrl' },
-      {
-        path: 'reply',
-        select: "user replyRef comment updatedAt",
-        populate: { path: 'user',select: 'firstName lastName photoUrl' },
-      },
-    ]).select('user comment reply updatedAt'),
+    Comments.find()
+      .populate([
+        { path: 'user', select: 'firstName lastName photoUrl' },
+        {
+          path: 'reply',
+          select: 'user replyRef comment updatedAt',
+          populate: { path: 'user', select: 'firstName lastName photoUrl' },
+        },
+      ])
+      .select('user comment reply updatedAt content'), // 'content' for feed reference
     query,
   )
-    .search([''])
+    .search(['comment']) // search on main comment text
     .filter()
     .paginate()
-    .sort()
-    .fields()
+    .sort() // latest first
+    .fields();
 
-  const data = await commentsModel.modelQuery
-  const meta = await commentsModel.countTotal()
+  const comments = await commentsModel.modelQuery;
+  const meta = await commentsModel.countTotal();
+
+  if (!comments || comments.length === 0) {
+    return { data: [], meta };
+  }
+
+  // 1. Batch check delete permission for MAIN comments
+  const commentDeleteMap = await canDeleteCommentsBatch(comments, userId);
+
+  // 2. Collect ALL replies from all comments (flatten)
+  const allReplies = comments.flatMap(comment => 
+    comment.reply.map((reply: any) => ({
+      ...reply.toObject(),
+      parentCommentId: comment._id.toString(), // for reference
+      parentFeedId: comment.content.toString(), // feed reference
+    }))
+  );
+
+  // 3. Batch check delete permission for ALL replies
+  const replyDeleteMap = await canDeleteCommentsBatch(allReplies, userId);
+
+  // 4. Enrich main comments + their replies
+  const enrichedComments = comments.map(comment => {
+    const commentObj = comment.toObject();
+    
+    // Add isDeletable for main comment
+    // @ts-ignore
+    commentObj.isDeletable = commentDeleteMap.get(comment._id.toString()) || false;
+
+    // Enrich replies
+    commentObj.reply = comment.reply.map((reply: any) => ({
+      ...reply.toObject(),
+      isDeletable: replyDeleteMap.get(reply._id.toString()) || false,
+    }));
+
+    return commentObj;
+  });
 
   return {
-    data,
+    data: enrichedComments,
     meta,
-  }
-}
+  };
+};
 
-const getCommentsById = async (id: string) => {
-  const result = await Comments.findById(id).populate([
-    { path: 'user', select: 'firstName lastName photoUrl' },
-    {
-      path: 'reply',
-      populate: { path: 'user', select: 'firstName lastName photoUrl' },
-    },
-  ])
-  if (!result) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Comments not found!')
+const getCommentsById = async (userId: string, commentId: string) => {
+  const comment = await Comments.findById(commentId)
+    .populate([
+      { path: 'user', select: 'firstName lastName photoUrl' },
+      {
+        path: 'reply',
+        select: 'user replyRef comment updatedAt',
+        populate: { path: 'user', select: 'firstName lastName photoUrl' },
+      },
+    ])
+    .select('user comment reply updatedAt content')
+    .lean();
+
+  if (!comment) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Comment not found!');
   }
-  return result
-}
+
+  // Check delete permission for main comment
+  const commentDeletable = await canDeleteComment(comment, userId);
+
+  // Batch check for all replies
+  const replyDeleteMap = await canDeleteCommentsBatch(Array.isArray(comment.reply) ? comment.reply : [], userId);
+
+  // Enrich replies
+  const enrichedReplies = Array.isArray(comment.reply)
+    ? comment.reply.map((reply: any) => ({
+        ...reply,
+        isDeletable: replyDeleteMap.get(reply._id.toString()) || false,
+      }))
+    : [];
+
+  return {
+    ...comment,
+    isDeletable: commentDeletable,
+    reply: enrichedReplies,
+  };
+};
 
 const updateComments = async (
   id: string,

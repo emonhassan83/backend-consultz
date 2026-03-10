@@ -15,7 +15,7 @@ const createComments = catchAsync(async (req: Request, res: Response) => {
 })
 
 const getAllComments = catchAsync(async (req: Request, res: Response) => {
-  const result = await commentsService.getAllComments(req.query)
+  const result = await commentsService.getAllComments(req.user._id, req.query)
 
   sendResponse(res, {
     statusCode: 200,
@@ -29,7 +29,7 @@ const getAllComments = catchAsync(async (req: Request, res: Response) => {
 const getAllCommentsByContent = catchAsync(
   async (req: Request, res: Response) => {
     req.query['content'] = req.params.contentId
-    const result = await commentsService.getAllComments(req.query)
+    const result = await commentsService.getAllComments(req.user._id, req.query)
 
     sendResponse(res, {
       statusCode: 200,
@@ -42,7 +42,7 @@ const getAllCommentsByContent = catchAsync(
 )
 
 const getCommentsById = catchAsync(async (req: Request, res: Response) => {
-  const result = await commentsService.getCommentsById(req.params.id)
+  const result = await commentsService.getCommentsById(req.user._id, req.params.id)
 
   sendResponse(res, {
     statusCode: 200,
