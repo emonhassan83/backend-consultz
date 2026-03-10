@@ -166,7 +166,7 @@ const getAllUsersFromDB = async (query: Record<string, unknown>, currentUserId: 
     ),
     query,
   )
-    .search(['firstName', 'lastName', 'headline', 'expertise'])
+    .search(['firstName', 'lastName'])
     .filter()
     .sort()
     .paginate()
