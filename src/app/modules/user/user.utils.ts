@@ -1,3 +1,5 @@
+import { Types } from 'mongoose';
+import { Follow } from '../connection/connection.models'
 import { modeType } from '../notification/notification.interface'
 import { messages } from '../notification/notification.constant'
 import { TUser } from './user.interface'
@@ -6,6 +8,8 @@ import { sendNotification } from '../../utils/sentNotification'
 import { TUserStatus, USER_ROLE, USER_STATUS } from './user.constant'
 import emailSender from '../../utils/emailSender'
 import config from '../../config'
+import { BOOKING_STATUS } from '../booking/booking.constants';
+import { Booking } from '../booking/booking.models';
 
 export const calculateProfileSetupProgress = (user: any): number => {
   if (!user || !user.role) {
@@ -84,6 +88,66 @@ export const calculateProfileSetupProgress = (user: any): number => {
   const progress = Math.round((filledCount / requiredFields.length) * 100)
   return Math.min(progress, 100)
 }
+
+/**
+ * Batch checks if current user follows multiple target users
+ * @returns Map<targetUserId: string, isFollowing: boolean>
+ */
+export const getFollowingStatusBatch = async (
+  currentUserId: string,
+  targetUserIds: string[] | Types.ObjectId[]
+): Promise<Map<string, boolean>> => {
+  if (!currentUserId || targetUserIds.length === 0) return new Map();
+
+  const normalizedIds = targetUserIds.map(id => new Types.ObjectId(id.toString()));
+
+  const follows = await Follow.find({
+    follower: new Types.ObjectId(currentUserId),
+    following: { $in: normalizedIds },
+  })
+    .select('following')
+    .lean();
+
+  const followingSet = new Set(follows.map(f => f.following.toString()));
+
+  const result = new Map<string, boolean>();
+  normalizedIds.forEach(id => {
+    result.set(id.toString(), followingSet.has(id.toString()));
+  });
+
+  return result;
+};
+
+/**
+ * Batch calculates total completed bookings for multiple experts
+ * @returns Map<expertId: string, totalBookings: number>
+ */
+export const getTotalBookingsBatch = async (
+  expertIds: string[] | Types.ObjectId[]
+): Promise<Map<string, number>> => {
+  if (expertIds.length === 0) return new Map();
+
+  const normalizedIds = expertIds.map(id => new Types.ObjectId(id.toString()));
+
+  const completedCounts = await Booking.aggregate([
+    {
+      $match: {
+        consult: { $in: normalizedIds },
+        status: BOOKING_STATUS.completed,
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: '$consult',
+        totalBookings: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const countMap = new Map(completedCounts.map(c => [c._id.toString(), c.totalBookings]));
+  return countMap;
+};
 
 export const sendUserStatusNotifYToAdmin = async (
   status: 'active' | 'blocked' | 'pending',

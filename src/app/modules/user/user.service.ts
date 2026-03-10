@@ -13,6 +13,8 @@ import {
 import {
   calculateProfileSetupProgress,
   generateUserStatusEmail,
+  getFollowingStatusBatch,
+  getTotalBookingsBatch,
   sendUserStatusNotifYToAdmin,
   sendUserStatusNotifYToUser,
 } from './user.utils'
@@ -21,6 +23,7 @@ import { Booking } from '../booking/booking.models'
 import { BOOKING_STATUS } from '../booking/booking.constants'
 import config from '../../config'
 import { sendNotification } from '../../utils/sentNotification'
+import { Follow } from '../connection/connection.models'
 
 const registerUserIntoDB = async (
   payload: TUser & { referralCode?: string },
@@ -102,15 +105,14 @@ const registerUserIntoDB = async (
   return newUser
 }
 
-const getAllUsersFromDB = async (query: Record<string, unknown>) => {
-  // Base query: only experts, active, not deleted
+const getAllUsersFromDB = async (query: Record<string, unknown>, currentUserId: string) => {
   let baseQuery: FilterQuery<TUser> = {
     isDeleted: false,
     role: USER_ROLE.expert,
     status: USER_STATUS.active,
   };
 
-  // 1. priceRange filter (e.g., 100-120)
+  // Apply all your filters (unchanged)
   if (query.priceRange) {
     const [minStr, maxStr] = (query.priceRange as string).split('-');
     const min = Number(minStr);
@@ -120,25 +122,21 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
     }
   }
 
-  // 2. interests filter (any match in array)
   if (query.interests) {
     const interests = (query.interests as string).split(',');
     baseQuery.interests = { $in: interests.map(i => i.trim()) };
   }
 
-  // 3. learningStyles filter (any match in array)
   if (query.learningStyles) {
     const styles = (query.learningStyles as string).split(',');
     baseQuery.learningStyles = { $in: styles.map(s => s.trim()) };
   }
 
-  // 4. availability filter (any day match)
   if (query.availability) {
     const days = (query.availability as string).split(',');
     baseQuery['availability.day'] = { $in: days.map(d => d.trim().toLowerCase()) };
   }
 
-  // 5. rating filter (range e.g., 3,4 → >=3 and <=4)
   if (query.rating) {
     const [minRatingStr, maxRatingStr] = (query.rating as string).split(',');
     const minRating = Number(minRatingStr);
@@ -151,7 +149,6 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
     }
   }
 
-  // 6. sessionDurations filter (any duration match in array)
   if (query.sessionDurations) {
     const durations = (query.sessionDurations as string)
       .split(',')
@@ -163,7 +160,6 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
     }
   }
 
-  // Build QueryBuilder with the final filter
   const usersQuery = new QueryBuilder(
     User.find(baseQuery).select(
       '_id id firstName lastName email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status isProfileSetup createdAt hourlyRate sessionDurations availability interests learningStyles'
@@ -171,15 +167,28 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
     query,
   )
     .search(['firstName', 'lastName', 'headline', 'expertise'])
-    .filter() // your existing filter for other params
+    .filter()
     .sort()
     .paginate()
     .fields();
 
-  const result = await usersQuery.modelQuery;
+  const experts = await usersQuery.modelQuery;
   const meta = await usersQuery.countTotal();
 
-  // Get active counts (independent of filters)
+  // Batch fetch isFollowing & totalBookings
+  const expertIds = experts.map(e => e._id.toString());
+  const [followingMap, totalBookingsMap] = await Promise.all([
+    getFollowingStatusBatch(currentUserId, expertIds),
+    getTotalBookingsBatch(expertIds),
+  ]);
+
+  // Enrich result
+  const enrichedResult = experts.map(expert => ({
+    ...expert.toObject(),
+    isFollowing: followingMap.get(expert._id.toString()) || false,
+    totalBookings: totalBookingsMap.get(expert._id.toString()) || 0,
+  }));
+
   const activeCounts = await User.aggregate([
     {
       $match: {
@@ -205,7 +214,7 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
       totalUsers: meta.total,
       activeConsult,
       activeExpert,
-      userList: result,
+      userList: enrichedResult,
     },
   };
 };
@@ -247,29 +256,17 @@ const getInterestExpertsFromDB = async (
 
   const experts = await usersQuery.modelQuery;
 
-  // Batch calculate totalBookings for all fetched experts
-  const expertIds = experts.map(e => e._id);
-  const completedCounts = await Booking.aggregate([
-    {
-      $match: {
-        consult: { $in: expertIds },
-        status: BOOKING_STATUS.completed,
-        isDeleted: false,
-      },
-    },
-    {
-      $group: {
-        _id: '$consult',
-        totalBookings: { $sum: 1 },
-      },
-    },
+  // Batch isFollowing + totalBookings
+  const expertIds = experts.map(e => e._id.toString());
+  const [followingMap, totalBookingsMap] = await Promise.all([
+    getFollowingStatusBatch(userId, expertIds),
+    getTotalBookingsBatch(expertIds),
   ]);
 
-  // Map counts to experts
-  const countMap = new Map(completedCounts.map(c => [c._id.toString(), c.totalBookings]));
   const result = experts.map(expert => ({
     ...expert.toObject(),
-    totalBookings: countMap.get(expert._id.toString()) || 0,
+    isFollowing: followingMap.get(expert._id.toString()) || false,
+    totalBookings: totalBookingsMap.get(expert._id.toString()) || 0,
   }));
 
   const meta = await usersQuery.countTotal();
@@ -278,7 +275,7 @@ const getInterestExpertsFromDB = async (
 };
 
 // 2. Property experts
-const getPropertyExpertsFromDB = async (query: Record<string, unknown>) => {
+const getPropertyExpertsFromDB = async (userId: string, query: Record<string, unknown>) => {
   const filter = {
     role: USER_ROLE.expert,
     status: USER_STATUS.active,
@@ -305,28 +302,17 @@ const getPropertyExpertsFromDB = async (query: Record<string, unknown>) => {
 
   const experts = await usersQuery.modelQuery;
 
-  // Batch totalBookings
-  const expertIds = experts.map(e => e._id);
-  const completedCounts = await Booking.aggregate([
-    {
-      $match: {
-        consult: { $in: expertIds },
-        status: BOOKING_STATUS.completed,
-        isDeleted: false,
-      },
-    },
-    {
-      $group: {
-        _id: '$consult',
-        totalBookings: { $sum: 1 },
-      },
-    },
+ // Batch isFollowing + totalBookings
+  const expertIds = experts.map(e => e._id.toString());
+  const [followingMap, totalBookingsMap] = await Promise.all([
+    getFollowingStatusBatch(userId, expertIds),
+    getTotalBookingsBatch(expertIds),
   ]);
 
-  const countMap = new Map(completedCounts.map(c => [c._id.toString(), c.totalBookings]));
   const result = experts.map(expert => ({
     ...expert.toObject(),
-    totalBookings: countMap.get(expert._id.toString()) || 0,
+    isFollowing: followingMap.get(expert._id.toString()) || false,
+    totalBookings: totalBookingsMap.get(expert._id.toString()) || 0,
   }));
 
   const meta = await usersQuery.countTotal();
@@ -335,7 +321,7 @@ const getPropertyExpertsFromDB = async (query: Record<string, unknown>) => {
 };
 
 // 3. Top experts
-const getTopExpertsFromDB = async (query: Record<string, unknown>) => {
+const getTopExpertsFromDB = async (userId: string, query: Record<string, unknown>) => {
   const filter = {
     role: USER_ROLE.expert,
     status: USER_STATUS.active,
@@ -359,27 +345,17 @@ const getTopExpertsFromDB = async (query: Record<string, unknown>) => {
 
   const experts = await usersQuery.modelQuery;
 
-  const expertIds = experts.map(e => e._id);
-  const completedCounts = await Booking.aggregate([
-    {
-      $match: {
-        consult: { $in: expertIds },
-        status: BOOKING_STATUS.completed,
-        isDeleted: false,
-      },
-    },
-    {
-      $group: {
-        _id: '$consult',
-        totalBookings: { $sum: 1 },
-      },
-    },
+  // Batch isFollowing + totalBookings
+  const expertIds = experts.map(e => e._id.toString());
+  const [followingMap, totalBookingsMap] = await Promise.all([
+    getFollowingStatusBatch(userId, expertIds),
+    getTotalBookingsBatch(expertIds),
   ]);
 
-  const countMap = new Map(completedCounts.map(c => [c._id.toString(), c.totalBookings]));
   const result = experts.map(expert => ({
     ...expert.toObject(),
-    totalBookings: countMap.get(expert._id.toString()) || 0,
+    isFollowing: followingMap.get(expert._id.toString()) || false,
+    totalBookings: totalBookingsMap.get(expert._id.toString()) || 0,
   }));
 
   const meta = await usersQuery.countTotal();
@@ -388,7 +364,7 @@ const getTopExpertsFromDB = async (query: Record<string, unknown>) => {
 };
 
 // 4. Investment experts
-const getInvestmentExperts = async (query: Record<string, unknown>) => {
+const getInvestmentExperts = async (userId: string, query: Record<string, unknown>) => {
   const filter = {
     role: USER_ROLE.expert,
     status: USER_STATUS.active,
@@ -416,27 +392,17 @@ const getInvestmentExperts = async (query: Record<string, unknown>) => {
 
   const experts = await queryBuilder.modelQuery;
 
-  const expertIds = experts.map(e => e._id);
-  const completedCounts = await Booking.aggregate([
-    {
-      $match: {
-        consult: { $in: expertIds },
-        status: BOOKING_STATUS.completed,
-        isDeleted: false,
-      },
-    },
-    {
-      $group: {
-        _id: '$consult',
-        totalBookings: { $sum: 1 },
-      },
-    },
+  // Batch isFollowing + totalBookings
+  const expertIds = experts.map(e => e._id.toString());
+  const [followingMap, totalBookingsMap] = await Promise.all([
+    getFollowingStatusBatch(userId, expertIds),
+    getTotalBookingsBatch(expertIds),
   ]);
 
-  const countMap = new Map(completedCounts.map(c => [c._id.toString(), c.totalBookings]));
   const result = experts.map(expert => ({
     ...expert.toObject(),
-    totalBookings: countMap.get(expert._id.toString()) || 0,
+    isFollowing: followingMap.get(expert._id.toString()) || false,
+    totalBookings: totalBookingsMap.get(expert._id.toString()) || 0,
   }));
 
   const meta = await queryBuilder.countTotal();
@@ -444,7 +410,7 @@ const getInvestmentExperts = async (query: Record<string, unknown>) => {
   return { meta, result };
 };
 
-const geUserByIdFromDB = async (id: string) => {
+const geUserByIdFromDB = async (userId: string, id: string) => {
   const user = await User.findById(id)
     .select(
       '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education isTopExpert pushNotify emailNotify status createdAt',
@@ -502,6 +468,12 @@ const geUserByIdFromDB = async (id: string) => {
 
   const profileSetupProgress = calculateProfileSetupProgress(user)
 
+  // Check isFollowing (single check)
+  const isFollowing = await Follow.exists({
+    follower: userId,
+    following: id,
+  });
+
   return {
     ...user,
     referralLink, // added for frontend sharing
@@ -509,6 +481,7 @@ const geUserByIdFromDB = async (id: string) => {
     profileSetupProgress,
     advisingTimeInHours,
     avgAttendance,
+    isFollowing: !!isFollowing,
   }
 }
 

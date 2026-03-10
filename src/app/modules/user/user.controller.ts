@@ -39,10 +39,9 @@ const getInterestExpert = catchAsync(async (req, res) => {
   })
 })
 
-
 // 🔥 Top Experts
 const getTopExperts = catchAsync(async (req, res) => {
-  const result = await UserService.getTopExpertsFromDB(req.query)
+  const result = await UserService.getTopExpertsFromDB(req.user._id, req.query)
 
   sendResponse(res, {
     success: true,
@@ -55,7 +54,7 @@ const getTopExperts = catchAsync(async (req, res) => {
 
 // 🏠 Property Experts
 const getPropertyExperts = catchAsync(async (req, res) => {
-  const result = await UserService.getPropertyExpertsFromDB(req.query)
+  const result = await UserService.getPropertyExpertsFromDB(req.user._id, req.query)
 
   sendResponse(res, {
     success: true,
@@ -68,7 +67,7 @@ const getPropertyExperts = catchAsync(async (req, res) => {
 
 const getInvestmentExperts = catchAsync(async (req, res) => {
   req.query['role'] = USER_ROLE.expert;
-  const result = await UserService.getInvestmentExperts(req.query)
+  const result = await UserService.getInvestmentExperts(req.user._id,req.query)
 
   sendResponse(res, {
     success: true,
@@ -80,7 +79,7 @@ const getInvestmentExperts = catchAsync(async (req, res) => {
 })
 
 const getAllUsers = catchAsync(async (req, res) => {
-  const result = await UserService.getAllUsersFromDB(req.query)
+  const result = await UserService.getAllUsersFromDB(req.query, req.user._id)
 
   sendResponse(res, {
     success: true,
@@ -94,7 +93,7 @@ const getAllUsers = catchAsync(async (req, res) => {
 const getAllExperts = catchAsync(async (req, res) => {
   req.query['role'] = USER_ROLE.expert;
   req.query['status'] = USER_STATUS.active;
-  const result = await UserService.getAllUsersFromDB(req.query)
+  const result = await UserService.getAllUsersFromDB(req.query, req.user._id)
 
   sendResponse(res, {
     success: true,
@@ -106,7 +105,7 @@ const getAllExperts = catchAsync(async (req, res) => {
 })
 
 const getUserById = catchAsync(async (req: Request, res: Response) => {
-  const result = await UserService.geUserByIdFromDB(req.params.id)
+  const result = await UserService.geUserByIdFromDB(req.user._id,req.params.id)
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -117,7 +116,7 @@ const getUserById = catchAsync(async (req: Request, res: Response) => {
 
 const getMyProfile = catchAsync(
   async (req: Request & { user?: any }, res: Response) => {
-    const result = await UserService.geUserByIdFromDB(req?.user?._id)
+    const result = await UserService.geUserByIdFromDB(req?.user?._id, req?.user?._id)
 
     sendResponse(res, {
       success: true,
