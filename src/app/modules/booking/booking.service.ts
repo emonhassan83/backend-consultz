@@ -159,14 +159,20 @@ const createBookings = async (payload: TBookings, userId: string) => {
 
 const getAllBookings = async (query: Record<string, any>) => {
   const bookingModel = new QueryBuilder(
+    // @ts-ignore
     Booking.find({
       isDeleted: false,
-      status: { $ne: BOOKING_STATUS.pending || BOOKING_STATUS.cancelled },
-    }).populate([
-      { path: 'user', select: 'firstName lastName photoUrl email' },
-      { path: 'consult', select: 'firstName lastName photoUrl email' },
-      { path: 'slot', select: 'date time' },
-    ]),
+      // status: { $ne: BOOKING_STATUS.cancelled },
+      paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
+    })
+      .populate([
+        { path: 'user', select: 'firstName lastName photoUrl' },
+        { path: 'consult', select: 'firstName lastName photoUrl' },
+        { path: 'slot', select: 'date time' },
+      ])
+      .select(
+        'user consult slot sessionType sessionDuration price timezone status createdAt',
+      ),
     query,
   )
     .search([''])
@@ -186,8 +192,8 @@ const getBookingsById = async (id: string) => {
     status: { $ne: BOOKING_STATUS.pending || BOOKING_STATUS.cancelled },
     isDeleted: false,
   }).populate([
-    { path: 'user', select: 'firstName lastName photoUrl email' },
-    { path: 'consult', select: 'firstName lastName photoUrl email' },
+    { path: 'user', select: 'firstName lastName photoUrl' },
+    { path: 'consult', select: 'firstName lastName photoUrl' },
     { path: 'slot', select: 'date time' },
   ])
   if (!result) {

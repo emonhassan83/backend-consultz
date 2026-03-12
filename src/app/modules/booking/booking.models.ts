@@ -63,7 +63,7 @@ const bookingsSchema = new Schema<TBookings>(
     paymentStatus: {
       type: String,
       enum: Object.values(PAYMENT_STATUS),
-      default: PAYMENT_STATUS.paid,
+      default: PAYMENT_STATUS.unpaid,
     },
     dmCloseTime: {
       type: Date,

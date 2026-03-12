@@ -113,7 +113,6 @@ const getAllUsersFromDB = async (query: Record<string, unknown>, currentUserId: 
     status: USER_STATUS.active,
   };
 
-  // Apply all your filters (unchanged)
   if (query.priceRange) {
     const [minStr, maxStr] = (query.priceRange as string).split('-');
     const min = Number(minStr);
@@ -121,21 +120,25 @@ const getAllUsersFromDB = async (query: Record<string, unknown>, currentUserId: 
     if (!isNaN(min) && !isNaN(max)) {
       baseQuery.hourlyRate = { $gte: min, $lte: max };
     }
+    delete query.priceRange;
   }
 
   if (query.interests) {
     const interests = (query.interests as string).split(',');
     baseQuery.interests = { $in: interests.map(i => i.trim()) };
+    delete query.interests;
   }
 
   if (query.learningStyles) {
     const styles = (query.learningStyles as string).split(',');
     baseQuery.learningStyles = { $in: styles.map(s => s.trim()) };
+    delete query.learningStyles;
   }
 
   if (query.availability) {
     const days = (query.availability as string).split(',');
     baseQuery['availability.day'] = { $in: days.map(d => d.trim().toLowerCase()) };
+    delete query.availability;
   }
 
   if (query.rating) {
@@ -145,9 +148,10 @@ const getAllUsersFromDB = async (query: Record<string, unknown>, currentUserId: 
     if (!isNaN(minRating)) {
       baseQuery.avgRating = { $gte: minRating };
       if (isFinite(maxRating)) {
-        baseQuery.avgRating.$lte = maxRating;
+        (baseQuery.avgRating as any).$lte = maxRating;
       }
     }
+    delete query.rating;
   }
 
   if (query.sessionDurations) {
@@ -155,10 +159,10 @@ const getAllUsersFromDB = async (query: Record<string, unknown>, currentUserId: 
       .split(',')
       .map(d => Number(d.trim()))
       .filter(n => !isNaN(n));
-
     if (durations.length > 0) {
       baseQuery['sessionDurations.duration'] = { $in: durations };
     }
+    delete query.sessionDurations;
   }
 
   const usersQuery = new QueryBuilder(
@@ -176,14 +180,12 @@ const getAllUsersFromDB = async (query: Record<string, unknown>, currentUserId: 
   const experts = await usersQuery.modelQuery;
   const meta = await usersQuery.countTotal();
 
-  // Batch fetch isFollowing & totalBookings
   const expertIds = experts.map(e => e._id.toString());
   const [followingMap, totalBookingsMap] = await Promise.all([
     getFollowingStatusBatch(currentUserId, expertIds),
     getTotalBookingsBatch(expertIds),
   ]);
 
-  // Enrich result
   const enrichedResult = experts.map(expert => ({
     ...expert.toObject(),
     isFollowing: followingMap.get(expert._id.toString()) || false,

@@ -23,7 +23,7 @@ router.patch(
 router.patch(
   '/completed/:id',
   auth(USER_ROLE.consult, USER_ROLE.expert),
-  zodValidationRequest(BookingsValidation.createValidationSchema),
+  zodValidationRequest(BookingsValidation.completedValidationSchema),
   bookingsController.completedBooking,
 )
 
