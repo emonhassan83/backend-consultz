@@ -189,7 +189,7 @@ const getAllBookings = async (query: Record<string, any>) => {
 const getBookingsById = async (id: string) => {
   const result = await Booking.findOne({
     _id: id,
-    status: { $ne: BOOKING_STATUS.pending || BOOKING_STATUS.cancelled },
+    paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
     isDeleted: false,
   }).populate([
     { path: 'user', select: 'firstName lastName photoUrl' },
