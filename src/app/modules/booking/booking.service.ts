@@ -1,7 +1,9 @@
 import dayjs from 'dayjs'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
+dayjs.extend(customParseFormat)
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
-import mongoose, { ClientSession } from 'mongoose'
+import mongoose, { ClientSession, Types } from 'mongoose'
 import httpStatus from 'http-status'
 import { TBookings } from './booking.interface'
 import { BOOKING_STATUS, PAYMENT_STATUS } from './booking.constants'
@@ -20,6 +22,7 @@ import {
   sendSessionCompletedToConsultant,
 } from '../../utils/emailNotify'
 import { sendNotification } from '../../utils/sentNotification'
+import { addDays, endOfDay, endOfMonth, endOfWeek, startOfDay, startOfMonth, startOfWeek, parse, format } from 'date-fns'
 dayjs.extend(utc)
 dayjs.extend(timezone)
 
@@ -162,7 +165,6 @@ const getAllBookings = async (query: Record<string, any>) => {
     // @ts-ignore
     Booking.find({
       isDeleted: false,
-      // status: { $ne: BOOKING_STATUS.cancelled },
       paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
     })
       .populate([
@@ -185,6 +187,118 @@ const getAllBookings = async (query: Record<string, any>) => {
 
   return { data, meta }
 }
+
+const getAllBookingsByDate = async (query: Record<string, any>) => {
+  const { filterType, date } = query;
+
+  let startDate: Date | null = null;
+  let endDate: Date | null = null;
+  let dateFilter: any = {};
+
+  const now = new Date();
+
+  // 1️⃣ Handle different filter types
+  if (filterType === 'today') {
+    startDate = startOfDay(now);
+    endDate = endOfDay(now);
+  } 
+  else if (filterType === 'tomorrow') {
+    const tomorrow = addDays(now, 1);
+    startDate = startOfDay(tomorrow);
+    endDate = endOfDay(tomorrow);
+  } 
+  else if (filterType === 'week') {
+    startDate = startOfWeek(now, { weekStartsOn: 1 }); // Monday start
+    endDate = endOfWeek(now, { weekStartsOn: 1 });
+  } 
+  else if (filterType === 'month') {
+    startDate = startOfMonth(now);
+    endDate = endOfMonth(now);
+  } 
+  else if (date) {
+    // Custom date filter: "14-03-2026" format
+    const parsedDate = parse(date, 'dd-MM-yyyy', new Date());
+    startDate = startOfDay(parsedDate);
+    endDate = endOfDay(parsedDate);
+  }
+
+  // 2️⃣ Build date range for slot.date (string format "DD-MM-YYYY")
+  let dateStrings: string[] = [];
+  
+  if (startDate && endDate) {
+    const current = new Date(startDate);
+    while (current <= endDate) {
+      dateStrings.push(format(current, 'dd-MM-yyyy'));
+      current.setDate(current.getDate() + 1);
+    }
+  }
+
+  // 3️⃣ Fetch bookings
+  const bookingModel = new QueryBuilder(
+    // @ts-ignore
+    Booking.find({
+      isDeleted: false,
+      paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
+    })
+      .populate([
+        { path: 'user', select: 'firstName lastName photoUrl' },
+        { path: 'consult', select: 'firstName lastName photoUrl' },
+        { path: 'slot', select: 'date time' },
+      ])
+      .select(
+        'user consult slot sessionType sessionDuration price timezone status createdAt',
+      ),
+    query,
+  )
+    .search([''])
+    .filter()
+    .paginate()
+    .sort();
+
+  let bookings: any = await bookingModel?.modelQuery;
+
+  // 4️⃣ Filter by date strings if filter applied
+  if (dateStrings.length > 0) {
+    bookings = bookings.filter((booking: any) => {
+      return dateStrings.includes(booking?.slot?.date);
+    });
+  }
+
+  const meta = await bookingModel?.countTotal();
+
+  // 5️⃣ Group by date
+  const groupedByDate: Record<string, any[]> = {};
+
+  bookings.forEach((booking: any) => {
+    const bookingDate = booking?.slot?.date;
+    if (!bookingDate) return;
+
+    if (!groupedByDate[bookingDate]) {
+      groupedByDate[bookingDate] = [];
+    }
+    groupedByDate[bookingDate].push(booking);
+  });
+
+  // 6️⃣ Format response
+  const formattedData = Object.keys(groupedByDate)
+    .sort((a, b) => {
+      const dateA = parse(a, 'dd-MM-yyyy', new Date());
+      const dateB = parse(b, 'dd-MM-yyyy', new Date());
+      return dateA.getTime() - dateB.getTime();
+    })
+    .map((date) => ({
+      date,
+      bookingList: groupedByDate[date],
+    }));
+
+  return { 
+    data: formattedData, 
+    meta: {
+      ...meta,
+      total: bookings.length,
+    }
+  };
+};
 
 const getBookingsById = async (id: string) => {
   const result = await Booking.findOne({
@@ -819,6 +933,7 @@ const deleteBookings = async (id: string) => {
 export const bookingsService = {
   createBookings,
   getAllBookings,
+  getAllBookingsByDate,
   getBookingsById,
   deleteBookings,
   cancelBooking,

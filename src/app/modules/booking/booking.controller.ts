@@ -49,6 +49,30 @@ const getAllBookings = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
+const getExpertBookingsByDate = catchAsync(async (req: Request, res: Response) => {
+  req.query['consult'] = req.user._id
+  const result = await bookingsService.getAllBookingsByDate(req.query)
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'All bookings by date fetched successfully',
+    meta: result.meta,
+    data: result.data,
+  })
+})
+
+const getConsultBookingsByDate = catchAsync(async (req: Request, res: Response) => {
+  req.query['user'] = req.user._id
+  const result = await bookingsService.getAllBookingsByDate(req.query)
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'All bookings by date fetched successfully',
+    meta: result.meta,
+    data: result.data,
+  })
+})
+
 const getBookingsById = catchAsync(async (req: Request, res: Response) => {
   const result = await bookingsService.getBookingsById(req.params.id)
   sendResponse(res, {
@@ -129,6 +153,8 @@ const deleteBookings = catchAsync(async (req: Request, res: Response) => {
 export const bookingsController = {
   createBookings,
   getAllBookings,
+  getExpertBookingsByDate,
+  getConsultBookingsByDate,
   getBookingsById,
   deleteBookings,
   getConsultBookings,

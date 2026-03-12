@@ -302,6 +302,7 @@ const getInterestExpertsFromDB = async (
 // 2. Property experts
 const getPropertyExpertsFromDB = async (userId: string, query: Record<string, unknown>) => {
   const filter = {
+    _id: { $ne: new Types.ObjectId(userId) },
     role: USER_ROLE.expert,
     status: USER_STATUS.active,
     isDeleted: false,
@@ -348,6 +349,7 @@ const getPropertyExpertsFromDB = async (userId: string, query: Record<string, un
 // 3. Top experts
 const getTopExpertsFromDB = async (userId: string, query: Record<string, unknown>) => {
   const filter = {
+    _id: { $ne: new Types.ObjectId(userId) },
     role: USER_ROLE.expert,
     status: USER_STATUS.active,
     isDeleted: false,
@@ -391,6 +393,7 @@ const getTopExpertsFromDB = async (userId: string, query: Record<string, unknown
 // 4. Investment experts
 const getInvestmentExperts = async (userId: string, query: Record<string, unknown>) => {
   const filter = {
+    _id: { $ne: new Types.ObjectId(userId) },
     role: USER_ROLE.expert,
     status: USER_STATUS.active,
     isDeleted: false,
