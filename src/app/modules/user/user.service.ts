@@ -113,6 +113,7 @@ const getAllUsersFromDB = async (query: Record<string, unknown>, currentUserId: 
     status: USER_STATUS.active,
   };
 
+  // 1. priceRange → hourlyRate range filter (e.g. 100-120)
   if (query.priceRange) {
     const [minStr, maxStr] = (query.priceRange as string).split('-');
     const min = Number(minStr);
@@ -123,42 +124,63 @@ const getAllUsersFromDB = async (query: Record<string, unknown>, currentUserId: 
     delete query.priceRange;
   }
 
+  // 2. interests → multiple comma separated (e.g. abc,bcd)
   if (query.interests) {
-    const interests = (query.interests as string).split(',');
-    baseQuery.interests = { $in: interests.map(i => i.trim()) };
+    const interests = (query.interests as string)
+      .split(',')
+      .map(i => i.trim())
+      .filter(Boolean);
+    if (interests.length > 0) {
+      baseQuery.interests = { $in: interests };
+    }
     delete query.interests;
   }
 
+  // 3. learningStyles → multiple comma separated (e.g. ayasb,CSD)
   if (query.learningStyles) {
-    const styles = (query.learningStyles as string).split(',');
-    baseQuery.learningStyles = { $in: styles.map(s => s.trim()) };
+    const styles = (query.learningStyles as string)
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (styles.length > 0) {
+      baseQuery.learningStyles = { $in: styles };
+    }
     delete query.learningStyles;
   }
 
+  // 4. availability → match on availability.day (e.g. sat,sun)
   if (query.availability) {
-    const days = (query.availability as string).split(',');
-    baseQuery['availability.day'] = { $in: days.map(d => d.trim().toLowerCase()) };
+    const days = (query.availability as string)
+      .split(',')
+      .map(d => d.trim().toLowerCase())
+      .filter(Boolean);
+    if (days.length > 0) {
+      baseQuery['availability.day'] = { $in: days };
+    }
     delete query.availability;
   }
 
+  // 5. rating → multiple specific ratings (e.g. 5,4,3)
+  // avgRating >= min of selected ratings
   if (query.rating) {
-    const [minRatingStr, maxRatingStr] = (query.rating as string).split(',');
-    const minRating = Number(minRatingStr);
-    const maxRating = Number(maxRatingStr) || Infinity;
-    if (!isNaN(minRating)) {
-      baseQuery.avgRating = { $gte: minRating };
-      if (isFinite(maxRating)) {
-        (baseQuery.avgRating as any).$lte = maxRating;
-      }
+    const ratings = (query.rating as string)
+      .split(',')
+      .map(r => Number(r.trim()))
+      .filter(n => !isNaN(n) && n > 0);
+    if (ratings.length > 0) {
+      const minRating = Math.min(...ratings);
+      const maxRating = Math.max(...ratings);
+      baseQuery.avgRating = { $gte: minRating, $lte: maxRating + 0.99 };
     }
     delete query.rating;
   }
 
+  // 6. sessionDurations → match on sessionDurations.duration (e.g. 15,30)
   if (query.sessionDurations) {
     const durations = (query.sessionDurations as string)
       .split(',')
       .map(d => Number(d.trim()))
-      .filter(n => !isNaN(n));
+      .filter(n => !isNaN(n) && n > 0);
     if (durations.length > 0) {
       baseQuery['sessionDurations.duration'] = { $in: durations };
     }
