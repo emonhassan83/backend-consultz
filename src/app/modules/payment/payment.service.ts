@@ -17,6 +17,7 @@ import {
   sendNewBookingToConsultant,
   sendPaymentSuccessToUser,
 } from '../../utils/emailNotify'
+import { Contents } from '../contents/contents.models'
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2025-02-24.acacia',
@@ -38,9 +39,22 @@ const createPaymentIntent = async (payload: IPaymentIntent) => {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found')
   }
 
+  // consultationFee fetch করো
+  const contents = await Contents.findOne({ isDeleted: false }).select(
+    'consultationFee',
+  )
+  const consultationFeePercent = contents?.consultationFee || 0
+
+  // Commission calculate করো
+  const amount = booking.price
+  const platformCommission = parseFloat(
+    ((amount * consultationFeePercent) / 100).toFixed(2),
+  )
+  const consultAmount = parseFloat((amount - platformCommission).toFixed(2))
+
   // Create payment Intent
   const paymentIntent = await stripe.paymentIntents.create({
-    amount: booking.price * 100,
+    amount: amount * 100,
     currency: 'usd',
     payment_method_types: ['card'],
     metadata: {
@@ -54,8 +68,10 @@ const createPaymentIntent = async (payload: IPaymentIntent) => {
   await Payment.findOneAndUpdate(
     { booking: bookingId, isPaid: false },
     {
-      user: userId,
-      amount: booking.price,
+      account: userId,
+      amount,
+      platformCommission,
+      consultAmount,
       paymentIntentId: paymentIntent.id,
       status: PAYMENT_STATUS.unpaid,
     },

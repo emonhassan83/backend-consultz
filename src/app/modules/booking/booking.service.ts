@@ -1,9 +1,8 @@
 import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
-dayjs.extend(customParseFormat)
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
-import mongoose, { ClientSession, Types } from 'mongoose'
+import mongoose from 'mongoose'
 import httpStatus from 'http-status'
 import { TBookings } from './booking.interface'
 import { BOOKING_STATUS, PAYMENT_STATUS } from './booking.constants'
@@ -22,7 +21,7 @@ import {
   sendSessionCompletedToConsultant,
 } from '../../utils/emailNotify'
 import { sendNotification } from '../../utils/sentNotification'
-import { addDays, endOfDay, endOfMonth, endOfWeek, startOfDay, startOfMonth, startOfWeek, parse, format } from 'date-fns'
+dayjs.extend(customParseFormat)
 dayjs.extend(utc)
 dayjs.extend(timezone)
 
@@ -189,116 +188,109 @@ const getAllBookings = async (query: Record<string, any>) => {
 }
 
 const getAllBookingsByDate = async (query: Record<string, any>) => {
-  const { filterType, date } = query;
+  const { filterType, date, ...restQuery } = query
 
-  let startDate: Date | null = null;
-  let endDate: Date | null = null;
-  let dateFilter: any = {};
+  let targetDates: string[] = []
+  const today = dayjs()
 
-  const now = new Date();
-
-  // 1️⃣ Handle different filter types
-  if (filterType === 'today') {
-    startDate = startOfDay(now);
-    endDate = endOfDay(now);
-  } 
-  else if (filterType === 'tomorrow') {
-    const tomorrow = addDays(now, 1);
-    startDate = startOfDay(tomorrow);
-    endDate = endOfDay(tomorrow);
-  } 
-  else if (filterType === 'week') {
-    startDate = startOfWeek(now, { weekStartsOn: 1 }); // Monday start
-    endDate = endOfWeek(now, { weekStartsOn: 1 });
-  } 
-  else if (filterType === 'month') {
-    startDate = startOfMonth(now);
-    endDate = endOfMonth(now);
-  } 
-  else if (date) {
-    // Custom date filter: "14-03-2026" format
-    const parsedDate = parse(date, 'dd-MM-yyyy', new Date());
-    startDate = startOfDay(parsedDate);
-    endDate = endOfDay(parsedDate);
+  // date দেওয়া থাকলে সবসময় single date filter
+  if (date) {
+    const parsed = dayjs(date, 'DD-MM-YYYY')
+    if (!parsed.isValid()) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid date format. Use DD-MM-YYYY')
+    }
+    targetDates = [parsed.format('YYYY-MM-DD')]
+  } else if (filterType === 'today') {
+    targetDates = [today.format('YYYY-MM-DD')]
+  } else if (filterType === 'yesterday') {
+    targetDates = [today.subtract(1, 'day').format('YYYY-MM-DD')]
+  } else if (filterType === 'week') {
+    const startOfWeek = today.startOf('week')
+    for (let i = 0; i < 7; i++) {
+      targetDates.push(startOfWeek.add(i, 'day').format('YYYY-MM-DD'))
+    }
+  } else if (filterType === 'month') {
+    const startOfMonth = today.startOf('month')
+    const daysInMonth = today.daysInMonth()
+    for (let i = 0; i < daysInMonth; i++) {
+      targetDates.push(startOfMonth.add(i, 'day').format('YYYY-MM-DD'))
+    }
+  } else {
+    // default → today
+    targetDates = [today.format('YYYY-MM-DD')]
   }
 
-  // 2️⃣ Build date range for slot.date (string format "DD-MM-YYYY")
-  let dateStrings: string[] = [];
-  
-  if (startDate && endDate) {
-    const current = new Date(startDate);
-    while (current <= endDate) {
-      dateStrings.push(format(current, 'dd-MM-yyyy'));
-      current.setDate(current.getDate() + 1);
+  // Slot ids বের করো
+  const matchingSlots = await BookingSlots.find({
+    date: { $in: targetDates },
+  }).select('_id')
+
+  const slotIds = matchingSlots.map(s => s._id)
+
+  // Slot না থাকলে early return
+  if (slotIds.length === 0) {
+    if (targetDates.length === 1) {
+      return {
+        data: {
+          date: dayjs(targetDates[0]).format('DD-MM-YYYY'),
+          bookingList: [],
+        },
+      }
+    }
+    return {
+      data: targetDates.map(d => ({
+        date: dayjs(d).format('DD-MM-YYYY'),
+        bookingList: [],
+      })),
     }
   }
 
-  // 3️⃣ Fetch bookings
-  const bookingModel = new QueryBuilder(
-    // @ts-ignore
-    Booking.find({
-      isDeleted: false,
-      paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
-    })
-      .populate([
-        { path: 'user', select: 'firstName lastName photoUrl' },
-        { path: 'consult', select: 'firstName lastName photoUrl' },
-        { path: 'slot', select: 'date time' },
-      ])
-      .select(
-        'user consult slot sessionType sessionDuration price timezone status createdAt',
-      ),
-    query,
-  )
-    .search([''])
-    .filter()
-    .paginate()
-    .sort();
+  // Booking fetch করো
+  const bookings: any[] = await Booking.find({
+    isDeleted: false,
+    paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
+    slot: { $in: slotIds },
+  })
+    .populate([
+      { path: 'user', select: 'firstName lastName photoUrl' },
+      { path: 'consult', select: 'firstName lastName photoUrl' },
+      { path: 'slot', select: 'date time' },
+    ])
+    .select('user consult slot sessionType sessionDuration price timezone status createdAt')
+    .sort({ createdAt: -1 })
 
-  let bookings: any = await bookingModel?.modelQuery;
-
-  // 4️⃣ Filter by date strings if filter applied
-  if (dateStrings.length > 0) {
-    bookings = bookings.filter((booking: any) => {
-      return dateStrings.includes(booking?.slot?.date);
-    });
+  // Single date → simple response
+  if (targetDates.length === 1) {
+    return {
+      data: {
+        date: dayjs(targetDates[0]).format('DD-MM-YYYY'),
+        bookingList: bookings,
+      },
+    }
   }
 
-  const meta = await bookingModel?.countTotal();
+  // Multiple dates → grouped response
+  const groupedByDate: Record<string, any[]> = {}
+  for (const d of targetDates) {
+    groupedByDate[d] = []
+  }
 
-  // 5️⃣ Group by date
-  const groupedByDate: Record<string, any[]> = {};
-
-  bookings.forEach((booking: any) => {
-    const bookingDate = booking?.slot?.date;
-    if (!bookingDate) return;
-
-    if (!groupedByDate[bookingDate]) {
-      groupedByDate[bookingDate] = [];
+  for (const booking of bookings) {
+    const slotDate = booking?.slot?.date
+    if (slotDate && groupedByDate[slotDate] !== undefined) {
+      groupedByDate[slotDate].push(booking)
     }
-    groupedByDate[bookingDate].push(booking);
-  });
+  }
 
-  // 6️⃣ Format response
   const formattedData = Object.keys(groupedByDate)
-    .sort((a, b) => {
-      const dateA = parse(a, 'dd-MM-yyyy', new Date());
-      const dateB = parse(b, 'dd-MM-yyyy', new Date());
-      return dateA.getTime() - dateB.getTime();
-    })
-    .map((date) => ({
-      date,
-      bookingList: groupedByDate[date],
-    }));
+    .sort()
+    .map(d => ({
+      date: dayjs(d).format('DD-MM-YYYY'),
+      bookingList: groupedByDate[d],
+    }))
 
-  return { 
-    data: formattedData, 
-    meta: {
-      ...meta,
-      total: bookings.length,
-    }
-  };
-};
+  return { data: formattedData }
+}
 
 const getBookingsById = async (id: string) => {
   const result = await Booking.findOne({

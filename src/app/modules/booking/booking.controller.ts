@@ -56,7 +56,6 @@ const getExpertBookingsByDate = catchAsync(async (req: Request, res: Response) =
     statusCode: 200,
     success: true,
     message: 'All bookings by date fetched successfully',
-    meta: result.meta,
     data: result.data,
   })
 })
@@ -68,7 +67,6 @@ const getConsultBookingsByDate = catchAsync(async (req: Request, res: Response) 
     statusCode: 200,
     success: true,
     message: 'All bookings by date fetched successfully',
-    meta: result.meta,
     data: result.data,
   })
 })
