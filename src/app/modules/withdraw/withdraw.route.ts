@@ -9,7 +9,7 @@ const router = express.Router()
 
 router.post(
   '/',
-  auth(USER_ROLE.consult),
+  auth(USER_ROLE.expert),
   zodValidationRequest(WithdrawValidation.createValidationSchema),
   WithdrawControllers.addWithdraw,
 )

@@ -55,17 +55,20 @@ export const sendWithdrawNotify = async (
 /**
  * Get total completed withdrawals for the current month (no year/month filter needed)
  */
-export const getThisMonthWithdraw = async (userId: string): Promise<number> => {
-  const currentMonthStart = dayjs().startOf('month').toDate();
-  const currentMonthEnd = dayjs().endOf('month').toDate();
+export const getThisMonthWithdraw = async (userId: string) => {
+  const now = dayjs()
+  const startOfMonth = now.startOf('month').toDate()
+  const endOfMonth = now.endOf('month').toDate()
 
   const result = await Withdraw.aggregate([
     {
       $match: {
         user: new Types.ObjectId(userId),
-        status: WITHDRAW_STATUS.completed,
-        isDeleted: false,
-        createdAt: { $gte: currentMonthStart, $lte: currentMonthEnd },
+        status: { $in: [WITHDRAW_STATUS.completed, WITHDRAW_STATUS.proceed] },
+        createdAt: {
+          $gte: startOfMonth,
+          $lte: endOfMonth,
+        },
       },
     },
     {
@@ -74,31 +77,30 @@ export const getThisMonthWithdraw = async (userId: string): Promise<number> => {
         total: { $sum: '$amount' },
       },
     },
-  ]);
+  ])
 
-  return result[0]?.total || 0;
-};
+  return result[0]?.total || 0
+}
 
 /**
  * Get monthly withdrawal overview for a specific year (returns array like [{month: "January", amount: 100}, ...])
  * @param userId - Consultant's user ID
  * @param year - Year to filter (defaults to current year)
  */
-export const getWithdrawMonthlyOverview = async (
-  userId: string,
-  year?: number
-): Promise<Array<{ month: string; amount: number }>> => {
-  const selectedYear = year || dayjs().year();
-  const yearStart = dayjs(`${selectedYear}-01-01`).startOf('year').toDate();
-  const yearEnd = dayjs(`${selectedYear}-12-31`).endOf('year').toDate();
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 
-  const monthlyData = await Withdraw.aggregate([
+export const getWithdrawMonthlyOverview = async (userId: string, year?: number) => {
+  const selectedYear = year || dayjs().year()
+
+  const result = await Withdraw.aggregate([
     {
       $match: {
         user: new Types.ObjectId(userId),
-        status: WITHDRAW_STATUS.completed,
-        isDeleted: false,
-        createdAt: { $gte: yearStart, $lte: yearEnd },
+        status: { $in: [WITHDRAW_STATUS.completed, WITHDRAW_STATUS.proceed] },
+        createdAt: {
+          $gte: new Date(`${selectedYear}-01-01`),
+          $lt: new Date(`${selectedYear + 1}-01-01`),
+        },
       },
     },
     {
@@ -107,33 +109,11 @@ export const getWithdrawMonthlyOverview = async (
         amount: { $sum: '$amount' },
       },
     },
-    {
-      $project: {
-        month: {
-          $switch: {
-            branches: [
-              { case: { $eq: ['$_id', 1] }, then: 'January' },
-              { case: { $eq: ['$_id', 2] }, then: 'February' },
-              { case: { $eq: ['$_id', 3] }, then: 'March' },
-              { case: { $eq: ['$_id', 4] }, then: 'April' },
-              { case: { $eq: ['$_id', 5] }, then: 'May' },
-              { case: { $eq: ['$_id', 6] }, then: 'June' },
-              { case: { $eq: ['$_id', 7] }, then: 'July' },
-              { case: { $eq: ['$_id', 8] }, then: 'August' },
-              { case: { $eq: ['$_id', 9] }, then: 'September' },
-              { case: { $eq: ['$_id', 10] }, then: 'October' },
-              { case: { $eq: ['$_id', 11] }, then: 'November' },
-              { case: { $eq: ['$_id', 12] }, then: 'December' },
-            ],
-            default: 'Unknown',
-          },
-        },
-        amount: 1,
-        _id: 0,
-      },
-    },
-    { $sort: { _id: 1 } }, // Sort by internal month number
-  ]);
+  ])
 
-  return monthlyData;
-};
+  // সব 12 মাস fill করো
+  return MONTHS.map((month, i) => ({
+    month,
+    amount: result.find(r => r._id === i + 1)?.amount || 0,
+  }))
+}
