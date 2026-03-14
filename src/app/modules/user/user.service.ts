@@ -438,12 +438,23 @@ const getInvestmentExperts = async (userId: string, query: Record<string, unknow
   return { meta, result };
 };
 
+const enrichSessionDurationsWithPrice = (
+  sessionDurations: any[],
+  hourlyRate: number,
+) => {
+  return sessionDurations.map(session => ({
+    ...session,
+    price: session.offeredPrice > 0
+      ? session.offeredPrice
+      : parseFloat(((hourlyRate / 60) * session.duration).toFixed(2)),
+  }))
+}
+
 const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    // 1. Fetch the viewed user
     const user = await User.findById(viewedUserId)
       .select(
         '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education isTopExpert pushNotify emailNotify status createdAt'
@@ -454,18 +465,16 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
     }
 
-    // 2. Skip view count for the user's own profile
     if (viewerId === viewedUserId) {
       // No view count increment for self-view
     } else {
-      // 3. Increment profile view count (only once per unique viewer)
       await ProfileView.findOneAndUpdate(
         {
           viewer: viewerId,
           viewedUser: viewedUserId,
         },
         {
-          $setOnInsert: { viewedAt: new Date() }, // only create if not exists
+          $setOnInsert: { viewedAt: new Date() },
         },
         {
           upsert: true,
@@ -475,7 +484,6 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       );
     }
 
-    // 4. Calculate other stats (unchanged)
     const referralLink = `${config.client_url}/signup?ref=${user.referralCode}`;
 
     const completedBookingsCount = await Booking.countDocuments({
@@ -507,22 +515,28 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       following: viewedUserId,
     });
 
-    // 5. Get total unique profile views (for display)
     const profileViewCount = await ProfileView.countDocuments({
       viewedUser: viewedUserId,
     });
+
+    // ✅ sessionDurations এ price add করো
+    const sessionDurationsWithPrice = enrichSessionDurationsWithPrice(
+      user.sessionDurations || [],
+      user.hourlyRate || 0,
+    )
 
     await session.commitTransaction();
 
     return {
       ...user,
+      sessionDurations: sessionDurationsWithPrice, // ✅ enriched
       referralLink,
       totalBookings: completedBookingsCount,
       profileSetupProgress,
       advisingTimeInHours,
       avgAttendance,
       isFollowing: !!isFollowing,
-      profileViewCount, // ← New field: total unique views
+      profileViewCount,
     };
   } catch (error) {
     await session.abortTransaction();

@@ -134,16 +134,18 @@ const getConsultWithdrawsFromDB = async (
     throw new AppError(httpStatus.NOT_FOUND, 'Expert profile not found!')
   }
 
-  // 1. This month total (always current month)
   const thisMonthWithdraw = await getThisMonthWithdraw(userId)
 
-  // 2. Monthly overview (year filterable via query.year)
   const withdrawOverview = await getWithdrawMonthlyOverview(
     userId,
     query.year ? parseInt(query.year as string, 10) : undefined,
   )
 
-  // 3. Paginated withdraw list (supports year/month via QueryBuilder)
+  // ✅ QueryBuilder এ যাওয়ার আগে custom fields delete করো
+  const listQuery = { ...query }
+  delete listQuery.year
+  delete listQuery.month
+
   const withdrawQuery = new QueryBuilder(
     Withdraw.find({ user: userId })
       .populate([
@@ -154,9 +156,9 @@ const getConsultWithdrawsFromDB = async (
         },
       ])
       .sort({ createdAt: -1 }),
-    query,
+    listQuery, // ✅ cleaned query
   )
-    .filter() // Your QueryBuilder already supports year/month filtering
+    .filter()
     .sort()
     .paginate()
     .fields()

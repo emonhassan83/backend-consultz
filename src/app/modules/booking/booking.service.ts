@@ -21,6 +21,8 @@ import {
   sendSessionCompletedToConsultant,
 } from '../../utils/emailNotify'
 import { sendNotification } from '../../utils/sentNotification'
+import isoWeek from 'dayjs/plugin/isoWeek'
+dayjs.extend(isoWeek)
 dayjs.extend(customParseFormat)
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -202,10 +204,18 @@ const getAllBookingsByDate = async (query: Record<string, any>) => {
     targetDates = [parsed.format('YYYY-MM-DD')]
   } else if (filterType === 'today') {
     targetDates = [today.format('YYYY-MM-DD')]
-  } else if (filterType === 'yesterday') {
-    targetDates = [today.subtract(1, 'day').format('YYYY-MM-DD')]
+  } else if (filterType === 'tomorrow') {
+    // ✅ yesterday → tomorrow
+    targetDates = [today.add(1, 'day').format('YYYY-MM-DD')]
+  } else if (filterType === 'day') {
+    // ✅ today + tomorrow দুটো দেখাবে
+    targetDates = [
+      today.format('YYYY-MM-DD'),
+      today.add(1, 'day').format('YYYY-MM-DD'),
+    ]
   } else if (filterType === 'week') {
-    const startOfWeek = today.startOf('week')
+    // ✅ Monday থেকে week শুরু (isoWeek = Monday start)
+    const startOfWeek = today.startOf('isoWeek')
     for (let i = 0; i < 7; i++) {
       targetDates.push(startOfWeek.add(i, 'day').format('YYYY-MM-DD'))
     }
@@ -216,7 +226,7 @@ const getAllBookingsByDate = async (query: Record<string, any>) => {
       targetDates.push(startOfMonth.add(i, 'day').format('YYYY-MM-DD'))
     }
   } else {
-    // default → today
+    // ✅ default → today
     targetDates = [today.format('YYYY-MM-DD')]
   }
 
