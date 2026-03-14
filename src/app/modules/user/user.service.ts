@@ -25,6 +25,7 @@ import config from '../../config'
 import { sendNotification } from '../../utils/sentNotification'
 import { Follow } from '../connection/connection.models'
 import { ProfileView } from '../profileView/profileView.model'
+import dayjs from 'dayjs'
 
 const registerUserIntoDB = async (
   payload: TUser & { referralCode?: string },
@@ -107,85 +108,72 @@ const registerUserIntoDB = async (
 }
 
 const getAllUsersFromDB = async (query: Record<string, unknown>, currentUserId: string) => {
-  let baseQuery: FilterQuery<TUser> = {
+  // Base filter — সবসময় apply হবে
+  const mustMatch: FilterQuery<TUser> = {
     isDeleted: false,
     role: USER_ROLE.expert,
     status: USER_STATUS.active,
   };
 
-  // 1. priceRange → hourlyRate range filter (e.g. 100-120)
+  // Optional conditions — যেকোনো একটা match করলেই চলবে
+  const orConditions: FilterQuery<TUser>[] = [];
+
   if (query.priceRange) {
     const [minStr, maxStr] = (query.priceRange as string).split('-');
     const min = Number(minStr);
     const max = Number(maxStr);
     if (!isNaN(min) && !isNaN(max)) {
-      baseQuery.hourlyRate = { $gte: min, $lte: max };
+      orConditions.push({ hourlyRate: { $gte: min, $lte: max } });
     }
     delete query.priceRange;
   }
 
-  // 2. interests → multiple comma separated (e.g. abc,bcd)
   if (query.interests) {
-    const interests = (query.interests as string)
-      .split(',')
-      .map(i => i.trim())
-      .filter(Boolean);
+    const interests = (query.interests as string).split(',').map(i => i.trim()).filter(Boolean);
     if (interests.length > 0) {
-      baseQuery.interests = { $in: interests };
+      orConditions.push({ interests: { $in: interests } });
     }
     delete query.interests;
   }
 
-  // 3. learningStyles → multiple comma separated (e.g. ayasb,CSD)
   if (query.learningStyles) {
-    const styles = (query.learningStyles as string)
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
+    const styles = (query.learningStyles as string).split(',').map(s => s.trim()).filter(Boolean);
     if (styles.length > 0) {
-      baseQuery.learningStyles = { $in: styles };
+      orConditions.push({ learningStyles: { $in: styles } });
     }
     delete query.learningStyles;
   }
 
-  // 4. availability → match on availability.day (e.g. sat,sun)
   if (query.availability) {
-    const days = (query.availability as string)
-      .split(',')
-      .map(d => d.trim().toLowerCase())
-      .filter(Boolean);
+    const days = (query.availability as string).split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
     if (days.length > 0) {
-      baseQuery['availability.day'] = { $in: days };
+      orConditions.push({ 'availability.day': { $in: days } });
     }
     delete query.availability;
   }
 
-  // 5. rating → multiple specific ratings (e.g. 5,4,3)
-  // avgRating >= min of selected ratings
   if (query.rating) {
-    const ratings = (query.rating as string)
-      .split(',')
-      .map(r => Number(r.trim()))
-      .filter(n => !isNaN(n) && n > 0);
+    const ratings = (query.rating as string).split(',').map(r => Number(r.trim())).filter(n => !isNaN(n) && n > 0);
     if (ratings.length > 0) {
       const minRating = Math.min(...ratings);
       const maxRating = Math.max(...ratings);
-      baseQuery.avgRating = { $gte: minRating, $lte: maxRating + 0.99 };
+      orConditions.push({ avgRating: { $gte: minRating, $lte: maxRating + 0.99 } });
     }
     delete query.rating;
   }
 
-  // 6. sessionDurations → match on sessionDurations.duration (e.g. 15,30)
   if (query.sessionDurations) {
-    const durations = (query.sessionDurations as string)
-      .split(',')
-      .map(d => Number(d.trim()))
-      .filter(n => !isNaN(n) && n > 0);
+    const durations = (query.sessionDurations as string).split(',').map(d => Number(d.trim())).filter(n => !isNaN(n) && n > 0);
     if (durations.length > 0) {
-      baseQuery['sessionDurations.duration'] = { $in: durations };
+      orConditions.push({ 'sessionDurations.duration': { $in: durations } });
     }
     delete query.sessionDurations;
   }
+
+  // ✅ orConditions থাকলে $or যোগ করো, না থাকলে শুধু mustMatch
+  const baseQuery: FilterQuery<TUser> = orConditions.length > 0
+    ? { ...mustMatch, $or: orConditions }
+    : mustMatch;
 
   const usersQuery = new QueryBuilder(
     User.find(baseQuery).select(
@@ -465,9 +453,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
     }
 
-    if (viewerId === viewedUserId) {
-      // No view count increment for self-view
-    } else {
+    if (viewerId !== viewedUserId) {
       await ProfileView.findOneAndUpdate(
         {
           viewer: viewerId,
@@ -486,10 +472,28 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
 
     const referralLink = `${config.client_url}/signup?ref=${user.referralCode}`;
 
-    const completedBookingsCount = await Booking.countDocuments({
-      consult: viewedUserId,
-      status: BOOKING_STATUS.completed,
-    });
+    const last7Days = dayjs().subtract(7, 'day').toDate()
+
+    const [
+      completedBookingsCount,
+      totalBookingsCountAll,
+      profileViewCount,
+      isFollowing,
+    ] = await Promise.all([
+      Booking.countDocuments({
+        consult: viewedUserId,
+        status: BOOKING_STATUS.completed,
+      }),
+      Booking.countDocuments({ consult: viewedUserId }),
+      ProfileView.countDocuments({
+        viewedUser: viewedUserId,
+        viewedAt: { $gte: last7Days }, // ✅ last 7 days
+      }),
+      Follow.exists({
+        follower: viewerId,
+        following: viewedUserId,
+      }),
+    ])
 
     let advisingTimeInHours = 0;
     if (user.role === USER_ROLE.expert) {
@@ -502,7 +506,6 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       advisingTimeInHours = Number((minutes / 60).toFixed(2));
     }
 
-    const totalBookingsCountAll = await Booking.countDocuments({ consult: viewedUserId });
     const avgAttendance =
       totalBookingsCountAll > 0
         ? Math.min(Math.round((completedBookingsCount / totalBookingsCountAll) * 100), 100)
@@ -510,16 +513,6 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
 
     const profileSetupProgress = calculateProfileSetupProgress(user);
 
-    const isFollowing = await Follow.exists({
-      follower: viewerId,
-      following: viewedUserId,
-    });
-
-    const profileViewCount = await ProfileView.countDocuments({
-      viewedUser: viewedUserId,
-    });
-
-    // ✅ sessionDurations এ price add করো
     const sessionDurationsWithPrice = enrichSessionDurationsWithPrice(
       user.sessionDurations || [],
       user.hourlyRate || 0,
@@ -529,7 +522,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
 
     return {
       ...user,
-      sessionDurations: sessionDurationsWithPrice, // ✅ enriched
+      sessionDurations: sessionDurationsWithPrice,
       referralLink,
       totalBookings: completedBookingsCount,
       profileSetupProgress,
