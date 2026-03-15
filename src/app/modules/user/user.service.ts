@@ -26,6 +26,8 @@ import { sendNotification } from '../../utils/sentNotification'
 import { Follow } from '../connection/connection.models'
 import { ProfileView } from '../profileView/profileView.model'
 import dayjs from 'dayjs'
+import { Withdraw } from '../withdraw/withdraw.model'
+import { WITHDRAW_STATUS } from '../withdraw/withdraw.constant'
 
 const registerUserIntoDB = async (
   payload: TUser & { referralCode?: string },
@@ -107,77 +109,96 @@ const registerUserIntoDB = async (
   return newUser
 }
 
-const getAllUsersFromDB = async (query: Record<string, unknown>, currentUserId: string) => {
+const getAllUsersFromDB = async (
+  query: Record<string, unknown>,
+  currentUserId: string,
+) => {
   // Base filter — সবসময় apply হবে
   const mustMatch: FilterQuery<TUser> = {
     isDeleted: false,
     role: USER_ROLE.expert,
     status: USER_STATUS.active,
-  };
+  }
 
   // Optional conditions — যেকোনো একটা match করলেই চলবে
-  const orConditions: FilterQuery<TUser>[] = [];
+  const orConditions: FilterQuery<TUser>[] = []
 
   if (query.priceRange) {
-    const [minStr, maxStr] = (query.priceRange as string).split('-');
-    const min = Number(minStr);
-    const max = Number(maxStr);
+    const [minStr, maxStr] = (query.priceRange as string).split('-')
+    const min = Number(minStr)
+    const max = Number(maxStr)
     if (!isNaN(min) && !isNaN(max)) {
-      orConditions.push({ hourlyRate: { $gte: min, $lte: max } });
+      orConditions.push({ hourlyRate: { $gte: min, $lte: max } })
     }
-    delete query.priceRange;
+    delete query.priceRange
   }
 
   if (query.interests) {
-    const interests = (query.interests as string).split(',').map(i => i.trim()).filter(Boolean);
+    const interests = (query.interests as string)
+      .split(',')
+      .map((i) => i.trim())
+      .filter(Boolean)
     if (interests.length > 0) {
-      orConditions.push({ interests: { $in: interests } });
+      orConditions.push({ interests: { $in: interests } })
     }
-    delete query.interests;
+    delete query.interests
   }
 
   if (query.learningStyles) {
-    const styles = (query.learningStyles as string).split(',').map(s => s.trim()).filter(Boolean);
+    const styles = (query.learningStyles as string)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
     if (styles.length > 0) {
-      orConditions.push({ learningStyles: { $in: styles } });
+      orConditions.push({ learningStyles: { $in: styles } })
     }
-    delete query.learningStyles;
+    delete query.learningStyles
   }
 
   if (query.availability) {
-    const days = (query.availability as string).split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
+    const days = (query.availability as string)
+      .split(',')
+      .map((d) => d.trim().toLowerCase())
+      .filter(Boolean)
     if (days.length > 0) {
-      orConditions.push({ 'availability.day': { $in: days } });
+      orConditions.push({ 'availability.day': { $in: days } })
     }
-    delete query.availability;
+    delete query.availability
   }
 
   if (query.rating) {
-    const ratings = (query.rating as string).split(',').map(r => Number(r.trim())).filter(n => !isNaN(n) && n > 0);
+    const ratings = (query.rating as string)
+      .split(',')
+      .map((r) => Number(r.trim()))
+      .filter((n) => !isNaN(n) && n > 0)
     if (ratings.length > 0) {
-      const minRating = Math.min(...ratings);
-      const maxRating = Math.max(...ratings);
-      orConditions.push({ avgRating: { $gte: minRating, $lte: maxRating + 0.99 } });
+      const minRating = Math.min(...ratings)
+      const maxRating = Math.max(...ratings)
+      orConditions.push({
+        avgRating: { $gte: minRating, $lte: maxRating + 0.99 },
+      })
     }
-    delete query.rating;
+    delete query.rating
   }
 
   if (query.sessionDurations) {
-    const durations = (query.sessionDurations as string).split(',').map(d => Number(d.trim())).filter(n => !isNaN(n) && n > 0);
+    const durations = (query.sessionDurations as string)
+      .split(',')
+      .map((d) => Number(d.trim()))
+      .filter((n) => !isNaN(n) && n > 0)
     if (durations.length > 0) {
-      orConditions.push({ 'sessionDurations.duration': { $in: durations } });
+      orConditions.push({ 'sessionDurations.duration': { $in: durations } })
     }
-    delete query.sessionDurations;
+    delete query.sessionDurations
   }
 
   // ✅ orConditions থাকলে $or যোগ করো, না থাকলে শুধু mustMatch
-  const baseQuery: FilterQuery<TUser> = orConditions.length > 0
-    ? { ...mustMatch, $or: orConditions }
-    : mustMatch;
+  const baseQuery: FilterQuery<TUser> =
+    orConditions.length > 0 ? { ...mustMatch, $or: orConditions } : mustMatch
 
   const usersQuery = new QueryBuilder(
     User.find(baseQuery).select(
-      '_id id firstName lastName email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status isProfileSetup createdAt hourlyRate sessionDurations availability interests learningStyles'
+      '_id id firstName lastName email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status isProfileSetup createdAt hourlyRate sessionDurations availability interests learningStyles',
     ),
     query,
   )
@@ -185,22 +206,22 @@ const getAllUsersFromDB = async (query: Record<string, unknown>, currentUserId: 
     .filter()
     .sort()
     .paginate()
-    .fields();
+    .fields()
 
-  const experts = await usersQuery.modelQuery;
-  const meta = await usersQuery.countTotal();
+  const experts = await usersQuery.modelQuery
+  const meta = await usersQuery.countTotal()
 
-  const expertIds = experts.map(e => e._id.toString());
+  const expertIds = experts.map((e) => e._id.toString())
   const [followingMap, totalBookingsMap] = await Promise.all([
     getFollowingStatusBatch(currentUserId, expertIds),
     getTotalBookingsBatch(expertIds),
-  ]);
+  ])
 
-  const enrichedResult = experts.map(expert => ({
+  const enrichedResult = experts.map((expert) => ({
     ...expert.toObject(),
     isFollowing: followingMap.get(expert._id.toString()) || false,
     totalBookings: totalBookingsMap.get(expert._id.toString()) || 0,
-  }));
+  }))
 
   const activeCounts = await User.aggregate([
     {
@@ -216,10 +237,12 @@ const getAllUsersFromDB = async (query: Record<string, unknown>, currentUserId: 
         count: { $sum: 1 },
       },
     },
-  ]);
+  ])
 
-  const activeConsult = activeCounts.find(item => item._id === USER_ROLE.consult)?.count || 0;
-  const activeExpert = activeCounts.find(item => item._id === USER_ROLE.expert)?.count || 0;
+  const activeConsult =
+    activeCounts.find((item) => item._id === USER_ROLE.consult)?.count || 0
+  const activeExpert =
+    activeCounts.find((item) => item._id === USER_ROLE.expert)?.count || 0
 
   return {
     meta,
@@ -229,24 +252,24 @@ const getAllUsersFromDB = async (query: Record<string, unknown>, currentUserId: 
       activeExpert,
       userList: enrichedResult,
     },
-  };
-};
+  }
+}
 
 // 1. Interest-based experts
 const getInterestExpertsFromDB = async (
   userId: string,
   query: Record<string, unknown>,
 ) => {
-  const currentUser = await User.findById(userId).select('interests');
+  const currentUser = await User.findById(userId).select('interests')
   if (!currentUser) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
 
-  const { interests } = currentUser;
+  const { interests } = currentUser
 
-  const matchConditions: any[] = [];
+  const matchConditions: any[] = []
   if (interests?.length) {
-    matchConditions.push({ interests: { $in: interests } });
+    matchConditions.push({ interests: { $in: interests } })
   }
 
   const baseFilter = {
@@ -255,40 +278,43 @@ const getInterestExpertsFromDB = async (
     status: USER_STATUS.active,
     role: USER_ROLE.expert,
     $or: matchConditions,
-  };
+  }
 
   const usersQuery = new QueryBuilder(
     User.find(baseFilter).select(
-      '_id firstName lastName photoUrl headline followers avgRating ratingCount'
+      '_id firstName lastName photoUrl headline followers avgRating ratingCount',
     ),
     query,
   )
     .sort()
     .paginate()
-    .fields();
+    .fields()
 
-  const experts = await usersQuery.modelQuery;
+  const experts = await usersQuery.modelQuery
 
   // Batch isFollowing + totalBookings
-  const expertIds = experts.map(e => e._id.toString());
+  const expertIds = experts.map((e) => e._id.toString())
   const [followingMap, totalBookingsMap] = await Promise.all([
     getFollowingStatusBatch(userId, expertIds),
     getTotalBookingsBatch(expertIds),
-  ]);
+  ])
 
-  const result = experts.map(expert => ({
+  const result = experts.map((expert) => ({
     ...expert.toObject(),
     isFollowing: followingMap.get(expert._id.toString()) || false,
     totalBookings: totalBookingsMap.get(expert._id.toString()) || 0,
-  }));
+  }))
 
-  const meta = await usersQuery.countTotal();
+  const meta = await usersQuery.countTotal()
 
-  return { meta, result };
-};
+  return { meta, result }
+}
 
 // 2. Property experts
-const getPropertyExpertsFromDB = async (userId: string, query: Record<string, unknown>) => {
+const getPropertyExpertsFromDB = async (
+  userId: string,
+  query: Record<string, unknown>,
+) => {
   const filter = {
     _id: { $ne: new Types.ObjectId(userId) },
     role: USER_ROLE.expert,
@@ -298,11 +324,11 @@ const getPropertyExpertsFromDB = async (userId: string, query: Record<string, un
       { expertise: { $in: ['Property & Real Estate'] } },
       { skills: { $in: PROPERTY_SKILLS } },
     ],
-  };
+  }
 
   const usersQuery = new QueryBuilder(
     User.find(filter).select(
-      '_id firstName lastName photoUrl headline followers avgRating ratingCount'
+      '_id firstName lastName photoUrl headline followers avgRating ratingCount',
     ),
     query,
   )
@@ -312,41 +338,44 @@ const getPropertyExpertsFromDB = async (userId: string, query: Record<string, un
       points: -1,
     })
     .paginate()
-    .fields();
+    .fields()
 
-  const experts = await usersQuery.modelQuery;
+  const experts = await usersQuery.modelQuery
 
- // Batch isFollowing + totalBookings
-  const expertIds = experts.map(e => e._id.toString());
+  // Batch isFollowing + totalBookings
+  const expertIds = experts.map((e) => e._id.toString())
   const [followingMap, totalBookingsMap] = await Promise.all([
     getFollowingStatusBatch(userId, expertIds),
     getTotalBookingsBatch(expertIds),
-  ]);
+  ])
 
-  const result = experts.map(expert => ({
+  const result = experts.map((expert) => ({
     ...expert.toObject(),
     isFollowing: followingMap.get(expert._id.toString()) || false,
     totalBookings: totalBookingsMap.get(expert._id.toString()) || 0,
-  }));
+  }))
 
-  const meta = await usersQuery.countTotal();
+  const meta = await usersQuery.countTotal()
 
-  return { meta, result };
-};
+  return { meta, result }
+}
 
 // 3. Top experts
-const getTopExpertsFromDB = async (userId: string, query: Record<string, unknown>) => {
+const getTopExpertsFromDB = async (
+  userId: string,
+  query: Record<string, unknown>,
+) => {
   const filter = {
     _id: { $ne: new Types.ObjectId(userId) },
     role: USER_ROLE.expert,
     status: USER_STATUS.active,
     isDeleted: false,
     avgRating: { $gte: 4 },
-  };
+  }
 
   const usersQuery = new QueryBuilder(
     User.find(filter).select(
-      '_id firstName lastName photoUrl headline avgRating ratingCount followers'
+      '_id firstName lastName photoUrl headline avgRating ratingCount followers',
     ),
     query,
   )
@@ -356,30 +385,33 @@ const getTopExpertsFromDB = async (userId: string, query: Record<string, unknown
       followers: -1,
     })
     .paginate()
-    .fields();
+    .fields()
 
-  const experts = await usersQuery.modelQuery;
+  const experts = await usersQuery.modelQuery
 
   // Batch isFollowing + totalBookings
-  const expertIds = experts.map(e => e._id.toString());
+  const expertIds = experts.map((e) => e._id.toString())
   const [followingMap, totalBookingsMap] = await Promise.all([
     getFollowingStatusBatch(userId, expertIds),
     getTotalBookingsBatch(expertIds),
-  ]);
+  ])
 
-  const result = experts.map(expert => ({
+  const result = experts.map((expert) => ({
     ...expert.toObject(),
     isFollowing: followingMap.get(expert._id.toString()) || false,
     totalBookings: totalBookingsMap.get(expert._id.toString()) || 0,
-  }));
+  }))
 
-  const meta = await usersQuery.countTotal();
+  const meta = await usersQuery.countTotal()
 
-  return { meta, result };
-};
+  return { meta, result }
+}
 
 // 4. Investment experts
-const getInvestmentExperts = async (userId: string, query: Record<string, unknown>) => {
+const getInvestmentExperts = async (
+  userId: string,
+  query: Record<string, unknown>,
+) => {
   const filter = {
     _id: { $ne: new Types.ObjectId(userId) },
     role: USER_ROLE.expert,
@@ -389,11 +421,11 @@ const getInvestmentExperts = async (userId: string, query: Record<string, unknow
       { expertise: { $in: ['Property Investment & Development'] } },
       { skills: { $in: INVESTMENT_SKILLS } },
     ],
-  };
+  }
 
   const queryBuilder = new QueryBuilder(
     User.find(filter).select(
-      '_id firstName lastName photoUrl headline avgRating ratingCount followers'
+      '_id firstName lastName photoUrl headline avgRating ratingCount followers',
     ),
     query,
   )
@@ -404,53 +436,54 @@ const getInvestmentExperts = async (userId: string, query: Record<string, unknow
       createdAt: -1,
     })
     .paginate()
-    .fields();
+    .fields()
 
-  const experts = await queryBuilder.modelQuery;
+  const experts = await queryBuilder.modelQuery
 
   // Batch isFollowing + totalBookings
-  const expertIds = experts.map(e => e._id.toString());
+  const expertIds = experts.map((e) => e._id.toString())
   const [followingMap, totalBookingsMap] = await Promise.all([
     getFollowingStatusBatch(userId, expertIds),
     getTotalBookingsBatch(expertIds),
-  ]);
+  ])
 
-  const result = experts.map(expert => ({
+  const result = experts.map((expert) => ({
     ...expert.toObject(),
     isFollowing: followingMap.get(expert._id.toString()) || false,
     totalBookings: totalBookingsMap.get(expert._id.toString()) || 0,
-  }));
+  }))
 
-  const meta = await queryBuilder.countTotal();
+  const meta = await queryBuilder.countTotal()
 
-  return { meta, result };
-};
+  return { meta, result }
+}
 
 const enrichSessionDurationsWithPrice = (
   sessionDurations: any[],
   hourlyRate: number,
 ) => {
-  return sessionDurations.map(session => ({
+  return sessionDurations.map((session) => ({
     ...session,
-    price: session.offeredPrice > 0
-      ? session.offeredPrice
-      : parseFloat(((hourlyRate / 60) * session.duration).toFixed(2)),
+    price:
+      session.offeredPrice > 0
+        ? session.offeredPrice
+        : parseFloat(((hourlyRate / 60) * session.duration).toFixed(2)),
   }))
 }
 
 const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const session = await mongoose.startSession()
+  session.startTransaction()
 
   try {
     const user = await User.findById(viewedUserId)
       .select(
-        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education isTopExpert pushNotify emailNotify status createdAt'
+        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education isTopExpert pushNotify emailNotify status createdAt',
       )
-      .lean();
+      .lean()
 
     if (!user || user.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
     }
 
     if (viewerId !== viewedUserId) {
@@ -466,11 +499,11 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
           upsert: true,
           new: true,
           session,
-        }
-      );
+        },
+      )
     }
 
-    const referralLink = `${config.client_url}/signup?ref=${user.referralCode}`;
+    const referralLink = `${config.client_url}/signup?ref=${user.referralCode}`
 
     const last7Days = dayjs().subtract(7, 'day').toDate()
 
@@ -479,6 +512,10 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       totalBookingsCountAll,
       profileViewCount,
       isFollowing,
+      totalWithdrawResult,
+      pendingWithdrawResult,
+      last7DaysFollowersCount, // ✅
+      totalFollowersCount, // ✅
     ] = await Promise.all([
       Booking.countDocuments({
         consult: viewedUserId,
@@ -487,38 +524,92 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       Booking.countDocuments({ consult: viewedUserId }),
       ProfileView.countDocuments({
         viewedUser: viewedUserId,
-        viewedAt: { $gte: last7Days }, // ✅ last 7 days
+        viewedAt: { $gte: last7Days },
       }),
       Follow.exists({
         follower: viewerId,
         following: viewedUserId,
       }),
+      // ✅ completed withdraw total amount
+      Withdraw.aggregate([
+        {
+          $match: {
+            user: new mongoose.Types.ObjectId(viewedUserId),
+            status: WITHDRAW_STATUS.completed,
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$amount' },
+          },
+        },
+      ]),
+      // ✅ proceed + hold withdraw
+      Withdraw.aggregate([
+        {
+          $match: {
+            user: new mongoose.Types.ObjectId(viewedUserId),
+            status: { $in: [WITHDRAW_STATUS.proceed, WITHDRAW_STATUS.hold] },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$amount' },
+          },
+        },
+      ]),
+
+      // last 7 days new followers
+      Follow.countDocuments({
+        following: viewedUserId,
+        createdAt: { $gte: last7Days },
+      }),
+      // total followers
+      Follow.countDocuments({
+        following: viewedUserId,
+      }),
     ])
 
-    let advisingTimeInHours = 0;
+    const totalWithdraw = totalWithdrawResult[0]?.total || 0
+    const pendingWithdraw = pendingWithdrawResult[0]?.total || 0
+
+    // Growth rate calculate
+    const followerGrowthRate =
+      totalFollowersCount > 0
+        ? parseFloat(
+            ((last7DaysFollowersCount / totalFollowersCount) * 100).toFixed(2),
+          )
+        : 0
+
+    let advisingTimeInHours = 0
     if (user.role === USER_ROLE.expert) {
       const totalMinutesResult = await Booking.aggregate([
         { $match: { consult: viewedUserId, status: BOOKING_STATUS.completed } },
         { $group: { _id: null, totalMinutes: { $sum: '$sessionDuration' } } },
-      ]);
+      ])
 
-      const minutes = totalMinutesResult[0]?.totalMinutes || 0;
-      advisingTimeInHours = Number((minutes / 60).toFixed(2));
+      const minutes = totalMinutesResult[0]?.totalMinutes || 0
+      advisingTimeInHours = Number((minutes / 60).toFixed(2))
     }
 
     const avgAttendance =
       totalBookingsCountAll > 0
-        ? Math.min(Math.round((completedBookingsCount / totalBookingsCountAll) * 100), 100)
-        : 0;
+        ? Math.min(
+            Math.round((completedBookingsCount / totalBookingsCountAll) * 100),
+            100,
+          )
+        : 0
 
-    const profileSetupProgress = calculateProfileSetupProgress(user);
+    const profileSetupProgress = calculateProfileSetupProgress(user)
 
     const sessionDurationsWithPrice = enrichSessionDurationsWithPrice(
       user.sessionDurations || [],
       user.hourlyRate || 0,
     )
 
-    await session.commitTransaction();
+    await session.commitTransaction()
 
     return {
       ...user,
@@ -530,16 +621,22 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       avgAttendance,
       isFollowing: !!isFollowing,
       profileViewCount,
-    };
+      totalWithdraw,
+      pendingWithdraw,
+      followerGrowthRate
+    }
   } catch (error) {
-    await session.abortTransaction();
+    await session.abortTransaction()
     throw error instanceof AppError
       ? error
-      : new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to fetch user profile');
+      : new AppError(
+          httpStatus.INTERNAL_SERVER_ERROR,
+          'Failed to fetch user profile',
+        )
   } finally {
-    session.endSession();
+    session.endSession()
   }
-};
+}
 
 const changeUserStatusFromDB = async (payload: {
   userId: string

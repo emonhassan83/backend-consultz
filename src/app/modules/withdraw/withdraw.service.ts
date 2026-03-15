@@ -134,20 +134,28 @@ const getConsultWithdrawsFromDB = async (
     throw new AppError(httpStatus.NOT_FOUND, 'Expert profile not found!')
   }
 
+  const selectedYear = query.year
+    ? parseInt(query.year as string, 10)
+    : new Date().getFullYear()
+
   const thisMonthWithdraw = await getThisMonthWithdraw(userId)
 
-  const withdrawOverview = await getWithdrawMonthlyOverview(
-    userId,
-    query.year ? parseInt(query.year as string, 10) : undefined,
-  )
+  const withdrawOverview = await getWithdrawMonthlyOverview(userId, selectedYear)
 
-  // ✅ QueryBuilder এ যাওয়ার আগে custom fields delete করো
+  // year filter এর date range
+  const yearStart = new Date(`${selectedYear}-01-01`)
+  const yearEnd = new Date(`${selectedYear + 1}-01-01`)
+
+  // QueryBuilder এ যাওয়ার আগে custom fields delete করো
   const listQuery = { ...query }
   delete listQuery.year
   delete listQuery.month
 
   const withdrawQuery = new QueryBuilder(
-    Withdraw.find({ user: userId })
+    Withdraw.find({
+      user: userId,
+      createdAt: { $gte: yearStart, $lt: yearEnd },
+    })
       .populate([
         {
           path: 'booking',
@@ -156,7 +164,7 @@ const getConsultWithdrawsFromDB = async (
         },
       ])
       .sort({ createdAt: -1 }),
-    listQuery, // ✅ cleaned query
+    listQuery,
   )
     .filter()
     .sort()
