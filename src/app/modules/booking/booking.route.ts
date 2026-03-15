@@ -34,6 +34,12 @@ router.patch(
 )
 
 router.patch(
+  '/declined/:id',
+  auth(USER_ROLE.expert),
+  bookingsController.declineBooking,
+)
+
+router.patch(
   '/reschedule/:id',
   auth(USER_ROLE.consult, USER_ROLE.expert),
   zodValidationRequest(BookingsValidation.rescheduleValidationSchema),

@@ -23,6 +23,7 @@ export const messages = {
   booking: {
     request: 'Booking Request',
     confirmed: 'Booking Confirmed! 🎉',
+    declined: 'Booking Declined',
     cancellation: 'Booking Cancelled',
     rescheduled: 'Booking Rescheduled',
     reminder: 'Good Morning!',

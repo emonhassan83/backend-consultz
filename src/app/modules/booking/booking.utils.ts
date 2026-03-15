@@ -6,6 +6,7 @@ import { SESSION_TYPE } from './booking.constants'
 export type TBookingNotifyAction =
   | 'pending'
   | 'confirmed'
+  | 'declined'
   | 'cancellation'
   | 'not_responded'
   | 'reschedule'
@@ -58,6 +59,11 @@ export const sendBookingsNotification = async (
     case 'confirmed':
       message = messages.booking.confirmed
       description = `${sessionTypeFormatted} session with ${booking.consult.firstName} on ${sessionInfo}`
+      break
+
+    case 'declined':
+      message = messages.booking.declined
+      description = `${sessionTypeFormatted} session with ${booking.consult.firstName} was declined.`
       break
 
     case 'cancellation':

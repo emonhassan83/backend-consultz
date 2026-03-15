@@ -633,6 +633,155 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
   }
 }
 
+const declineBooking = async (bookingId: string, currentUserId: string) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
+
+  try {
+    // 1. Find the booking (only the consultant is allowed to decline)
+    const booking = await Booking.findOne({
+      _id: bookingId,
+      consult: currentUserId,
+      isDeleted: false,
+    })
+      .populate('user consult slot')
+      .session(session)
+
+    if (!booking) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Booking not found or not yours')
+    }
+
+    // 2. Validation checks
+    if (
+      booking.status === BOOKING_STATUS.completed ||
+      booking.status === BOOKING_STATUS.cancelled
+    ) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        `This booking has already been ${booking.status}. It cannot be declined now.`,
+      )
+    }
+
+    if (booking.status !== BOOKING_STATUS.pending) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Only pending bookings can be declined',
+      )
+    }
+
+    if (booking.paymentStatus !== PAYMENT_STATUS.paid) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'This booking has not been paid yet and cannot be declined.',
+      )
+    }
+
+    // 3. Free the slot
+    await BookingSlots.findByIdAndUpdate(
+      booking.slot,
+      { isBooked: false },
+      { session },
+    )
+
+    // 4. Mark booking as declined
+    const updatedBooking = await Booking.findByIdAndUpdate(
+      bookingId,
+      { status: BOOKING_STATUS.declined },
+      { new: true, session },
+    )
+
+    if (!updatedBooking) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Failed to decline booking')
+    }
+
+    // 5. Refund process
+    let refundProcessed = false
+    let refundAmount = 0
+
+    const payment = await Payment.findOne({
+      booking: booking._id,
+      isPaid: true,
+      isDeleted: false,
+    }).session(session)
+
+    if (payment && payment.paymentIntentId) {
+      try {
+        const refund = await stripe.refunds.create({
+          payment_intent: payment.paymentIntentId,
+          amount: payment.amount * 100,
+        })
+
+        await Payment.updateOne(
+          { _id: payment._id },
+          { status: PAYMENT_STATUS.refunded },
+          { session },
+        )
+
+        refundProcessed = true
+        refundAmount = refund.amount / 100
+      } catch (refundError: any) {
+        console.error('Refund failed:', refundError.message)
+      }
+    }
+
+    // 6. Fetch user and consult for notifications
+    const [booker, expert, slot] = await Promise.all([
+      User.findById(booking.user).session(session),
+      User.findById(booking.consult).session(session),
+      BookingSlots.findById(booking.slot).session(session),
+    ])
+
+    // 7. Push notification to booker
+    if (booker && booker.fcmToken && booker.pushNotify?.bookingAndSchedule) {
+      await sendBookingsNotification(
+        'declined',
+        updatedBooking,
+        booker,
+        slot,
+        { cancelledBy: 'consult' },
+      )
+    }
+
+    // 8. Push notification to expert (optional — self declined)
+    if (expert && expert.fcmToken && expert.pushNotify?.bookingAndSchedule) {
+      await sendBookingsNotification(
+        'declined',
+        updatedBooking,
+        expert,
+        slot,
+        { cancelledBy: 'consult' },
+      )
+    }
+
+    // 9. Email notification
+    if (booker && expert && slot) {
+      await sendCancellationEmail(
+        booker,
+        expert,
+        updatedBooking,
+        slot,
+        'consult',
+      )
+    }
+
+    await session.commitTransaction()
+
+    return {
+      booking: updatedBooking,
+      refundProcessed,
+      refundAmount,
+      message: refundProcessed
+        ? 'Booking declined and refund processed'
+        : 'Booking declined (no refund needed)',
+    }
+  } catch (error) {
+    await session.abortTransaction()
+    throw error
+  } finally {
+    session.endSession()
+  }
+}
+
 const completedBooking = async (
   bookingId: string,
   currentUserId: string,
@@ -940,6 +1089,7 @@ export const bookingsService = {
   deleteBookings,
   cancelBooking,
   confirmedBooking,
+  declineBooking,
   completedBooking,
   rescheduleBooking,
 }

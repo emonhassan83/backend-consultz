@@ -13,6 +13,7 @@ export const PAYMENT_STATUS = {
 
 export const BOOKING_STATUS = {
   pending: 'pending',
+  declined: 'declined',
   confirmed: 'confirmed',
   completed: 'completed',
   not_responded: 'not_responded',
