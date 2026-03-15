@@ -4,11 +4,7 @@ export interface TMessages {
   _id?: Types.ObjectId
   id?: string
   text?: string
-  imageUrl?: {
-    key: string
-    url: string
-  }[]
-
+  imageUrl?: string[]
   seen: boolean
   chat: Types.ObjectId
   sender: Types.ObjectId

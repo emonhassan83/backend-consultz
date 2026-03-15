@@ -5,336 +5,244 @@ import { Types } from 'mongoose'
 import getUserDetailsFromToken from './app/utils/vaildateUserFromToken'
 import AppError from './app/errors/AppError'
 import { callbackFn } from './app/utils/CallbackFn'
-import { TUser } from './app/modules/user/user.interface'
-import { User } from './app/modules/user/user.model'
 import { Message } from './app/modules/messages/messages.models'
 import { chatService } from './app/modules/chat/chat.service'
-import { TChat } from './app/modules/chat/chat.interface'
 import { Chat } from './app/modules/chat/chat.models'
 
 const initializeSocketIO = (server: HttpServer) => {
   const io = new Server(server, {
-    cors: {
-      origin: '*',
-    },
+    cors: { origin: '*' },
   })
 
-  // Online users
-  const onlineUser = new Set()
+  const onlineUser = new Set<string>()
 
   io.on('connection', async (socket) => {
     console.log('connected', socket?.id)
 
     try {
-      //----------------------user token get from front end-------------------------//
       const token =
         socket.handshake.auth?.token || socket.handshake.headers?.token
-      //----------------------check Token and return user details-------------------------//
+
       let user: any
       try {
         user = await getUserDetailsFromToken(token)
-        if (!user) {
-          throw new AppError(httpStatus.UNAUTHORIZED, 'Invalid token')
-        }
+        if (!user) throw new AppError(httpStatus.UNAUTHORIZED, 'Invalid token')
       } catch (error) {
         console.log(error)
+        socket.disconnect()
         return
       }
 
-      socket.join(user?._id?.toString())
+      const userId = user?._id?.toString()
 
-      //----------------------user id set in online array-------------------------//
-      onlineUser.add(user?._id?.toString())
-
-      socket.on('check', (data, callback) => {
-        console.log(data)
-
-        callbackFn(callback, { success: true })
-      })
-
-      //----------------------online array send for front end------------------------//
+      // ✅ user এর নিজস্ব room এ join করো
+      socket.join(userId)
+      onlineUser.add(userId)
       io.emit('onlineUser', Array.from(onlineUser))
 
-      //----------------------user details and messages send for front end -->(as need to use)------------------------//
-      socket.on('message-page', async (userId, callback) => {
-        if (!userId) {
-          callbackFn(callback, {
-            success: false,
-            message: 'userId is required',
-          })
-        }
+      // ✅ user এর সব chat room এ join করো
+      const userChats = await Chat.find({ participants: userId }).select('_id')
+      userChats.forEach((chat) => {
+        socket.join(`chat:${chat._id.toString()}`)
+      })
 
+      // =============================================
+      // EVENT: my-chat-list
+      // =============================================
+      socket.on('my-chat-list', async (_, callback) => {
         try {
-          const receiverDetails: TUser | null = await User.findById(
-            userId,
-          ).select('_id email role image')
-
-          if (!receiverDetails) {
-            callbackFn(callback, {
-              success: false,
-              message: 'user is not found!',
-            })
-            io.emit('io-error', {
-              success: false,
-              message: 'user is not found!',
-            })
-          }
-          const payload = {
-            _id: receiverDetails?._id,
-            email: receiverDetails?.email,
-            image: receiverDetails?.photoUrl,
-            role: receiverDetails?.role,
-          }
-
-          socket.emit('user-details', payload)
-
-          const getPreMessage = await Message.find({
-            $or: [
-              { sender: user?._id, receiver: userId },
-              { sender: userId, receiver: user?._id },
-            ],
-          }).sort({ updatedAt: 1 })
-
-          socket.emit('message', getPreMessage || [])
-
-          //end Notification//
-        } catch (error: any) {
-          callbackFn(callback, {
-            success: false,
-            message: error.message,
-          })
-          io.emit('io-error', { success: false, message: error })
-          console.error('Error in message-page event:', error)
+          const chatList = await chatService.getMyChatList(userId, {})
+          const eventName = `chat-list::${userId}`
+          io.to(userId).emit(eventName, chatList)
+          callbackFn(callback, { success: true, data: chatList })
+        } catch (err: any) {
+          callbackFn(callback, { success: false, message: err.message })
         }
       })
 
-      //----------------------chat list------------------------//
-      socket.on('my-chat-list', async (data, callback) => {
+      // =============================================
+      // EVENT: send-message
+      // =============================================
+      socket.on('send-message', async (payload, callback) => {
         try {
-          const chatList = await chatService.getMyChatList(user?._id, {})
-          const myChat = 'chat-list::' + user?._id
+          const { receiverId, text, imageUrl = [] } = payload
 
-          io.emit(myChat, chatList)
+          if (!receiverId || !text?.trim()) {
+            return callbackFn(callback, {
+              success: false,
+              message: 'receiverId and text are required',
+            })
+          }
 
-          callbackFn(callback, { success: true, message: chatList })
-        } catch (error: any) {
-          callbackFn(callback, {
-            success: false,
-            message: error.message,
+          // Chat find বা create করো
+          let chat = await Chat.findOne({
+            participants: { $all: [userId, receiverId] },
           })
-          io.emit('io-error', { success: false, message: error.message })
+
+          if (!chat) {
+            chat = await Chat.create({
+              participants: [userId, receiverId],
+            })
+            // নতুন chat room এ join করো
+            socket.join(`chat:${chat._id.toString()}`)
+
+            // receiver কে ও join করাও
+            const receiverSockets = await io.in(receiverId).fetchSockets()
+            receiverSockets.forEach((s) => {
+              s.join(`chat:${chat!._id.toString()}`)
+            })
+          }
+
+          const message = await Message.create({
+            chat: chat._id,
+            sender: userId,
+            receiver: receiverId,
+            text,
+            imageUrl,
+          })
+
+          const populated = await Message.findById(message._id)
+            .populate('sender', 'firstName lastName photoUrl _id')
+            .populate('receiver', 'firstName lastName photoUrl _id')
+
+          // ✅ শুধু ওই chat room এ emit করো
+          io.to(`chat:${chat._id.toString()}`).emit(
+            `new-message::${chat._id.toString()}`,
+            populated,
+          )
+
+          // ✅ দুজনের chat list update করো
+          const [senderChatList, receiverChatList] = await Promise.all([
+            chatService.getMyChatList(userId, {}),
+            chatService.getMyChatList(receiverId, {}),
+          ])
+
+          io.to(userId).emit(`chat-list::${userId}`, senderChatList)
+          io.to(receiverId).emit(`chat-list::${receiverId}`, receiverChatList)
+
+          // ✅ unread notification
+          const unreadCount = await Message.countDocuments({
+            receiver: receiverId,
+            seen: false,
+          })
+          io.to(receiverId).emit(`new-notifications::${receiverId}`, unreadCount)
+
+          callbackFn(callback, {
+            statusCode: httpStatus.OK,
+            success: true,
+            message: 'Message sent successfully!',
+            data: populated,
+          })
+        } catch (err: any) {
+          callbackFn(callback, { success: false, message: err.message })
         }
       })
 
-      //----------------------seen message-----------------------//
+      // =============================================
+      // EVENT: seen
+      // =============================================
       socket.on('seen', async ({ chatId }, callback) => {
         if (!chatId) {
-          callbackFn(callback, {
+          return callbackFn(callback, {
             success: false,
-            message: 'chatId id is required',
-          })
-          io.emit('io-error', {
-            success: false,
-            message: 'chatId id is required',
+            message: 'chatId is required',
           })
         }
 
         try {
-          const chatList: TChat | null = await Chat.findById(chatId)
-          if (!chatList) {
-            callbackFn(callback, {
+          const chat = await Chat.findById(chatId)
+          if (!chat) {
+            return callbackFn(callback, {
               success: false,
-              message: 'chat id is not valid',
+              message: 'Chat not found',
             })
-            io.emit('io-error', {
-              success: false,
-              message: 'chat id is not valid',
-            })
-            throw new AppError(httpStatus.BAD_REQUEST, 'chat id is not valid')
           }
 
-          const messageIdList = await Message.aggregate([
+          // ✅ current user ছাড়া বাকিদের messages seen করো
+          await Message.updateMany(
             {
-              $match: {
-                chat: new Types.ObjectId(chatId),
-                seen: false,
-                sender: { $ne: new Types.ObjectId(user?._id) },
-              },
+              chat: chatId,
+              seen: false,
+              sender: { $ne: new Types.ObjectId(userId) },
             },
-            { $group: { _id: null, ids: { $push: '$_id' } } },
-            { $project: { _id: 0, ids: 1 } },
-          ])
-          const unseenMessageIdList =
-            messageIdList.length > 0 ? messageIdList[0].ids : []
-
-          const updateMessages = await Message.updateMany(
-            { _id: { $in: unseenMessageIdList } },
             { $set: { seen: true } },
           )
 
-          const user1 = chatList.participants[0]
-          const user2 = chatList.participants[1]
-          // //----------------------ChatList------------------------//
-          const ChatListUser1 = await chatService.getMyChatList(
-            user1.toString(),
-            {}
-          )
+          // ✅ participants ObjectId array থেকে string এ convert করো
+          const participantIds = chat.participants.map((p) => p.toString())
 
-          const ChatListUser2 = await chatService.getMyChatList(
-            user2.toString(),
-            {}
-          )
+          for (const participantId of participantIds) {
+            const chatList = await chatService.getMyChatList(participantId, {})
+            io.to(participantId).emit(`chat-list::${participantId}`, chatList)
 
-          const user1Chat = 'chat-list::' + user1
+            const unreadCount = await Message.countDocuments({
+              receiver: participantId,
+              seen: false,
+            })
+            io.to(participantId).emit(
+              `new-notifications::${participantId}`,
+              unreadCount,
+            )
+          }
 
-          const user2Chat = 'chat-list::' + user2
+          // ✅ updated messages emit করো
+          const messages = await Message.find({ chat: chatId })
+            .sort({ createdAt: 1 })
+            .populate('sender', 'firstName lastName photoUrl _id')
+            .populate('receiver', 'firstName lastName photoUrl _id')
 
-          const allUnReaddMessage = await Message.countDocuments({
-            receiver: user1,
-            seen: false,
-          })
-          const variable = 'new-notifications::' + user1
-          io.emit(variable, allUnReaddMessage)
+          io.to(`chat:${chatId}`).emit(`message::${chatId}`, messages)
 
-          const allUnReaddMessage2 = await Message.countDocuments({
-            receiver: user2,
-            seen: false,
-          })
-          const variable2 = 'new-notifications::' + user2
-          io.emit(variable2, allUnReaddMessage2)
-
-          const getPreMessage = await Message.find({
-            $or: [
-              { sender: user1, receiver: user2 },
-              { sender: user2, receiver: user1 },
-            ],
-          }).sort({ updatedAt: 1 })
-
-          socket.emit('message', getPreMessage || [])
-
-          io.emit(user1Chat, ChatListUser1)
-          io.emit(user2Chat, ChatListUser2)
-        } catch (error: any) {
-          callbackFn(callback, {
-            success: false,
-            message: error.message,
-          })
-          console.error('Error in seen event:', error)
-          socket.emit('error', { message: error.message })
+          callbackFn(callback, { success: true })
+        } catch (err: any) {
+          callbackFn(callback, { success: false, message: err.message })
         }
       })
 
-      // received message from frontend
-      socket.on('send-message', async (payload, callback) => {
-        payload.sender = user?._id
-
-        const alreadyExists = await Chat.findOne({
-          participants: { $all: [payload.sender, payload.receiver] },
-        }).populate(['participants'])
-
-        if (!alreadyExists) {
-          const chatList = await Chat.create({
-            participants: [payload.sender, payload.receiver],
-          })
-
-          payload.chat = chatList?._id
-        } else {
-          payload.chat = alreadyExists?._id
-        }
-
-        const result = await Message.create(payload)
-
-        if (!result) {
-          callbackFn(callback, {
-            statusCode: httpStatus.BAD_REQUEST,
-            success: false,
-            message: 'Message sent failed',
-          })
-        }
-
-        const senderMessage = 'new-message::' + result.chat.toString()
-
-        io.emit(senderMessage, result)
-
-        // //----------------------ChatList------------------------//
-        const ChatListSender = await chatService.getMyChatList(
-          result?.sender.toString(),
-          {}
-        )
-        const senderChat = 'chat-list::' + result.sender.toString()
-        io.emit(senderChat, ChatListSender)
-
-        const ChatListReceiver = await chatService.getMyChatList(
-          result?.receiver.toString(),
-          {}
-        )
-
-        const receiverChat = 'chat-list::' + result.receiver.toString()
-
-        io.emit(receiverChat, ChatListReceiver)
-
-        // Notification
-        const allUnReaddMessage = await Message.countDocuments({
-          receiver: result.sender,
-          seen: false,
-        })
-        const variable = 'new-notifications::' + result.sender
-        io.emit(variable, allUnReaddMessage)
-        const allUnReaddMessage2 = await Message.countDocuments({
-          receiver: result.receiver,
-          seen: false,
-        })
-        const variable2 = 'new-notifications::' + result.receiver
-        io.emit(variable2, allUnReaddMessage2)
-
-        //end Notification//
-        callbackFn(callback, {
-          statusCode: httpStatus.OK,
-          success: true,
-          message: 'Message sent successfully!',
-          data: result,
+      // =============================================
+      // EVENT: typing / stopTyping
+      // =============================================
+      socket.on('typing', ({ chatId }) => {
+        if (!chatId) return
+        // ✅ socket.to() — নিজে ছাড়া বাকিদের emit করো
+        socket.to(`chat:${chatId}`).emit(`typing::${chatId}`, {
+          userId,
+          name: user?.firstName || user?.name || 'User',
         })
       })
 
-      //-----------------------Typing------------------------//
-      socket.on('typing', function (data) {
-        const chat = 'typing::' + data.chatId.toString()
-        const message = user?.name + ' is typing...'
-        socket.emit(chat, { message: message })
-      })
-      socket.on('stopTyping', function (data) {
-        const chat = 'stopTyping::' + data.chatId.toString()
-        const message = user?.name + ' is stop typing...'
-        socket.emit(chat, { message: message })
+      socket.on('stopTyping', ({ chatId }) => {
+        if (!chatId) return
+        socket.to(`chat:${chatId}`).emit(`stopTyping::${chatId}`, { userId })
       })
 
-      //-----------------------Seen All------------------------//
-      socket.on('message-notification', async ({}, callback) => {
+      // =============================================
+      // EVENT: message-notification
+      // =============================================
+      socket.on('message-notification', async (_, callback) => {
         try {
-          const allUnReaddMessage = await Message.countDocuments({
-            receiver: user?._id,
+          const unreadCount = await Message.countDocuments({
+            receiver: userId,
             seen: false,
           })
-          const variable = 'new-notifications::' + user?._id
-          io.emit(variable, allUnReaddMessage)
-          callbackFn(callback, { success: true, message: allUnReaddMessage })
-        } catch (error) {
-          callbackFn(callback, {
-            statusCode: httpStatus.INTERNAL_SERVER_ERROR,
-            success: false,
-            message: 'Failed to retrieve notifications',
-          })
+          io.to(userId).emit(`new-notifications::${userId}`, unreadCount)
+          callbackFn(callback, { success: true, data: unreadCount })
+        } catch (err: any) {
+          callbackFn(callback, { success: false, message: err.message })
         }
       })
 
-      //-----------------------Disconnect------------------------//
+      // =============================================
+      // EVENT: disconnect
+      // =============================================
       socket.on('disconnect', () => {
-        onlineUser.delete(user?._id?.toString())
+        onlineUser.delete(userId)
         io.emit('onlineUser', Array.from(onlineUser))
-        console.log('disconnect user ', socket.id)
+        console.log('disconnect user', socket.id)
       })
     } catch (error) {
-      console.error('-- socket.io connection error --', error)
+      console.error('socket.io connection error:', error)
+      socket.disconnect()
     }
   })
 

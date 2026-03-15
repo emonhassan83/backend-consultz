@@ -14,8 +14,6 @@ const upload = multer({ storage })
 router.post(
   '/send-messages',
   auth(USER_ROLE.expert, USER_ROLE.consult),
-  upload.single('image'),
-  parseData(),
   validateRequest(messagesValidation.sendMessageValidation),
   messagesController.createMessages,
 )
@@ -26,11 +24,9 @@ router.patch(
   messagesController.seenMessage,
 )
 
-router.patch(
-  '/update/:id',
+router.put(
+  '/:id',
   auth(USER_ROLE.expert, USER_ROLE.consult),
-  upload.single('image'),
-  parseData(),
   validateRequest(messagesValidation.updateMessageValidation),
   messagesController.updateMessages,
 )

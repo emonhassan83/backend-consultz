@@ -25,8 +25,8 @@ const getMyChatList = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-const getChatById = catchAsync(async (req: Request, res: Response) => {
-  const result = await chatService.getChatById(req.params.id)
+const getChatBookingById = catchAsync(async (req: Request, res: Response) => {
+  const result = await chatService.getChatBookingById(req.params.bookingId)
 
   sendResponse(res, {
     statusCode: 200,
@@ -73,7 +73,7 @@ export const chatController = {
   createChat,
   getMyChatList,
   getChatByUserId,
-  getChatById,
+  getChatBookingById,
   updateChat,
   deleteChat,
 }

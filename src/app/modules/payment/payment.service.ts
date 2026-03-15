@@ -18,6 +18,8 @@ import {
   sendPaymentSuccessToUser,
 } from '../../utils/emailNotify'
 import { Contents } from '../contents/contents.models'
+import { Chat } from '../chat/chat.models'
+import { CHAT_STATUS } from '../chat/chat.constants'
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2025-02-24.acacia',
@@ -116,40 +118,55 @@ const confirmPayment = async (payload: IConfirmPayment) => {
       bookingId,
       {
         paymentStatus: PAYMENT_STATUS.paid,
-        // status: BOOKING_STATUS.confirmed,
       },
       { new: true, session },
     ).populate('slot')
+
     if (!booking) {
       throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
     }
 
-    // slot booking
+    // ✅ Chat create — duplicate prevent
+    const existingChat = await Chat.findOne({
+      booking: bookingId,
+      participants: { $all: [booking.user, booking.consult] },
+    }).session(session)
+
+    if (!existingChat) {
+      await Chat.create(
+        [
+          {
+            booking: bookingId,
+            participants: [booking.user, booking.consult],
+            status: CHAT_STATUS.accepted,
+          },
+        ],
+        { session },
+      )
+    }
+
+    // Slot booking
     const slots = await BookingSlots.findByIdAndUpdate(
-      booking._id,
+      booking.slot,
       { isBooked: true },
-      { new: true },
+      { new: true, session },
     )
 
-    // sent notify to consult
+    // Sent notify to consult
     const consult = await User.findById(booking.consult)
-    if (
-      consult &&
-      consult?.fcmToken &&
-      consult.pushNotify?.bookingAndSchedule
-    ) {
+    if (consult && consult?.fcmToken && consult.pushNotify?.bookingAndSchedule) {
       await sendBookingsNotification('pending', booking, consult, booking.slot)
     }
 
-    // sent notify to admin
+    // Sent notify to admin
     await paymentNotifyToAdmin('SUCCESS', payment)
 
-    // sent email to consult
+    // Sent email to consult
     if (consult && consult.emailNotify.booking) {
       await sendNewBookingToConsultant(consult, booking, booking.slot)
     }
 
-    // sent email to user to payment success and waiting for consult approval
+    // Sent email to user
     const user = await User.findById(userId)
     if (user && booking && slots && user.emailNotify.payment) {
       await sendPaymentSuccessToUser(user, booking, slots)

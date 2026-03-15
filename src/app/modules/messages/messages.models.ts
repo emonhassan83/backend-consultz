@@ -7,15 +7,10 @@ const messageSchema = new Schema<TMessages>(
       type: String,
       default: null,
     },
-    imageUrl: [
-      {
-        key: {
-          type: String,
-          default: null,
-        },
-        url: { type: String, default: null },
-      },
-    ],
+    imageUrl: {
+      type: [String],
+      default: [],
+    },
     seen: {
       type: Boolean,
       default: false,

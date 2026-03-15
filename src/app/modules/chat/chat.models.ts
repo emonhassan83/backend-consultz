@@ -4,6 +4,10 @@ import { CHAT_STATUS } from './chat.constants'
 
 const chatSchema = new Schema<TChat>(
   {
+    booking: {
+      type: Schema.Types.ObjectId,
+      ref: 'Booking',
+    },
     participants: [
       {
         type: Schema.Types.ObjectId,

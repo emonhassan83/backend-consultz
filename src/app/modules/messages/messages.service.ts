@@ -18,10 +18,8 @@ const createMessages = async (payload: TMessages) => {
     const chatList = await Chat.create({
       participants: [payload.sender, payload.receiver],
     })
-    //@ts-ignore
     payload.chat = chatList?._id
   } else {
-    //@ts-ignore
     payload.chat = alreadyExists?._id
   }
 
@@ -31,24 +29,38 @@ const createMessages = async (payload: TMessages) => {
   }
 
   if (io) {
-    const senderMessage = 'new-message::' + result.chat.toString()
+    const senderMessage = `new-message::${result.chat.toString()}`
+    io.to(`chat:${result.chat.toString()}`).emit(senderMessage, result)
 
-    io.emit(senderMessage, result)
+    const [ChatListSender, ChatListReceiver] = await Promise.all([
+      chatService.getMyChatList(result.sender.toString(), {}),
+      chatService.getMyChatList(result.receiver.toString(), {}),
+    ])
 
-    // //----------------------ChatList------------------------//
-    const ChatListSender = await chatService.getMyChatList(
-      result?.sender.toString(),
-      {}
+    // ✅ সঠিক user কে সঠিক chat list পাঠাও
+    io.to(result.sender.toString()).emit(
+      `chat-list::${result.sender.toString()}`,
+      ChatListSender,
     )
-    const ChatListReceiver = await chatService.getMyChatList(
-      result?.receiver.toString(),
-      {}
+    io.to(result.receiver.toString()).emit(
+      `chat-list::${result.receiver.toString()}`,
+      ChatListReceiver,
     )
 
-    const senderChat = 'chat-list::' + result.sender.toString()
-    const receiverChat = 'chat-list::' + result.receiver.toString()
-    io.emit(receiverChat, ChatListSender)
-    io.emit(senderChat, ChatListReceiver)
+    // Unread notification
+    const [senderUnread, receiverUnread] = await Promise.all([
+      Message.countDocuments({ receiver: result.sender, seen: false }),
+      Message.countDocuments({ receiver: result.receiver, seen: false }),
+    ])
+
+    io.to(result.sender.toString()).emit(
+      `new-notifications::${result.sender.toString()}`,
+      senderUnread,
+    )
+    io.to(result.receiver.toString()).emit(
+      `new-notifications::${result.receiver.toString()}`,
+      receiverUnread,
+    )
   }
 
   return result
@@ -60,17 +72,13 @@ const getAllMessages = async (query: Record<string, any>) => {
     Message.find().populate([
       {
         path: 'sender',
-        select: 'name email photoUrl _id contactNumber',
-      },
-      {
-        path: 'receiver',
-        select: 'name email photoUrl _id contactNumber',
+        select: 'firstName lastName photoUrl',
       },
     ]),
     query,
   )
     .filter()
-    // .paginate()
+    .paginate()
     .sort()
     .fields()
 
@@ -92,31 +100,34 @@ const updateMessages = async (id: string, payload: Partial<TMessages>) => {
 }
 
 // Get messages by chat ID
-const getMessagesByChatId = async (chatId: string) => {
-  const result = await Message.find({ chat: chatId }).sort({ createdAt: 1 }).populate([
-    {
-      path: 'sender',
-      select: 'name email photoUrl _id',
-    },
-    {
-      path: 'receiver',
-      select: 'name email photoUrl _id',
-    },
-  ])
-  return result
+const getMessagesByChatId = async (
+  chatId: string,
+  query: Record<string, any>,
+) => {
+  const messageQuery = new QueryBuilder(
+    Message.find({ chat: chatId })
+      .populate([{ path: 'sender', select: 'firstName lastName photoUrl _id' }])
+      .select('text imageUrl seen sender createdAt')
+      .sort({ createdAt: -1 }),
+    query,
+  )
+    .filter()
+    .paginate()
+    .fields()
+
+  const messages = await messageQuery.modelQuery
+  const meta = await messageQuery.countTotal()
+
+  // ✅ পুরনো থেকে নতুন order এ দাও
+  const orderedMessages = [...messages].reverse()
+
+  return { meta, data: orderedMessages }
 }
 
 // Get message by ID
 const getMessagesById = async (id: string) => {
   const result = await Message.findById(id).populate([
-    {
-      path: 'sender',
-      select: 'name email photoUrl _id',
-    },
-    {
-      path: 'receiver',
-      select: 'name email photoUrl _id',
-    },
+    { path: 'sender', select: 'firstName lastName photoUrl _id' },
   ])
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'Oops! Message not found')
@@ -128,11 +139,6 @@ const deleteMessages = async (id: string) => {
   const message = await Message.findById(id)
   if (!message) {
     throw new AppError(httpStatus.NOT_FOUND, 'Oops! Message not found')
-  }
-  if (message?.imageUrl) {
-    await deleteFromS3(
-      `images/messages/${message?.chat.toString()}/${message?.id}`,
-    )
   }
 
   const result = await Message.findByIdAndDelete(id)
@@ -159,7 +165,6 @@ const seenMessage = async (userId: string, chatId: string) => {
     messageIdList.length > 0 ? messageIdList[0].ids : []
 
   if (unseenMessageIdList.length === 0) {
-    console.log('No unseen messages found')
     return { message: 'No messages to update' }
   }
 
@@ -172,32 +177,23 @@ const seenMessage = async (userId: string, chatId: string) => {
 }
 
 const deleteMessagesByChatId = async (chatId: string) => {
- const session = await mongoose.startSession();
-  session.startTransaction();
+  const session = await mongoose.startSession()
+  session.startTransaction()
 
   try {
-    // Delete all messages for the chat
-    const messageDeleteResult = await Message.deleteMany({ chat: chatId }).session(session);
-    
+    const messageDeleteResult = await Message.deleteMany({ chat: chatId }).session(session)
+
     if (messageDeleteResult.deletedCount === 0) {
-      throw new AppError(httpStatus.NOT_FOUND, 'No messages found for this chat');
+      throw new AppError(httpStatus.NOT_FOUND, 'No messages found for this chat')
     }
 
-    // // Delete the chat itself
-    // const chatDeleteResult = await Chat.findByIdAndDelete(chatId).session(session);
-    
-    // if (!chatDeleteResult) {
-    //   throw new AppError(httpStatus.NOT_FOUND, 'Chat not found');
-    // }
-
-    await session.commitTransaction();
-    session.endSession();
-
+    await session.commitTransaction()
     return messageDeleteResult
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
-    throw error;
+    await session.abortTransaction()
+    throw error
+  } finally {
+    session.endSession()
   }
 }
 
@@ -209,5 +205,5 @@ export const messagesService = {
   getAllMessages,
   deleteMessages,
   seenMessage,
-  deleteMessagesByChatId
+  deleteMessagesByChatId,
 }

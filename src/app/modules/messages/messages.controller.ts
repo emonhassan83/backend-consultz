@@ -9,18 +9,9 @@ import AppError from '../../errors/AppError'
 import { TChat } from '../chat/chat.interface'
 import { Chat } from '../chat/chat.models'
 import { chatService } from '../chat/chat.service'
-import { storeFile } from '../../utils/fileHelper'
 import { io } from '../../../server'
 
 const createMessages = catchAsync(async (req: Request, res: Response) => {
-  const id = `${Math.floor(100000 + Math.random() * 900000)}${Date.now()}`
-  req.body.id = id
-  if (req?.file) {
-    req.body.imageUrl = storeFile('messages', req?.file?.filename)
-  }
-
-  req.body.sender = req.user._id
-
   const result = await messagesService.createMessages(req.body)
 
   sendResponse(res, {
@@ -46,13 +37,14 @@ const getAllMessages = catchAsync(async (req: Request, res: Response) => {
 
 // Get messages by chat ID
 const getMessagesByChatId = catchAsync(async (req: Request, res: Response) => {
-  const result = await messagesService.getMessagesByChatId(req.params.chatId)
+  const result = await messagesService.getMessagesByChatId(req.params.chatId, req.query)
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Messages retrieved successfully',
-    data: result,
+    meta: result.meta,
+    data: result.data,
   })
 })
 
@@ -70,20 +62,8 @@ const getMessagesById = catchAsync(async (req: Request, res: Response) => {
 
 // Update message
 const updateMessages = catchAsync(async (req: Request, res: Response) => {
-  if (req.file) {
-    const message = await Message.findById(req.params.id)
-    if (!message) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Message not found')
-    }
-    const imageUrl = await uploadToS3({
-      file: req.file,
-      fileName: `images/messages/${message.chat}/${message.id}`,
-    })
-
-    req.body.imageUrl = imageUrl
-  }
-
   const result = await messagesService.updateMessages(req.params.id, req.body)
+
   sendResponse(res, {
     statusCode: 200,
     success: true,

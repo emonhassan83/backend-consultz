@@ -28,21 +28,21 @@ router.delete(
 )
 
 router.get(
-  '/project/:userId',
+  '/user/:userId',
   auth(USER_ROLE.expert, USER_ROLE.consult),
   chatController.getChatByUserId,
+)
+
+router.get(
+  '/booking/:bookingId',
+  auth(USER_ROLE.expert, USER_ROLE.consult),
+  chatController.getChatBookingById,
 )
 
 router.get(
   '/my-chat-list',
   auth(USER_ROLE.expert, USER_ROLE.consult),
   chatController.getMyChatList,
-)
-
-router.get(
-  '/:id',
-  auth(USER_ROLE.expert, USER_ROLE.consult),
-  chatController.getChatById,
 )
 
 export const ChatRoutes = router

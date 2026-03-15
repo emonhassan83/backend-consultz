@@ -93,7 +93,7 @@ const moduleRoutes = [
     path: '/stripe',
     route: StripeRoute,
   },
-    {
+  {
     path: '/withdraw',
     route: WithdrawRoutes,
   },
@@ -132,7 +132,7 @@ const moduleRoutes = [
   {
     path: '/meta',
     route: MetaRoutes,
-  }
+  },
 ]
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route))
