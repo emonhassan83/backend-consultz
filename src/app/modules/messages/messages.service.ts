@@ -1,6 +1,5 @@
 import httpStatus from 'http-status'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { deleteFromS3 } from '../../utils/s3'
 import { TMessages } from './messages.interface'
 import { Chat } from '../chat/chat.models'
 import { Message } from './messages.models'

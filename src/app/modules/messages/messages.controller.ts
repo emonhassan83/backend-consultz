@@ -2,9 +2,7 @@ import { Request, Response } from 'express'
 import catchAsync from '../../utils/catchAsync'
 import { messagesService } from './messages.service'
 import sendResponse from '../../utils/sendResponse'
-import { uploadToS3 } from '../../utils/s3'
 import httpStatus from 'http-status'
-import { Message } from './messages.models'
 import AppError from '../../errors/AppError'
 import { TChat } from '../chat/chat.interface'
 import { Chat } from '../chat/chat.models'
@@ -19,19 +17,6 @@ const createMessages = catchAsync(async (req: Request, res: Response) => {
     success: true,
     message: 'Message sent successfully',
     data: result,
-  })
-})
-
-// Get all messages
-const getAllMessages = catchAsync(async (req: Request, res: Response) => {
-  const result = await messagesService.getAllMessages(req.query)
-
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: 'Messages retrieved successfully',
-    meta: result.meta,
-    data: result.data,
   })
 })
 
@@ -131,7 +116,6 @@ const deleteMessagesByChatId = catchAsync(async (req: Request, res: Response) =>
 
 export const messagesController = {
   createMessages,
-  getAllMessages,
   getMessagesByChatId,
   getMessagesById,
   updateMessages,

@@ -68,11 +68,13 @@ const getMyChatList = async (
 
   const chats = await Chat.find({
     participants: userId,
-  }).populate({
-    path: 'participants',
-    select: 'firstName lastName photoUrl',
-    match: { _id: { $ne: userId } },
   })
+    .populate({
+      path: 'participants',
+      select: 'firstName lastName photoUrl',
+      match: { _id: { $ne: userId } },
+    })
+    .select('_id participants status')
 
   if (!chats) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Chat list not found')
@@ -96,7 +98,12 @@ const getMyChatList = async (
       const chatId = chatItem?._id
 
       const [message, unreadMessageCount] = await Promise.all([
-        Message.findOne({ chat: chatId }).sort({ createdAt: -1 }),
+        Message.findOne({ chat: chatId })
+          .sort({ createdAt: -1 })
+          .select('text imageUrl seen sender createdAt')
+          .populate([
+            { path: 'sender', select: 'firstName lastName photoUrl' },
+          ]),
         Message.countDocuments({
           chat: chatId,
           seen: false,
@@ -104,7 +111,11 @@ const getMyChatList = async (
         }),
       ])
 
-      return { chat: chatItem, message: message || null, unreadMessageCount }
+      return {
+        chat: chatItem,
+        lastMessage: message || null,
+        unreadMessageCount,
+      }
     }),
   )
 
