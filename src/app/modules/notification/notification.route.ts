@@ -2,13 +2,16 @@ import express from 'express'
 import auth from '../../middleware/auth'
 import { USER_ROLE } from '../user/user.constant'
 import { NotificationControllers } from './notification.controller'
+import { NotificationValidation } from './notification.validation'
+import zodValidationRequest from '../../middleware/validateRequest'
 
 const router = express.Router()
 
 router.post(
-  '/general-notification',
+  '/',
   auth(USER_ROLE.admin),
-  NotificationControllers.sentGeneralNotification,
+  zodValidationRequest(NotificationValidation.createValidationSchema),
+  NotificationControllers.createNotification,
 )
 
 router.delete(

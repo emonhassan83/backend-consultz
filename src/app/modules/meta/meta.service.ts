@@ -116,9 +116,9 @@ const analysisReportingMetaData = async (
   const userOverview = await getUserOverview(selectedYear, selectedRole);
 
   return {
-    latestPayout,
-    notifications,
     userOverview,
+    notifications,
+    latestPayout,
   };
 };
 

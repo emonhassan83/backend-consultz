@@ -7,6 +7,13 @@ import moment from 'moment'
 import { User } from '../user/user.model'
 
 const createNotificationIntoDB = async (payload: TNotification) => {
+  const { receiver, ...othersData } = payload
+
+  const user = await User.findById(receiver)
+  if (!user || user?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Receiver user not found!')
+  }
+
   const notification = await Notification.create(payload)
   if (!notification) {
     throw new AppError(httpStatus.CONFLICT, 'Notification not created!')
