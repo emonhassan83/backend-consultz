@@ -11,10 +11,16 @@ import { BOOKING_STATUS } from '../booking/booking.constants'
 const createChat = async (payload: TChat) => {
   const { participants, booking: bookingId } = payload
   if (!participants || participants.length !== 2) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Exactly two participants are required to create a chat')
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Exactly two participants are required to create a chat',
+    )
   }
   if (!bookingId) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Booking is required to create a chat')
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Booking is required to create a chat',
+    )
   }
 
   const booking = await Booking.findById(bookingId)
@@ -22,8 +28,11 @@ const createChat = async (payload: TChat) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
   }
 
-  if(booking.status !== BOOKING_STATUS.confirmed) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Only confirmed bookings can have chats')
+  if (booking.status !== BOOKING_STATUS.confirmed) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Only confirmed bookings can have chats',
+    )
   }
 
   const bookingExists = await Chat.findOne({ booking: bookingId })
@@ -46,11 +55,15 @@ const createChat = async (payload: TChat) => {
   if (alreadyExists) return alreadyExists
 
   const result = await Chat.create(payload)
-  if (!result) throw new AppError(httpStatus.BAD_REQUEST, 'Chat creation failed')
+  if (!result)
+    throw new AppError(httpStatus.BAD_REQUEST, 'Chat creation failed')
   return result
 }
 
-const getMyChatList = async (userId: string, query: Record<string, unknown>) => {
+const getMyChatList = async (
+  userId: string,
+  query: Record<string, unknown>,
+) => {
   const searchTerm = query.searchTerm as string | undefined
 
   const chats = await Chat.find({
@@ -75,7 +88,8 @@ const getMyChatList = async (userId: string, query: Record<string, unknown>) => 
 
       // Search filter
       if (searchTerm) {
-        const fullName = `${participant?.firstName || ''} ${participant?.lastName || ''}`.toLowerCase()
+        const fullName =
+          `${participant?.firstName || ''} ${participant?.lastName || ''}`.toLowerCase()
         if (!fullName.includes(searchTerm.toLowerCase())) return null
       }
 
@@ -99,8 +113,12 @@ const getMyChatList = async (userId: string, query: Record<string, unknown>) => 
 
   // Latest message এর based এ sort করো
   data.sort((a, b) => {
-    const dateA = a.message?.createdAt ? new Date(a.message.createdAt).getTime() : 0
-    const dateB = b.message?.createdAt ? new Date(b.message.createdAt).getTime() : 0
+    const dateA = a.message?.createdAt
+      ? new Date(a.message.createdAt).getTime()
+      : 0
+    const dateB = b.message?.createdAt
+      ? new Date(b.message.createdAt).getTime()
+      : 0
     return dateB - dateA
   })
 
@@ -152,8 +170,12 @@ const getChatByUserId = async (currentUser: string, userId: string) => {
   const data = dataWithMessages.filter(Boolean) as any[]
 
   data.sort((a, b) => {
-    const dateA = a.message?.createdAt ? new Date(a.message.createdAt).getTime() : 0
-    const dateB = b.message?.createdAt ? new Date(b.message.createdAt).getTime() : 0
+    const dateA = a.message?.createdAt
+      ? new Date(a.message.createdAt).getTime()
+      : 0
+    const dateB = b.message?.createdAt
+      ? new Date(b.message.createdAt).getTime()
+      : 0
     return dateB - dateA
   })
 
@@ -173,6 +195,11 @@ const deleteChatList = async (id: string) => {
   return result
 }
 
+const checkUserExists = async (userId: string) => {
+  const user = await User.findById(userId).select('_id')
+  return !!user
+}
+
 export const chatService = {
   createChat,
   getMyChatList,
@@ -180,4 +207,5 @@ export const chatService = {
   getChatByUserId,
   updateChatList,
   deleteChatList,
+  checkUserExists,
 }
