@@ -10,7 +10,7 @@ const router = Router()
 router.post(
   '/',
   zodValidationRequest(BookingsValidation.createValidationSchema),
-  auth(USER_ROLE.consult),
+  auth(USER_ROLE.consult, USER_ROLE.expert),
   bookingsController.createBookings,
 )
 
