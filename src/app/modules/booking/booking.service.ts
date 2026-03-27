@@ -138,13 +138,6 @@ const createBookings = async (payload: TBookings, userId: string) => {
       }
     }
 
-    // 9. Mark slot as booked
-    await BookingSlots.findByIdAndUpdate(
-      slotId,
-      { isBooked: true },
-      { session },
-    )
-
     await session.commitTransaction()
 
     return createdBooking
