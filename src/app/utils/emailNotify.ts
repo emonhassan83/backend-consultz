@@ -356,3 +356,88 @@ export const sendPaymentSuccessToUser = async (
     )
   );
 };
+
+/**
+ * Send email when a booking is automatically marked as "not_responded"
+ * (System-initiated + Refund processed)
+ */
+export const sendNotRespondedEmail = async (
+  user: TUser,      // the booker (customer)
+  consult: TUser,   // the expert/consultant
+  booking: TBookings,
+  slot: TBookingSlots,
+  refundProcessed: boolean = false
+): Promise<void> => {
+  const sessionInfo = `${slot.date} • ${slot.time} (${booking.timezone})`;
+
+  // Email for the booker (user)
+  const userEmailContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+      <h2 style="color: #d9534f;">Booking Not Responded</h2>
+      <p style="color: #555;">Dear ${user.firstName},</p>
+      <p style="color: #555;">
+        Your confirmed booking with <strong>${consult.firstName} ${consult.lastName}</strong> 
+        on <strong>${sessionInfo}</strong> was not completed by the consultant.
+      </p>
+      <p style="color: #555;">
+        The booking has been automatically marked as <strong>Not Responded</strong>.
+      </p>
+      ${
+        refundProcessed
+          ? `<p style="color: #d9534f; font-weight: bold;">
+               A full refund has been initiated and will be processed shortly.
+             </p>`
+          : `<p style="color: #555;">
+               No refund was needed for this booking.
+             </p>`
+      }
+      <p style="color: #555;">If you have any questions, please contact support.</p>
+      <p style="color: #555;">Best regards,<br/><strong>Consultz Team</strong></p>
+      <div style="text-align: center; margin-top: 20px; font-size: 12px; color: #999;">
+        <p>© ${new Date().getFullYear()} Consultz App. All rights reserved.</p>
+      </div>
+    </div>
+  `;
+
+  // Email for the consultant (expert)
+  const consultEmailContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+      <h2 style="color: #d9534f;">Booking Marked as Not Responded</h2>
+      <p style="color: #555;">Dear ${consult.firstName},</p>
+      <p style="color: #555;">
+        Your confirmed booking with <strong>${user.firstName} ${user.lastName}</strong> 
+        on <strong>${sessionInfo}</strong> was not completed.
+      </p>
+      <p style="color: #555;">
+        The booking has been automatically marked as <strong>Not Responded</strong> 
+        because you did not attend the session.
+      </p>
+      <p style="color: #555;">Please ensure you respond to future bookings in a timely manner.</p>
+      <p style="color: #555;">Best regards,<br/><strong>Consultz Team</strong></p>
+      <div style="text-align: center; margin-top: 20px; font-size: 12px; color: #999;">
+        <p>© ${new Date().getFullYear()} Consultz App. All rights reserved.</p>
+      </div>
+    </div>
+  `;
+
+  // Send emails in parallel (non-blocking)
+  const emailTasks: Promise<void>[] = [];
+
+  if (user?.email && user.emailNotify?.booking) {
+    emailTasks.push(
+      emailSender(user.email, 'Booking Not Responded', userEmailContent).catch((err) =>
+        console.error(`Failed to send not_responded email to user ${user._id}:`, err)
+      )
+    );
+  }
+
+  if (consult?.email && consult.emailNotify?.booking) {
+    emailTasks.push(
+      emailSender(consult.email, 'Booking Not Responded', consultEmailContent).catch((err) =>
+        console.error(`Failed to send not_responded email to consultant ${consult._id}:`, err)
+      )
+    );
+  }
+
+  await Promise.all(emailTasks);
+};

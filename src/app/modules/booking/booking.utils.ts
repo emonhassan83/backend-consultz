@@ -79,7 +79,7 @@ export const sendBookingsNotification = async (
 
     case 'not_responded':
       message = messages.booking.not_responded
-      description = `${sessionTypeFormatted} session with ${booking.consult.firstName} was not completed.`
+      description = `Your confirmed booking on ${sessionInfo} was not completed and has been marked as not responded. A refund has been initiated.`;
       break
 
     case 'reschedule':

@@ -63,6 +63,38 @@ const createBookings = async (payload: TBookings, userId: string) => {
       throw new AppError(httpStatus.BAD_REQUEST, 'Slot already booked!')
     }
 
+    // 🔥 NEW CHECK: Prevent same user from booking the same slot again if it's still booked
+    const unpaidBooking = await Booking.findOne({
+      user: userId,
+      consult: consult?._id,
+      slot: slotId,
+      isDeleted: false,
+      paymentStatus: PAYMENT_STATUS.unpaid,
+    }).session(session)
+    if (unpaidBooking) {
+      return unpaidBooking
+    }
+
+    const existingBooking = await Booking.findOne({
+      consult: consult?._id,
+      slot: slotId,
+      isDeleted: false,
+      status: {
+        $nin: [
+          BOOKING_STATUS.cancelled,
+          BOOKING_STATUS.not_responded,
+          BOOKING_STATUS.declined,
+        ],
+      }, // ignore bookings
+    }).session(session)
+
+    if (existingBooking) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'This expert already booked this slot. You cannot book the same slot again.',
+      )
+    }
+
     // 4. Date/time validation (buffer time check)
     const slotDateTimeStr = `${slotTime.date} ${slotTime.time}`
     const slotDateTime = dayjs(slotDateTimeStr, 'YYYY-MM-DD HH:mm')
@@ -192,7 +224,10 @@ const getAllBookingsByDate = async (query: Record<string, any>) => {
   if (date) {
     const parsed = dayjs(date, 'DD-MM-YYYY')
     if (!parsed.isValid()) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid date format. Use DD-MM-YYYY')
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Invalid date format. Use DD-MM-YYYY',
+      )
     }
     targetDates = [parsed.format('YYYY-MM-DD')]
   } else if (filterType === 'today') {
@@ -228,7 +263,7 @@ const getAllBookingsByDate = async (query: Record<string, any>) => {
     date: { $in: targetDates },
   }).select('_id')
 
-  const slotIds = matchingSlots.map(s => s._id)
+  const slotIds = matchingSlots.map((s) => s._id)
 
   // Slot না থাকলে early return
   if (slotIds.length === 0) {
@@ -241,7 +276,7 @@ const getAllBookingsByDate = async (query: Record<string, any>) => {
       }
     }
     return {
-      data: targetDates.map(d => ({
+      data: targetDates.map((d) => ({
         date: dayjs(d).format('DD-MM-YYYY'),
         bookingList: [],
       })),
@@ -259,7 +294,9 @@ const getAllBookingsByDate = async (query: Record<string, any>) => {
       { path: 'consult', select: 'firstName lastName photoUrl' },
       { path: 'slot', select: 'date time' },
     ])
-    .select('user consult slot sessionType sessionDuration price timezone status createdAt')
+    .select(
+      'user consult slot sessionType sessionDuration price timezone status createdAt',
+    )
     .sort({ createdAt: -1 })
 
   // Single date → simple response
@@ -287,7 +324,7 @@ const getAllBookingsByDate = async (query: Record<string, any>) => {
 
   const formattedData = Object.keys(groupedByDate)
     .sort()
-    .map(d => ({
+    .map((d) => ({
       date: dayjs(d).format('DD-MM-YYYY'),
       bookingList: groupedByDate[d],
     }))
@@ -726,24 +763,16 @@ const declineBooking = async (bookingId: string, currentUserId: string) => {
 
     // 7. Push notification to booker
     if (booker && booker.fcmToken && booker.pushNotify?.bookingAndSchedule) {
-      await sendBookingsNotification(
-        'declined',
-        updatedBooking,
-        booker,
-        slot,
-        { cancelledBy: 'consult' },
-      )
+      await sendBookingsNotification('declined', updatedBooking, booker, slot, {
+        cancelledBy: 'consult',
+      })
     }
 
     // 8. Push notification to expert (optional — self declined)
     if (expert && expert.fcmToken && expert.pushNotify?.bookingAndSchedule) {
-      await sendBookingsNotification(
-        'declined',
-        updatedBooking,
-        expert,
-        slot,
-        { cancelledBy: 'consult' },
-      )
+      await sendBookingsNotification('declined', updatedBooking, expert, slot, {
+        cancelledBy: 'consult',
+      })
     }
 
     // 9. Email notification

@@ -8,21 +8,32 @@ import {
   TBookingNotifyAction,
 } from '../modules/booking/booking.utils'
 import mongoose from 'mongoose'
-import { Contents } from '../modules/contents/contents.models'
 import { Withdraw } from '../modules/withdraw/withdraw.model'
 import { WITHDRAW_STATUS } from '../modules/withdraw/withdraw.constant'
 import StripeService from '../class/stripe/stripe'
 import { sendWithdrawNotify } from '../modules/withdraw/withdraw.utils'
-import { BOOKING_STATUS } from '../modules/booking/booking.constants'
+import {
+  BOOKING_STATUS,
+  PAYMENT_STATUS,
+} from '../modules/booking/booking.constants'
 import { Reviews } from '../modules/review/review.models'
 import { notifyUserToLeaveReview } from '../modules/review/review.utils'
 import emailSender from './emailSender'
 import {
   createReminderEmailContent,
+  sendNotRespondedEmail,
   sendWithdrawCompletedEmail,
 } from './emailNotify'
 import { USER_ROLE, USER_STATUS } from '../modules/user/user.constant'
 import { sendNotification } from './sentNotification'
+import { Payment } from '../modules/payment/payment.model'
+import Stripe from 'stripe'
+import config from '../config'
+
+const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
+  apiVersion: '2025-02-24.acacia',
+  typescript: true,
+})
 
 /**
  * Initializes and starts all scheduled cron jobs.
@@ -502,7 +513,7 @@ export const initializeCronJobs = () => {
     { timezone: 'Europe/London' },
   )
 
-  // 6. Auto-mark old confirmed bookings as "not_responded" (daily at midnight UK time)
+  // 6. Auto-mark old confirmed bookings as "not_responded" + free slot + refund
   cron.schedule(
     '0 0 * * *',
     async () => {
@@ -512,17 +523,13 @@ export const initializeCronJobs = () => {
       session.startTransaction()
 
       try {
-        // Current time in UK timezone
         const now = dayjs().tz('Europe/London')
+        const thresholdTime = now.subtract(24, 'hour') // 24 hours after slot time
 
-        // Threshold: bookings older than 24 hours from slot time
-        const thresholdTime = now.subtract(24, 'hour')
-
-        // Find confirmed bookings where slot time + threshold passed and still not completed
+        // Find confirmed bookings that are overdue and not yet completed
         const oldConfirmedBookings = await Booking.find({
           status: BOOKING_STATUS.confirmed,
           isDeleted: false,
-          respondedAt: { $exists: false }, // optional: only if not responded yet
         })
           .populate('slot user consult')
           .session(session)
@@ -530,7 +537,7 @@ export const initializeCronJobs = () => {
         let updatedCount = 0
 
         for (const booking of oldConfirmedBookings) {
-          const slot = booking.slot as any // populated slot
+          const slot = booking.slot as any
 
           // Calculate actual booking start time in user's timezone
           const bookingStart = dayjs.tz(
@@ -539,63 +546,106 @@ export const initializeCronJobs = () => {
             booking.timezone,
           )
 
-          // If booking time + 24 hours has passed and still not completed
+          // If 24+ hours have passed since slot time and still not completed
           if (bookingStart.isBefore(thresholdTime)) {
-            // Update status to not_responded
+            // 1. Mark booking as not_responded
             await Booking.findByIdAndUpdate(
               booking._id,
               {
                 status: BOOKING_STATUS.not_responded,
-                respondedAt: new Date(), // mark when it was auto-updated
+                respondedAt: new Date(),
               },
               { session },
             )
 
-            // Notify both user and consultant
-            const notifications = []
-            const user = await User.findById(booking.user)
-              .select('fcmToken pushNotify')
-              .lean()
-            const consult = await User.findById(booking.consult)
-              .select('fcmToken pushNotify')
-              .lean()
+            // 2. Free the slot
+            await BookingSlots.findByIdAndUpdate(
+              booking.slot,
+              { isBooked: false },
+              { session },
+            )
 
-            // To user (booker)
-            if (user?.fcmToken && user.pushNotify?.bookingAndSchedule) {
-              notifications.push({
-                userId: user._id.toString(),
-                fcmToken: user.fcmToken,
-                action: 'not_responded',
-                booking,
-                slot,
-              })
+            // 3. Refund process (same as declineBooking)
+            let refundProcessed = false
+            let refundAmount = 0
+
+            const payment = await Payment.findOne({
+              booking: booking._id,
+              isPaid: true,
+              isDeleted: false,
+            }).session(session)
+
+            if (payment && payment.paymentIntentId) {
+              try {
+                const refund = await stripe.refunds.create({
+                  payment_intent: payment.paymentIntentId,
+                  amount: payment.amount * 100,
+                })
+
+                await Payment.updateOne(
+                  { _id: payment._id },
+                  { status: PAYMENT_STATUS.refunded },
+                  { session },
+                )
+
+                refundProcessed = true
+                refundAmount = refund.amount / 100
+              } catch (refundError: any) {
+                console.error(
+                  `Refund failed for booking ${booking._id}:`,
+                  refundError.message,
+                )
+              }
             }
 
-            // To consultant
-            if (consult?.fcmToken && consult.pushNotify?.bookingAndSchedule) {
-              notifications.push({
-                userId: consult._id.toString(),
-                fcmToken: consult.fcmToken,
-                action: 'not_responded',
-                booking,
-                slot,
-              })
-            }
+            // 4. Notify both user and consultant
+            const [booker, expert] = await Promise.all([
+              User.findById(booking.user)
+                .select('fcmToken pushNotify emailNotify')
+                .session(session),
+              User.findById(booking.consult)
+                .select('fcmToken pushNotify emailNotify')
+                .session(session),
+            ])
 
-            // Batch send notifications
-            for (const n of notifications) {
+            const slotInfo = await BookingSlots.findById(booking.slot).session(
+              session,
+            )
+
+            // Push notifications
+            if (booker?.fcmToken && booker.pushNotify?.bookingAndSchedule) {
               await sendBookingsNotification(
                 'not_responded',
-                n.booking,
-                await User.findById(n.userId)
-                  .select('fcmToken pushNotify')
-                  .lean(),
-                n.slot,
+                booking,
+                booker,
+                slotInfo,
+              )
+            }
+
+            if (expert?.fcmToken && expert.pushNotify?.bookingAndSchedule) {
+              await sendBookingsNotification(
+                'not_responded',
+                booking,
+                expert,
+                slotInfo,
+              )
+            }
+
+            // Email notification to booker (user)
+            if (booker && expert && slotInfo) {
+              await sendNotRespondedEmail(
+                booker,
+                expert,
+                booking,
+                slotInfo,
+                refundProcessed,
               )
             }
 
             updatedCount++
-            console.log(`Marked booking ${booking._id} as not_responded`)
+            console.log(
+              `Marked booking ${booking._id} as not_responded and processed refund`,
+            )
           }
         }
 
