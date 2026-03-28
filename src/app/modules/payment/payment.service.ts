@@ -26,38 +26,66 @@ const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   typescript: true,
 })
 
-const createPaymentIntent = async (payload: IPaymentIntent) => {
+/* =====================================================
+   🔹 CREATE PAYMENT INTENT (WITH CUSTOMER SUPPORT)
+===================================================== */
+const createPaymentIntent = async (payload: {
+  booking: string
+  account: string
+}) => {
   const { booking: bookingId, account: userId } = payload
 
-  // Check booking
+  /* ========= 1. Validate Booking ========= */
   const booking = await Booking.findById(bookingId)
   if (!booking || booking.isDeleted || booking.user.toString() !== userId) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Invalid booking')
   }
 
-  // user checked
+  /* ========= 2. Validate User ========= */
   const user = await User.findById(userId)
   if (!user || user.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found')
   }
 
-  // consultationFee fetch করো
+  /* ========= 3. Create / Reuse Stripe Customer ========= */
+  let stripeCustomerId = user.stripeCustomerId
+
+  if (!stripeCustomerId) {
+    const customer = await stripe.customers.create({
+      email: user.email,
+      name: `${user.firstName} ${user.lastName}`,
+    })
+
+    stripeCustomerId = customer.id
+
+    await User.findByIdAndUpdate(userId, {
+      stripeCustomerId,
+    })
+  }
+
+  const ephemeralKey = await stripe.ephemeralKeys.create(
+    { customer: stripeCustomerId },
+    { apiVersion: '2025-02-24.acacia' },
+  )
+
+  /* ========= 4. Calculate Amount ========= */
   const contents = await Contents.findOne({ isDeleted: false }).select(
     'consultationFee',
   )
+
   const consultationFeePercent = contents?.consultationFee || 0
 
-  // Commission calculate করো
   const amount = booking.price
   const platformCommission = parseFloat(
     ((amount * consultationFeePercent) / 100).toFixed(2),
   )
   const consultAmount = parseFloat((amount - platformCommission).toFixed(2))
 
-  // Create payment Intent
+  /* ========= 5. Create PaymentIntent ========= */
   const paymentIntent = await stripe.paymentIntents.create({
-    amount: amount * 100,
-    currency: 'usd',
+    amount: Math.round(amount * 100),
+    currency: 'eur',
+    customer: stripeCustomerId,
     payment_method_types: ['card'],
     metadata: {
       bookingId: bookingId.toString(),
@@ -66,7 +94,7 @@ const createPaymentIntent = async (payload: IPaymentIntent) => {
     description: `Booking payment for ${booking._id}`,
   })
 
-  // Payment record create
+  /* ========= 6. Save Payment ========= */
   await Payment.findOneAndUpdate(
     { booking: bookingId, isPaid: false },
     {
@@ -83,23 +111,36 @@ const createPaymentIntent = async (payload: IPaymentIntent) => {
   return {
     clientSecret: paymentIntent.client_secret,
     paymentIntentId: paymentIntent.id,
+    customerId: stripeCustomerId,
+    ephemeralKey: ephemeralKey.secret,
   }
 }
 
-const confirmPayment = async (payload: IConfirmPayment) => {
+/* =====================================================
+   🔹 CONFIRM PAYMENT (SECURE)
+===================================================== */
+const confirmPayment = async (payload: {
+  paymentIntentId: string
+  booking: string
+  user: string
+}) => {
   const { paymentIntentId, booking: bookingId, user: userId } = payload
 
+  /* ========= 1. Verify from Stripe ========= */
   const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId)
 
   if (paymentIntent.status !== 'succeeded') {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Payment not succeeded')
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Payment not successful on Stripe',
+    )
   }
 
   const session = await mongoose.startSession()
   session.startTransaction()
 
   try {
-    // Payment record update
+    /* ========= 2. Update Payment ========= */
     const payment = await Payment.findOneAndUpdate(
       { paymentIntentId, isPaid: false },
       {
@@ -110,14 +151,15 @@ const confirmPayment = async (payload: IConfirmPayment) => {
     )
 
     if (!payment) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Payment record not found')
+      throw new AppError(httpStatus.NOT_FOUND, 'Payment not found')
     }
 
-    // Booking confirm
+    /* ========= 3. Update Booking ========= */
     const booking = await Booking.findByIdAndUpdate(
       bookingId,
       {
         paymentStatus: PAYMENT_STATUS.paid,
+        status: BOOKING_STATUS.pending,
       },
       { new: true, session },
     ).populate('slot')
@@ -126,7 +168,14 @@ const confirmPayment = async (payload: IConfirmPayment) => {
       throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
     }
 
-    // ✅ Chat create — duplicate prevent
+    /* ========= 4. Mark Slot as Booked ========= */
+    await BookingSlots.findByIdAndUpdate(
+      booking.slot,
+      { isBooked: true },
+      { session },
+    )
+
+    /* ========= 5. Create Chat ========= */
     const existingChat = await Chat.findOne({
       booking: bookingId,
       participants: { $all: [booking.user, booking.consult] },
@@ -145,35 +194,28 @@ const confirmPayment = async (payload: IConfirmPayment) => {
       )
     }
 
-    // Slot booking
-    const slots = await BookingSlots.findByIdAndUpdate(
-      booking.slot,
-      { isBooked: true },
-      { new: true, session },
-    )
+    await session.commitTransaction()
 
-    // Sent notify to consult
+    /* ========= 6. Notifications ========= */
     const consult = await User.findById(booking.consult)
-    if (consult && consult?.fcmToken && consult.pushNotify?.bookingAndSchedule) {
+    const user = await User.findById(userId)
+
+    if (consult?.fcmToken) {
       await sendBookingsNotification('pending', booking, consult, booking.slot)
     }
 
-    // Sent notify to admin
-    await paymentNotifyToAdmin('SUCCESS', payment)
-
-    // Sent email to consult
-    if (consult && consult.emailNotify.booking) {
+    if (consult?.emailNotify?.booking) {
       await sendNewBookingToConsultant(consult, booking, booking.slot)
     }
 
-    // Sent email to user
-    const user = await User.findById(userId)
-    if (user && booking && slots && user.emailNotify.payment) {
-      await sendPaymentSuccessToUser(user, booking, slots)
+    if (user?.emailNotify?.payment) {
+      await sendPaymentSuccessToUser(user, booking, booking.slot as any)
     }
 
-    await session.commitTransaction()
-    return { payment, booking }
+    return {
+      payment,
+      booking,
+    }
   } catch (error) {
     await session.abortTransaction()
     throw error

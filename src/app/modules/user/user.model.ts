@@ -85,28 +85,28 @@ const userSchema = new Schema<TUser, UserModel>(
     education: { type: EducationSchema, default: {} },
 
     // availability field
-   availability: {
-  type: [
-    {
-      day: {
-        type: String,
-        enum: Object.values(DAY_MAP),
-        required: true,
-      },
-      slots: {
-        type: [
-          {
-            from: { type: String, required: true },
-            to: { type: String, required: true },
+    availability: {
+      type: [
+        {
+          day: {
+            type: String,
+            enum: Object.values(DAY_MAP),
+            required: true,
           },
-        ],
-        _id: false, // ← disables _id for every slot
-      },
-      _id: false, // ← disables _id for every day object
+          slots: {
+            type: [
+              {
+                from: { type: String, required: true },
+                to: { type: String, required: true },
+              },
+            ],
+            _id: false, // ← disables _id for every slot
+          },
+          _id: false, // ← disables _id for every day object
+        },
+      ],
+      default: [],
     },
-  ],
-  default: [],
-},
     socialProfiles: { type: [SocialProfileSchema], default: [] },
     sessionDurations: { type: [SessionDurationSchema], default: [] },
 
@@ -200,6 +200,10 @@ const userSchema = new Schema<TUser, UserModel>(
         type: Boolean,
         default: true,
       },
+    },
+    stripeCustomerId: {
+      type: String,
+      default: null,
     },
     isTopExpert: {
       type: Boolean,

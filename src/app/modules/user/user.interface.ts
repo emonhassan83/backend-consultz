@@ -99,6 +99,7 @@ export interface TUser {
   expireAt: Date
   isTopExpert: boolean
   isProfileSetup: boolean
+  stripeCustomerId: string
   profileCompletionBonusClaimed: boolean
   socialProofBonusClaimed: boolean
   isDeleted: boolean
