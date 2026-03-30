@@ -10,6 +10,51 @@ import { Follow } from '../connection/connection.models';
 import { Feed } from './feed.model';
 import admin from 'firebase-admin';
 import { Notification } from '../notification/notification.model';
+import { Report } from '../report/report.models';
+
+/**
+ * Batch check if any report exists for multiple feeds
+ * Returns Map<feedId, isReported: boolean>
+ */
+export const getReportedStatusBatch = async (
+  feedIds: string[] | Types.ObjectId[],
+  currentUserId?: string // optional: যদি শুধু current user এর report চাও
+): Promise<Map<string, boolean>> => {
+  if (feedIds.length === 0) return new Map();
+
+  const normalizedIds = feedIds.map(id => new Types.ObjectId(id.toString()));
+
+  const query: any = { feed: { $in: normalizedIds } };
+
+  // যদি শুধু current user এর report চাও (optional)
+  if (currentUserId) {
+    query.author = new Types.ObjectId(currentUserId);
+  }
+
+  const reports = await Report.find(query)
+    .select('feed')
+    .lean();
+
+  const reportedSet = new Set(reports.map(r => r.feed.toString()));
+
+  const result = new Map<string, boolean>();
+  normalizedIds.forEach(id => {
+    result.set(id.toString(), reportedSet.has(id.toString()));
+  });
+
+  return result;
+};
+
+/**
+ * Get all reports for a single feed
+ */
+export const getReportsForFeed = async (feedId: string) => {
+  return await Report.find({ feed: feedId })
+    .populate('author', 'firstName lastName photoUrl')
+    .select('author reason createdAt')
+    .sort({ createdAt: -1 })
+    .lean();
+};
 
 // Utility to check isLiked
 export const enrichFeedWithUserInfo = async (feed: any, userId: string) => {

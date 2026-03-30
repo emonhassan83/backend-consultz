@@ -198,7 +198,7 @@ const getAllUsersFromDB = async (
 
   const usersQuery = new QueryBuilder(
     User.find(baseQuery).select(
-      '_id id firstName lastName email phoneNumber photoUrl headline following followers points avgRating skills languages expertise status isProfileSetup createdAt hourlyRate sessionDurations availability interests learningStyles',
+      '_id id firstName lastName email phoneNumber photoUrl role headline following followers points avgRating skills languages expertise status isProfileSetup createdAt hourlyRate sessionDurations availability interests learningStyles',
     ),
     query,
   )

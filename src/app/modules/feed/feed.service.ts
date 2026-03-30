@@ -8,6 +8,8 @@ import { ContentMetaService } from '../contentMeta/contentMeta.service'
 import { uploadToS3 } from '../../utils/s3'
 import {
   enrichFeedWithUserInfo,
+  getReportedStatusBatch,
+  getReportsForFeed,
   notifyFollowersOnNewPost,
   sendFeedNotificationToUser,
 } from './feed.utils'
@@ -81,64 +83,70 @@ const getAllFeedsFromDB = async (
   query: Record<string, unknown>,
   currentUserId: string,
 ) => {
-  const currentUser = await User.findById(currentUserId).select('role')
+  const currentUser = await User.findById(currentUserId).select('role');
   if (!currentUser) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found')
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
   }
 
-  let feedFilter: any = { isDeleted: false }
+  let feedFilter: any = { isDeleted: false };
 
   if (currentUser.role !== USER_ROLE.admin) {
-    const blockedDocs = await BlockProfile.find({ blocker: currentUserId }).select('blocked')
-    const blockedIds = blockedDocs.map((doc) => doc.blocked)
+    const blockedDocs = await BlockProfile.find({ blocker: currentUserId }).select('blocked');
+    const blockedIds = blockedDocs.map(doc => doc.blocked);
     if (blockedIds.length > 0) {
-      feedFilter.author = { $nin: blockedIds }
+      feedFilter.author = { $nin: blockedIds };
     }
   }
 
-  // 🔍 Author name search — searchTerm দিয়ে user খুঁজে author filter করো
-  const searchTerm = query?.searchTerm as string
-  if (searchTerm) {
-    const matchingAuthors = await User.find({
-      $or: [
-        { firstName: { $regex: searchTerm, $options: 'i' } },
-        { lastName: { $regex: searchTerm, $options: 'i' } },
-      ],
-    }).select('_id')
-
-    const authorIds = matchingAuthors.map((u) => u._id)
-
-    // description search + author name search একসাথে
-    feedFilter.$or = [
-      { description: { $regex: searchTerm, $options: 'i' } },
-      { author: { $in: authorIds } },
-    ]
+  if (query.status) {
+    feedFilter.status = query.status;
   }
 
-  const activeCount = await Feed.countDocuments({ ...feedFilter, status: FEED_STATUS.active })
-  const restrictCount = await Feed.countDocuments({ ...feedFilter, status: FEED_STATUS.restrict })
-
-  // searchTerm query থেকে সরিয়ে দাও, নইলে QueryBuilder আবার search করবে
-  const { searchTerm: _, ...restQuery } = query
+  const activeCount = await Feed.countDocuments({ ...feedFilter, status: FEED_STATUS.active });
+  const restrictCount = await Feed.countDocuments({ ...feedFilter, status: FEED_STATUS.restrict });
 
   const feedQuery = new QueryBuilder(
     Feed.find({ ...feedFilter }).populate([
       { path: 'author', select: 'firstName lastName headline photoUrl' },
       { path: 'contentMeta', select: 'like comment likeBy' },
     ]),
-    restQuery,
+    query,
   )
+    .search(['description'])
     .filter()
     .sortByCustom({ createdAt: -1 })
     .paginate()
-    .fields()
+    .fields();
 
-  const feedList = await feedQuery.modelQuery
-  const meta = await feedQuery.countTotal()
+  let feedList = await feedQuery.modelQuery;
+  const meta = await feedQuery.countTotal();
 
+  // Search on author name (post-processing)
+  const searchTerm = (query.searchTerm as string)?.toString().trim().toLowerCase();
+  if (searchTerm) {
+    feedList = feedList.filter((feed: any) => {
+      const descMatch = feed.description?.toLowerCase().includes(searchTerm) || false;
+      const authorName = `${feed.author?.firstName || ''} ${feed.author?.lastName || ''}`.toLowerCase();
+      return descMatch || authorName.includes(searchTerm);
+    });
+    meta.total = feedList.length;
+    meta.totalPage = Math.ceil(feedList.length / (Number(query.limit) || 10));
+  }
+
+  // 🔥 Batch check isReported
+  const feedIds = feedList.map((f: any) => f._id.toString());
+  const reportedMap = await getReportedStatusBatch(feedIds);
+
+  // Enrich with isReported
   const enrichedFeedList = await Promise.all(
-    feedList.map((feed) => enrichFeedWithUserInfo(feed, currentUserId)),
-  )
+    feedList.map(async (feed: any) => {
+      const enriched = await enrichFeedWithUserInfo(feed, currentUserId);
+      return {
+        ...enriched,
+        isReported: reportedMap.get(feed._id.toString()) || false,
+      };
+    })
+  );
 
   return {
     meta,
@@ -147,23 +155,31 @@ const getAllFeedsFromDB = async (
       restrictFeed: restrictCount,
       feedList: enrichedFeedList,
     },
-  }
-}
+  };
+};
 
 const getAFeedFromDB = async (id: string, userId: string) => {
-  const result = await Feed.findById(id).populate([
-    { path: 'author', select: 'firstName lastName headline photoUrl' },
-    { path: 'contentMeta', select: 'like comment likeBy' },
-  ])
+  const feed = await Feed.findById(id)
+    .populate([
+      { path: 'author', select: 'firstName lastName headline photoUrl' },
+      { path: 'contentMeta', select: 'like comment likeBy' },
+    ]);
 
-  if (!result || result.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Feed post not found')
+  if (!feed || feed.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Feed post not found');
   }
 
-  const enrichedFeed = await enrichFeedWithUserInfo(result, userId)
+  const enrichedFeed = await enrichFeedWithUserInfo(feed, userId);
 
-  return enrichedFeed
-}
+  // Get all reports for this feed
+  const reportList = await getReportsForFeed(id);
+
+  return {
+    ...enrichedFeed,
+    isReported: reportList.length > 0,
+    reportList,           // ← All reports with reason, status, author
+  };
+};
 
 const updateFeedFromDB = async (
   id: string,
