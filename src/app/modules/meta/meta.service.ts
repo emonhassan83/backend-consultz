@@ -191,7 +191,7 @@ const paymentTransactionMetaData = async (
     data: {
       totalEarnings: earningOverviewData.totalEarnings,
       consultAmount: earningOverviewData.consultAmount || 0,
-      earningOverview: earningOverviewData.monthlyData,
+      // earningOverview: earningOverviewData.monthlyData,
       paymentList,
       notifications,
     },
