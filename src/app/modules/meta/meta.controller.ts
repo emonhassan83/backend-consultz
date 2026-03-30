@@ -32,7 +32,8 @@ const paymentTransactionMetaData = catchAsync(async (req, res) => {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Payment transaction meta data retrieval successfully!',
-    data: result,
+    meta: result.meta,
+    data: result.data,
   })
 })
 
