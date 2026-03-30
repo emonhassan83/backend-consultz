@@ -215,57 +215,59 @@ const getAllBookings = async (query: Record<string, any>) => {
 }
 
 const getAllBookingsByDate = async (query: Record<string, any>) => {
-  const { filterType, date, ...restQuery } = query
+  const { 
+    filterType, 
+    date, 
+    user,      
+    consult, 
+    ...restQuery 
+  } = query;
 
-  let targetDates: string[] = []
-  const today = dayjs()
+  let targetDates: string[] = [];
+  const today = dayjs();
 
-  // date দেওয়া থাকলে সবসময় single date filter
+  // 🗓️ Date filtering logic
   if (date) {
-    const parsed = dayjs(date, 'DD-MM-YYYY')
+    const parsed = dayjs(date, 'DD-MM-YYYY');
     if (!parsed.isValid()) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
         'Invalid date format. Use DD-MM-YYYY',
-      )
+      );
     }
-    targetDates = [parsed.format('YYYY-MM-DD')]
+    targetDates = [parsed.format('YYYY-MM-DD')];
   } else if (filterType === 'today') {
-    targetDates = [today.format('YYYY-MM-DD')]
+    targetDates = [today.format('YYYY-MM-DD')];
   } else if (filterType === 'tomorrow') {
-    // ✅ yesterday → tomorrow
-    targetDates = [today.add(1, 'day').format('YYYY-MM-DD')]
+    targetDates = [today.add(1, 'day').format('YYYY-MM-DD')];
   } else if (filterType === 'day') {
-    // ✅ today + tomorrow দুটো দেখাবে
     targetDates = [
       today.format('YYYY-MM-DD'),
       today.add(1, 'day').format('YYYY-MM-DD'),
-    ]
+    ];
   } else if (filterType === 'week') {
-    // ✅ Monday থেকে week শুরু (isoWeek = Monday start)
-    const startOfWeek = today.startOf('isoWeek')
+    const startOfWeek = today.startOf('isoWeek');
     for (let i = 0; i < 7; i++) {
-      targetDates.push(startOfWeek.add(i, 'day').format('YYYY-MM-DD'))
+      targetDates.push(startOfWeek.add(i, 'day').format('YYYY-MM-DD'));
     }
   } else if (filterType === 'month') {
-    const startOfMonth = today.startOf('month')
-    const daysInMonth = today.daysInMonth()
+    const startOfMonth = today.startOf('month');
+    const daysInMonth = today.daysInMonth();
     for (let i = 0; i < daysInMonth; i++) {
-      targetDates.push(startOfMonth.add(i, 'day').format('YYYY-MM-DD'))
+      targetDates.push(startOfMonth.add(i, 'day').format('YYYY-MM-DD'));
     }
   } else {
-    // ✅ default → today
-    targetDates = [today.format('YYYY-MM-DD')]
+    targetDates = [today.format('YYYY-MM-DD')];
   }
 
-  // Slot ids বের করো
+  // 🔍 Find matching slots
   const matchingSlots = await BookingSlots.find({
     date: { $in: targetDates },
-  }).select('_id')
+  }).select('_id');
 
-  const slotIds = matchingSlots.map((s) => s._id)
+  const slotIds = matchingSlots.map((s) => s._id);
 
-  // Slot না থাকলে early return
+  // Early return if no slots
   if (slotIds.length === 0) {
     if (targetDates.length === 1) {
       return {
@@ -273,22 +275,35 @@ const getAllBookingsByDate = async (query: Record<string, any>) => {
           date: dayjs(targetDates[0]).format('DD-MM-YYYY'),
           bookingList: [],
         },
-      }
+      };
     }
     return {
       data: targetDates.map((d) => ({
         date: dayjs(d).format('DD-MM-YYYY'),
         bookingList: [],
       })),
-    }
+    };
   }
 
-  // Booking fetch করো
-  const bookings: any[] = await Booking.find({
+  // 🔥 Build booking filter (THIS IS THE FIX!)
+  const bookingFilter: Record<string, any> = {
     isDeleted: false,
     paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
     slot: { $in: slotIds },
-  })
+  };
+
+  // ✅ Add user filter if provided (for regular users)
+  if (user) {
+    bookingFilter.user = new mongoose.Types.ObjectId(user);
+  }
+
+  // ✅ Add consult filter if provided (for experts/consultants)
+  if (consult) {
+    bookingFilter.consult = new mongoose.Types.ObjectId(consult);
+  }
+
+  // 📋 Fetch bookings with filters
+  const bookings: any[] = await Booking.find(bookingFilter)
     .populate([
       { path: 'user', select: 'firstName lastName photoUrl' },
       { path: 'consult', select: 'firstName lastName photoUrl' },
@@ -297,28 +312,28 @@ const getAllBookingsByDate = async (query: Record<string, any>) => {
     .select(
       'user consult slot sessionType sessionDuration price timezone status createdAt',
     )
-    .sort({ createdAt: -1 })
+    .sort({ createdAt: -1 });
 
-  // Single date → simple response
+  // 📊 Single date response
   if (targetDates.length === 1) {
     return {
       data: {
         date: dayjs(targetDates[0]).format('DD-MM-YYYY'),
         bookingList: bookings,
       },
-    }
+    };
   }
 
-  // Multiple dates → grouped response
-  const groupedByDate: Record<string, any[]> = {}
+  // 📊 Multiple dates response (grouped)
+  const groupedByDate: Record<string, any[]> = {};
   for (const d of targetDates) {
-    groupedByDate[d] = []
+    groupedByDate[d] = [];
   }
 
   for (const booking of bookings) {
-    const slotDate = booking?.slot?.date
+    const slotDate = booking?.slot?.date;
     if (slotDate && groupedByDate[slotDate] !== undefined) {
-      groupedByDate[slotDate].push(booking)
+      groupedByDate[slotDate].push(booking);
     }
   }
 
@@ -327,10 +342,10 @@ const getAllBookingsByDate = async (query: Record<string, any>) => {
     .map((d) => ({
       date: dayjs(d).format('DD-MM-YYYY'),
       bookingList: groupedByDate[d],
-    }))
+    }));
 
-  return { data: formattedData }
-}
+  return { data: formattedData };
+};
 
 const getBookingsById = async (id: string) => {
   const result = await Booking.findOne({

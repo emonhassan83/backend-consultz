@@ -725,27 +725,27 @@ const updateUserInfoFromDB = async (
   userId: string,
   payload: Partial<TUser>,
 ) => {
-  const session = await mongoose.startSession()
-  session.startTransaction()
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
   try {
-    const user = await User.findById(userId).session(session)
+    const user = await User.findById(userId).session(session);
     if (!user || user.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
     }
 
-    let finalPayload = { ...payload }
+    let finalPayload = { ...payload };
 
-    // Step 1: Handle session durations logic (unchanged)
+    // Step 1: Handle session durations logic
     if (payload.sessionDurations && payload.sessionDurations.length > 0) {
       const effectiveHourlyRate =
-        payload.hourlyRate !== undefined ? payload.hourlyRate : user.hourlyRate
+        payload.hourlyRate !== undefined ? payload.hourlyRate : user.hourlyRate;
 
       if (effectiveHourlyRate <= 0) {
         throw new AppError(
           httpStatus.BAD_REQUEST,
           'Hourly rate must be greater than 0 to update session durations.',
-        )
+        );
       }
 
       const updatedDurations = payload.sessionDurations.map((item) => ({
@@ -753,48 +753,43 @@ const updateUserInfoFromDB = async (
         offeredPrice: Number(
           ((item.duration / 60) * effectiveHourlyRate).toFixed(2),
         ),
-      }))
+      }));
 
       finalPayload = {
         ...payload,
         sessionDurations: updatedDurations,
         hourlyRate: effectiveHourlyRate,
-      }
+      };
     }
 
-    // Step 2: Social profile addition reward (only for expert, one-time)
-    const isExpert = user.role === USER_ROLE.expert
+    // Step 2: Social profile addition reward
+    const isExpert = user.role === USER_ROLE.expert;
 
     if (
       isExpert &&
       payload.socialProfiles &&
       payload.socialProfiles.length > 0
     ) {
-      // Check if this is the FIRST time socialProfiles are being added
       const previouslyEmpty =
-        !user.socialProfiles || user.socialProfiles.length === 0
+        !user.socialProfiles || user.socialProfiles.length === 0;
 
-      if (previouslyEmpty) {
-        // Award 150 points (one-time)
-        user.points = (user.points || 0) + 150
-        finalPayload.points = user.points
+      if (previouslyEmpty && !user.socialProofBonusClaimed) {
+        user.points = (user.points || 0) + 150;
+        finalPayload.points = user.points;
+        finalPayload.socialProofBonusClaimed = true;
 
-        // Mark that this reward has been claimed (prevents multiple claims)
-        finalPayload.socialProofBonusClaimed = true
-
-        // Send push notification if enabled
         if (user.fcmToken && user.pushNotify?.points) {
           await sendNotification([user.fcmToken], {
             message: 'Social Profiles Added!',
             description:
               'Congratulations! You earned 150 points for adding your social profiles. 🎉',
-          })
+          });
         }
       }
     }
 
-    // Step 3: Existing profile completion bonus logic (role-based, unchanged)
-    const isConsult = user.role === USER_ROLE.consult
+    // Step 3: Profile completion bonus logic
+    const isConsult = user.role === USER_ROLE.consult;
 
     const requiredFields = isConsult
       ? [
@@ -827,34 +822,34 @@ const updateUserInfoFromDB = async (
           'advisingStyles',
           'sessionDurations',
           'availability',
-        ]
+        ];
 
     const isProfileNowComplete = requiredFields.every((field) => {
       const value =
         (payload as any)[field] !== undefined
           ? (payload as any)[field]
-          : (user as any)[field]
+          : (user as any)[field];
 
       if (Array.isArray(value)) {
-        return value.length > 0
+        return value.length > 0;
       }
 
-      return value !== undefined && value !== null && value !== ''
-    })
+      return value !== undefined && value !== null && value !== '';
+    });
 
     if (isProfileNowComplete && !user.profileCompletionBonusClaimed) {
-      const pointsToAdd = isExpert ? 300 : isConsult ? 150 : 0
+      const pointsToAdd = isExpert ? 300 : isConsult ? 150 : 0;
 
       if (pointsToAdd > 0) {
-        user.points = (user.points || 0) + pointsToAdd
-        finalPayload.points = user.points
-        finalPayload.profileCompletionBonusClaimed = true
+        user.points = (user.points || 0) + pointsToAdd;
+        finalPayload.points = user.points;
+        finalPayload.profileCompletionBonusClaimed = true;
 
         if (user.fcmToken && user.pushNotify?.points) {
           await sendNotification([user.fcmToken], {
             message: 'Profile Completed!',
             description: `Congratulations! You have earned ${pointsToAdd} points for fully completing your ${isExpert ? 'expert' : 'consult'} profile. 🎉`,
-          })
+          });
         }
       }
     }
@@ -865,30 +860,38 @@ const updateUserInfoFromDB = async (
       runValidators: true,
       session,
     }).select(
-      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role profileCompletionBonusClaimed socialProfileBonusClaimed',
-    )
+      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role profileCompletionBonusClaimed socialProofBonusClaimed',
+    );
 
     if (!updatedUser) {
       throw new AppError(
         httpStatus.NOT_FOUND,
         'User not found and failed to update!',
-      )
+      );
     }
 
-    await session.commitTransaction()
-    return updatedUser
+    await session.commitTransaction();
+
+    // 🔥 Calculate profile progress after update (without saving to DB)
+    const profileSetupProgress = calculateProfileSetupProgress(updatedUser);
+
+    // 🎯 Return user data with calculated progress
+    return {
+      ...updatedUser.toObject(),
+      profileSetupProgress,
+    };
   } catch (error) {
-    await session.abortTransaction()
+    await session.abortTransaction();
     throw error instanceof AppError
       ? error
       : new AppError(
           httpStatus.INTERNAL_SERVER_ERROR,
           'Failed to update user information',
-        )
+        );
   } finally {
-    session.endSession()
+    session.endSession();
   }
-}
+};
 
 const updateLocationFromDB = async (
   userId: string,
