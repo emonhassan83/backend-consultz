@@ -116,7 +116,7 @@ const getAllUsersFromDB = async (
   // Base filter — সবসময় apply হবে
   const mustMatch: FilterQuery<TUser> = {
     isDeleted: false,
-    role: USER_ROLE.expert,
+    role: { $ne: USER_ROLE.admin },
     status: USER_STATUS.active,
   }
 
@@ -260,16 +260,30 @@ const getInterestExpertsFromDB = async (
   userId: string,
   query: Record<string, unknown>,
 ) => {
-  const currentUser = await User.findById(userId).select('interests')
+  const currentUser = await User.findById(userId).select(
+    'role interests expertise',
+  )
   if (!currentUser) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
 
-  const { interests } = currentUser
+  const { role, interests, expertise } = currentUser
 
-  const matchConditions: any[] = []
-  if (interests?.length) {
-    matchConditions.push({ interests: { $in: interests } })
+  let matchConditions: any[] = []
+
+  if (role === USER_ROLE.expert) {
+    if (expertise?.length) {
+      matchConditions.push({ expertise: { $in: expertise } })
+    }
+  } else {
+    if (interests?.length) {
+      matchConditions.push({ expertise: { $in: interests } })
+    }
+  }
+
+  // 🔥 Fallback: যদি কোনো condition না থাকে, তাহলে সব expert দেখাবে
+  if (matchConditions.length === 0) {
+    matchConditions = [{}]
   }
 
   const baseFilter = {
@@ -503,7 +517,12 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       )
     }
 
-    const referralLink = `${config.client_url}/signup?ref=${user.referralCode}`
+    let referralLink = ''
+    if (user.referralCode) {
+      referralLink = `${config.app_url}/signup?ref=${user.referralCode}`
+    }
+
+    const deeplink = `consultz://profile/${viewedUserId}`;
 
     const last7Days = dayjs().subtract(7, 'day').toDate()
 
@@ -615,6 +634,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       ...user,
       sessionDurations: sessionDurationsWithPrice,
       referralLink,
+      deeplink,
       totalBookings: completedBookingsCount,
       profileSetupProgress,
       advisingTimeInHours,
@@ -623,7 +643,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       profileViewCount,
       totalWithdraw,
       pendingWithdraw,
-      followerGrowthRate
+      followerGrowthRate,
     }
   } catch (error) {
     await session.abortTransaction()
@@ -725,27 +745,27 @@ const updateUserInfoFromDB = async (
   userId: string,
   payload: Partial<TUser>,
 ) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const session = await mongoose.startSession()
+  session.startTransaction()
 
   try {
-    const user = await User.findById(userId).session(session);
+    const user = await User.findById(userId).session(session)
     if (!user || user.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
     }
 
-    let finalPayload = { ...payload };
+    let finalPayload = { ...payload }
 
     // Step 1: Handle session durations logic
     if (payload.sessionDurations && payload.sessionDurations.length > 0) {
       const effectiveHourlyRate =
-        payload.hourlyRate !== undefined ? payload.hourlyRate : user.hourlyRate;
+        payload.hourlyRate !== undefined ? payload.hourlyRate : user.hourlyRate
 
       if (effectiveHourlyRate <= 0) {
         throw new AppError(
           httpStatus.BAD_REQUEST,
           'Hourly rate must be greater than 0 to update session durations.',
-        );
+        )
       }
 
       const updatedDurations = payload.sessionDurations.map((item) => ({
@@ -753,17 +773,17 @@ const updateUserInfoFromDB = async (
         offeredPrice: Number(
           ((item.duration / 60) * effectiveHourlyRate).toFixed(2),
         ),
-      }));
+      }))
 
       finalPayload = {
         ...payload,
         sessionDurations: updatedDurations,
         hourlyRate: effectiveHourlyRate,
-      };
+      }
     }
 
     // Step 2: Social profile addition reward
-    const isExpert = user.role === USER_ROLE.expert;
+    const isExpert = user.role === USER_ROLE.expert
 
     if (
       isExpert &&
@@ -771,25 +791,25 @@ const updateUserInfoFromDB = async (
       payload.socialProfiles.length > 0
     ) {
       const previouslyEmpty =
-        !user.socialProfiles || user.socialProfiles.length === 0;
+        !user.socialProfiles || user.socialProfiles.length === 0
 
       if (previouslyEmpty && !user.socialProofBonusClaimed) {
-        user.points = (user.points || 0) + 150;
-        finalPayload.points = user.points;
-        finalPayload.socialProofBonusClaimed = true;
+        user.points = (user.points || 0) + 150
+        finalPayload.points = user.points
+        finalPayload.socialProofBonusClaimed = true
 
         if (user.fcmToken && user.pushNotify?.points) {
           await sendNotification([user.fcmToken], {
             message: 'Social Profiles Added!',
             description:
               'Congratulations! You earned 150 points for adding your social profiles. 🎉',
-          });
+          })
         }
       }
     }
 
     // Step 3: Profile completion bonus logic
-    const isConsult = user.role === USER_ROLE.consult;
+    const isConsult = user.role === USER_ROLE.consult
 
     const requiredFields = isConsult
       ? [
@@ -822,34 +842,34 @@ const updateUserInfoFromDB = async (
           'advisingStyles',
           'sessionDurations',
           'availability',
-        ];
+        ]
 
     const isProfileNowComplete = requiredFields.every((field) => {
       const value =
         (payload as any)[field] !== undefined
           ? (payload as any)[field]
-          : (user as any)[field];
+          : (user as any)[field]
 
       if (Array.isArray(value)) {
-        return value.length > 0;
+        return value.length > 0
       }
 
-      return value !== undefined && value !== null && value !== '';
-    });
+      return value !== undefined && value !== null && value !== ''
+    })
 
     if (isProfileNowComplete && !user.profileCompletionBonusClaimed) {
-      const pointsToAdd = isExpert ? 300 : isConsult ? 150 : 0;
+      const pointsToAdd = isExpert ? 300 : isConsult ? 150 : 0
 
       if (pointsToAdd > 0) {
-        user.points = (user.points || 0) + pointsToAdd;
-        finalPayload.points = user.points;
-        finalPayload.profileCompletionBonusClaimed = true;
+        user.points = (user.points || 0) + pointsToAdd
+        finalPayload.points = user.points
+        finalPayload.profileCompletionBonusClaimed = true
 
         if (user.fcmToken && user.pushNotify?.points) {
           await sendNotification([user.fcmToken], {
             message: 'Profile Completed!',
             description: `Congratulations! You have earned ${pointsToAdd} points for fully completing your ${isExpert ? 'expert' : 'consult'} profile. 🎉`,
-          });
+          })
         }
       }
     }
@@ -861,37 +881,37 @@ const updateUserInfoFromDB = async (
       session,
     }).select(
       '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role profileCompletionBonusClaimed socialProofBonusClaimed',
-    );
+    )
 
     if (!updatedUser) {
       throw new AppError(
         httpStatus.NOT_FOUND,
         'User not found and failed to update!',
-      );
+      )
     }
 
-    await session.commitTransaction();
+    await session.commitTransaction()
 
     // 🔥 Calculate profile progress after update (without saving to DB)
-    const profileSetupProgress = calculateProfileSetupProgress(updatedUser);
+    const profileSetupProgress = calculateProfileSetupProgress(updatedUser)
 
     // 🎯 Return user data with calculated progress
     return {
       ...updatedUser.toObject(),
       profileSetupProgress,
-    };
+    }
   } catch (error) {
-    await session.abortTransaction();
+    await session.abortTransaction()
     throw error instanceof AppError
       ? error
       : new AppError(
           httpStatus.INTERNAL_SERVER_ERROR,
           'Failed to update user information',
-        );
+        )
   } finally {
-    session.endSession();
+    session.endSession()
   }
-};
+}
 
 const updateLocationFromDB = async (
   userId: string,

@@ -9,6 +9,7 @@ export default {
   ip: process.env.IP,
   socket_port: process.env.SOCKET_PORT,
   client_url: process.env.CLIENT_URL,
+  app_url: process.env.APP_URL,
   server_url: process.env.SERVER_URL,
   database_url: process.env.DATABASE_URL,
   bcrypt_salt_rounds: process.env.BCRYPT_SALT_ROUNDS,
