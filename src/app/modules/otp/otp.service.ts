@@ -227,8 +227,13 @@ const sendOtpInEmail = async (email: string) => {
   return { token }
 }
 
-const sendOtpInPhone = async (phoneNumber: string) => {
-  const user = await User.findOne({ phoneNumber })
+const sendOtpInPhone = async (
+  userId: string,
+  payload: { phoneNumber: string },
+) => {
+  const { phoneNumber } = payload
+
+  const user = await User.findById(userId)
   if (!user) {
     throw new AppError(httpStatus.BAD_REQUEST, 'User not found')
   }

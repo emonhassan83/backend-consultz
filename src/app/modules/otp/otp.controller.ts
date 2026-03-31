@@ -40,7 +40,7 @@ const sendOtpInEmail = catchAsync(async (req: Request, res: Response) => {
 })
 
 const sendOtpInPhone = catchAsync(async (req: Request, res: Response) => {
-  const result = await otpServices.sendOtpInPhone(req.body.phoneNumber)
+  const result = await otpServices.sendOtpInPhone(req.user._id, req.body)
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

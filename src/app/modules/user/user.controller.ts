@@ -10,7 +10,9 @@ import { USER_ROLE, USER_STATUS } from './user.constant'
 
 const registerUser = catchAsync(async (req, res) => {
   const result = await UserService.registerUserIntoDB(req?.body)
-  const sendOtp = await otpServices.sendOtpInPhone(result.phoneNumber as string)
+  const sendOtp = await otpServices.sendOtpInPhone(result._id.toString(), {
+    phoneNumber: result.phoneNumber as string,
+  })
   const { _id, id, firstName, lastName, email, phoneNumber, status } = result
 
   sendResponse(res, {
@@ -54,7 +56,10 @@ const getTopExperts = catchAsync(async (req, res) => {
 
 // 🏠 Property Experts
 const getPropertyExperts = catchAsync(async (req, res) => {
-  const result = await UserService.getPropertyExpertsFromDB(req.user._id, req.query)
+  const result = await UserService.getPropertyExpertsFromDB(
+    req.user._id,
+    req.query,
+  )
 
   sendResponse(res, {
     success: true,
@@ -66,8 +71,8 @@ const getPropertyExperts = catchAsync(async (req, res) => {
 })
 
 const getInvestmentExperts = catchAsync(async (req, res) => {
-  req.query['role'] = USER_ROLE.expert;
-  const result = await UserService.getInvestmentExperts(req.user._id,req.query)
+  req.query['role'] = USER_ROLE.expert
+  const result = await UserService.getInvestmentExperts(req.user._id, req.query)
 
   sendResponse(res, {
     success: true,
@@ -91,8 +96,8 @@ const getAllUsers = catchAsync(async (req, res) => {
 })
 
 const getAllExperts = catchAsync(async (req, res) => {
-  req.query['role'] = USER_ROLE.expert;
-  req.query['status'] = USER_STATUS.active;
+  req.query['role'] = USER_ROLE.expert
+  req.query['status'] = USER_STATUS.active
   const result = await UserService.getAllUsersFromDB(req.query, req.user._id)
 
   sendResponse(res, {
@@ -105,7 +110,7 @@ const getAllExperts = catchAsync(async (req, res) => {
 })
 
 const getUserById = catchAsync(async (req: Request, res: Response) => {
-  const result = await UserService.geUserByIdFromDB(req.user._id,req.params.id)
+  const result = await UserService.geUserByIdFromDB(req.user._id, req.params.id)
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -116,7 +121,10 @@ const getUserById = catchAsync(async (req: Request, res: Response) => {
 
 const getMyProfile = catchAsync(
   async (req: Request & { user?: any }, res: Response) => {
-    const result = await UserService.geUserByIdFromDB(req?.user?._id, req?.user?._id)
+    const result = await UserService.geUserByIdFromDB(
+      req?.user?._id,
+      req?.user?._id,
+    )
 
     sendResponse(res, {
       success: true,
@@ -139,7 +147,10 @@ const changeUserStatus = catchAsync(async (req, res) => {
 })
 
 const changeUserNotify = catchAsync(async (req, res) => {
-  const result = await UserService.changeUserNotifyFromDB(req.user._id, req.body)
+  const result = await UserService.changeUserNotifyFromDB(
+    req.user._id,
+    req.body,
+  )
 
   sendResponse(res, {
     success: true,
@@ -151,22 +162,22 @@ const changeUserNotify = catchAsync(async (req, res) => {
 
 const updateMyProfile = catchAsync(async (req, res) => {
   if (req.files) {
-    const { image, cover } = req.files as UploadedFiles;
+    const { image, cover } = req.files as UploadedFiles
 
     if (image?.length) {
       const uploadedPhoto = await uploadToS3({
         file: image[0],
         fileName: `images/user/photoUrl/${Math.floor(100000 + Math.random() * 900000)}`,
-      });
-      req.body.photoUrl = uploadedPhoto as string;
+      })
+      req.body.photoUrl = uploadedPhoto as string
     }
 
     if (cover?.length) {
       const uploadedCover = await uploadToS3({
         file: cover[0],
         fileName: `images/user/cover/${Math.floor(100000 + Math.random() * 900000)}`,
-      });
-      req.body.coverPhoto = uploadedCover as string;
+      })
+      req.body.coverPhoto = uploadedCover as string
     }
   }
 
