@@ -112,7 +112,7 @@ const refresh = async (accountId: string, query: Record<string, any>) => {
   }
 
   const refresh_url = `${config.server_url}/stripe/refresh/${accountId}?userId=${userId}`
-  const return_url = `${config.server_url}/stripe/return?userId=${userId}&stripeAccountId=${accountId}`
+  const return_url = `${config.server_url}/stripe/return?userId=${userId}&stripeAccountId=${accountId}&success=true&statusCode=${httpStatus.OK}`
 
   const accountLink = await StripeService.connectAccount(
     return_url,
