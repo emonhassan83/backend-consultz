@@ -32,7 +32,7 @@ router.delete(
 );
 
 // Public routes (no auth - for redirects)
-router.get('/refresh/:id', stripeController.refresh);
 router.get('/return', stripeController.returnUrl);
+router.get('/refresh/:id', stripeController.refresh);
 
 export const StripeRoute = router

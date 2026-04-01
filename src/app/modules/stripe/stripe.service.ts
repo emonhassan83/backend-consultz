@@ -40,10 +40,10 @@ const stripLinkAccount = async (userId: string) => {
     const accountId = account.id
 
     // 🎯 Deep link URLs for mobile app
-    const refresh_url = `${config.server_url}/api/stripe/refresh/${accountId}?userId=${user._id}`
+    const refresh_url = `${config.server_url}/stripe/refresh/${accountId}?userId=${user._id}`
 
     // ✅ This URL will redirect to mobile app using deep link
-    const return_url = `${config.server_url}/api/stripe/return?userId=${user._id}&stripeAccountId=${accountId}`
+    const return_url = `${config.server_url}/stripe/return?userId=${user._id}&stripeAccountId=${accountId}`
 
     // Create Stripe onboarding link
     const accountLink = await StripeService.connectAccount(
