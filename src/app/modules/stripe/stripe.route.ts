@@ -11,28 +11,28 @@ router.post(
   stripeController.stripLinkAccount,
 )
 
-router.get(
-  '/check-connection',
-  auth(USER_ROLE.expert),
-  stripeController.checkStripeConnected,
+// Disconnect Stripe
+router.delete(
+  '/disconnect',
+  auth(USER_ROLE.expert, USER_ROLE.consult),
+  stripeController.disconnectStripe,
 )
 
 // Get account status
 router.get(
   '/account-status',
   auth(USER_ROLE.expert, USER_ROLE.consult),
-  stripeController.getStripeAccountStatus
-);
+  stripeController.getStripeAccountStatus,
+)
 
-// Disconnect Stripe
-router.delete(
-  '/disconnect',
-  auth(USER_ROLE.expert, USER_ROLE.consult),
-  stripeController.disconnectStripe
-);
+router.get(
+  '/check-connection',
+  auth(USER_ROLE.expert),
+  stripeController.checkStripeConnected,
+)
 
-// Public routes (no auth - for redirects)
-router.get('/return', stripeController.returnUrl);
-router.get('/refresh/:id', stripeController.refresh);
+router.get('/oauth/callback', stripeController?.handleStripeOAuth)
+router.get('/return', stripeController.returnUrl)
+router.get('/refresh/:id', stripeController.refresh)
 
 export const StripeRoute = router

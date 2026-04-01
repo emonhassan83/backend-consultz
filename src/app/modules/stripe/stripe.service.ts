@@ -13,55 +13,34 @@ const stripLinkAccount = async (userId: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found')
   }
 
-  // Check if already connected
-  if (user.stripeAccountId) {
-    return {
-      alreadyConnected: true,
-      message: 'Stripe account already connected',
-      stripeAccountId: user.stripeAccountId,
-    }
-  }
-
   try {
-    // Create Stripe Express account
     const account = await StripeService.getStripe().accounts.create({
       type: 'express',
       country: 'US',
-      email: user.email,
+      email: user.email, // Important: Add email
       capabilities: {
         card_payments: { requested: true },
         transfers: { requested: true },
-      },
-      metadata: {
-        userId: user._id.toString(),
       },
     })
 
     const accountId = account.id
 
-    // 🎯 Deep link URLs for mobile app
     const refresh_url = `${config.server_url}/stripe/refresh/${accountId}?userId=${user._id}`
+    const return_url = `${config.server_url}/stripe/return?userId=${user._id}&stripeAccountId=${accountId}&success=true&statusCode=${httpStatus.OK}`
 
-    // ✅ This URL will redirect to mobile app using deep link
-    const return_url = `${config.server_url}/stripe/return?userId=${user._id}&stripeAccountId=${accountId}`
-
-    // Create Stripe onboarding link
     const accountLink = await StripeService.connectAccount(
       return_url,
       refresh_url,
       accountId,
     )
 
-    return {
-      onboardingUrl: accountLink.url,
-      accountId: accountId,
-      message: 'Open this URL in browser to complete Stripe onboarding',
-    }
+    return accountLink.url
   } catch (error: any) {
     if (error.code === 'platform_profile_incomplete') {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        'Stripe platform profile incomplete. Contact support.',
+        'Stripe platform profile incomplete. Please accept responsibilities in Stripe dashboard.',
       )
     }
     throw new AppError(
@@ -164,57 +143,44 @@ const returnUrl = async (query: Record<string, any>) => {
       throw new AppError(httpStatus.NOT_FOUND, 'User not found')
     }
 
-    // Check if this is the FIRST time connecting Stripe
+    // Check if this is the FIRST time Stripe account is being linked
     const isFirstTimeConnect = !user.stripeAccountId
 
-    // Verify Stripe account is active
-    const account =
-      await StripeService.getStripe().accounts.retrieve(stripeAccountId)
-
-    if (!account.charges_enabled || !account.payouts_enabled) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'Stripe account onboarding not completed. Please complete all required steps.',
-      )
-    }
-
-    // Update user's Stripe account ID
+    // Update Stripe account ID
     user.stripeAccountId = stripeAccountId
 
-    // 🎁 Award 200 points on first connection
+    // Award 200 points ONLY on first successful connection
+    const pointsToAdd = 200
     if (isFirstTimeConnect) {
-      user.points = (user.points || 0) + 200
+      user.points = (user.points || 0) + pointsToAdd
 
-      // Send push notification
-      if (user.fcmToken && user.pushNotify?.payment) {
+      // 1. Send push notification (if enabled)
+      if (user.fcmToken && user.pushNotify?.points) {
         await sendNotification([user.fcmToken], {
-          message: 'Payment Method Connected! 🎉',
-          description:
-            'You earned 200 points for connecting your Stripe account. You can now receive payments!',
+          message: 'Payment Method Added!',
+          description: `Congratulations! You have earned 200 points for successfully adding your payment method via Stripe. 🎉`,
         })
       }
     }
 
+    // Save all changes
     await user.save({ session })
+
     await session.commitTransaction()
 
-    // 🔥 Mobile App Deep Link Redirect
-    // Format: yourapp://stripe/success?status=connected&points=200
-    const deepLink = `${config.app_url}://stripe/success?status=connected&points=${isFirstTimeConnect ? 200 : 0}&accountId=${stripeAccountId}`
-
     return {
-      url: deepLink,
-      isFirstTime: isFirstTimeConnect,
-      pointsEarned: isFirstTimeConnect ? 200 : 0,
+      stripeAccountId: stripeAccountId,
+      pointsAdded: isFirstTimeConnect ? 200 : 0,
     }
   } catch (error) {
     await session.abortTransaction()
     console.error('Stripe return URL failed:', error)
-
-    // Redirect to error deep link
-    const errorDeepLink = `${config.app_url}://stripe/error?message=${encodeURIComponent(error instanceof Error ? error.message : 'Connection failed')}`
-
-    return { url: errorDeepLink }
+    throw error instanceof AppError
+      ? error
+      : new AppError(
+          httpStatus.INTERNAL_SERVER_ERROR,
+          'Failed to process Stripe return',
+        )
   } finally {
     session.endSession()
   }
@@ -269,8 +235,6 @@ const disconnectStripe = async (userId: string) => {
   }
 
   // Note: Stripe doesn't allow programmatic account deletion
-  // await StripeService.getStripe().accounts.del(user.stripeAccountId);
-
   // @ts-ignore
   user.stripeAccountId = null
   await user.save()
