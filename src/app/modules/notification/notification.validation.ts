@@ -15,7 +15,7 @@ const createValidationSchema = z.object({
       invalid_type_error: 'Description must be a string',
     }),
     reference: objectIdSchema.optional(),
-    model_type: z.string({
+    modelType: z.string({
       required_error: 'Model type is required',
     }),
   }),

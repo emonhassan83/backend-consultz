@@ -17,7 +17,7 @@ export type TNotification = {
   receiver?: Types.ObjectId | string
   message: string
   description?: string
-  reference?: Types.ObjectId | string
+  reference?: Types.ObjectId | string | null
   modelType?: modeType
   date?: Date
   read?: boolean

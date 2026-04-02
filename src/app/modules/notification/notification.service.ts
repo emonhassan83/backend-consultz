@@ -5,9 +5,10 @@ import { TNotification } from './notification.interface'
 import { Notification } from './notification.model'
 import moment from 'moment'
 import { User } from '../user/user.model'
+import { sendNotification } from '../../utils/sentNotification'
 
 const createNotificationIntoDB = async (payload: TNotification) => {
-  const { receiver, ...othersData } = payload
+  const { receiver, message, description, reference, modelType, ...othersData } = payload
 
   const user = await User.findById(receiver)
   if (!user || user?.isDeleted) {
@@ -25,6 +26,17 @@ const createNotificationIntoDB = async (payload: TNotification) => {
     const ver = 'notification::' + payload?.receiver
     io.emit(ver, { ...payload, createdAt: moment().format('YYYY-MM-DD') })
   }
+
+  // sent notification to receiver using fcm
+   const notifyPayload = {
+      receiver: user._id,
+      message,
+      description,
+      reference: reference || null,
+      model_type: modelType,
+    }
+  
+    await sendNotification([user.fcmToken], notifyPayload)
 
   return notification
 }
