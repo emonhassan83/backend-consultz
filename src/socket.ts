@@ -8,6 +8,7 @@ import { callbackFn } from './app/utils/CallbackFn'
 import { Chat } from './app/modules/chat/chat.models'
 import { Message } from './app/modules/messages/messages.models'
 import { chatService } from './app/modules/chat/chat.service'
+import { CHAT_STATUS } from './app/modules/chat/chat.constants'
 
 let ioInstance: Server | null = null
 
@@ -80,9 +81,14 @@ const initializeSocketIO = (server: HttpServer) => {
       // =============================================
       socket.on('send-message', async (payload, callback) => {
         try {
-          const { receiverId, text, imageUrl = [] } = payload
+          const { receiverId, text, imageUrl = [], bookingId } = payload // ← bookingId নেওয়া হলো
 
-          console.log('📨 send-message received:', { receiverId, text, userId })
+          console.log('📨 send-message received:', {
+            receiverId,
+            text,
+            bookingId,
+            userId,
+          })
 
           if (!receiverId || !text?.trim()) {
             return callbackFn(callback, {
@@ -91,9 +97,8 @@ const initializeSocketIO = (server: HttpServer) => {
             })
           }
 
+          // Validate receiver
           const receiverExists = await chatService.checkUserExists(receiverId)
-          console.log('👤 receiver exists:', receiverExists)
-
           if (!receiverExists) {
             return callbackFn(callback, {
               success: false,
@@ -101,21 +106,39 @@ const initializeSocketIO = (server: HttpServer) => {
             })
           }
 
-          let chat = await Chat.findOne({
-            participants: { $all: [userId, receiverId] },
-          })
-          console.log(
-            '💬 existing chat:',
-            chat?._id || 'NOT FOUND — will create',
-          )
+          let chat
 
-          if (!chat) {
-            chat = await Chat.create({
-              participants: [userId, receiverId],
+          // 🔥 Priority 1: bookingId দিয়ে চ্যাট খুঁজব (সবচেয়ে সঠিক)
+          if (bookingId) {
+            chat = await Chat.findOne({
+              booking: bookingId,
+              participants: { $all: [userId, receiverId] },
             })
-            console.log('💬 new chat created:', chat._id)
+            console.log('💬 Found chat by bookingId:', chat?._id || 'NOT FOUND')
           }
 
+          // 🔥 Priority 2: যদি bookingId না থাকে বা না পাওয়া যায়, তাহলে participants দিয়ে খুঁজব
+          if (!chat) {
+            chat = await Chat.findOne({
+              participants: { $all: [userId, receiverId] },
+            })
+            console.log(
+              '💬 Found chat by participants:',
+              chat?._id || 'NOT FOUND',
+            )
+          }
+
+          // 🔥 Priority 3: যদি কোনো চ্যাট না পাওয়া যায়, তাহলে নতুন চ্যাট তৈরি করব
+          if (!chat) {
+            chat = await Chat.create({
+              booking: bookingId || null, // bookingId থাকলে সেট করব
+              participants: [userId, receiverId],
+              status: CHAT_STATUS.accepted,
+            })
+            console.log('💬 New chat created:', chat._id)
+          }
+
+          // Create message
           const message = await Message.create({
             chat: chat._id,
             sender: userId,
@@ -123,25 +146,16 @@ const initializeSocketIO = (server: HttpServer) => {
             text,
             imageUrl,
           })
-          console.log('✅ message created:', message._id)
 
           const populated = await Message.findById(message._id)
             .populate('sender', 'firstName lastName photoUrl _id')
             .populate('receiver', 'firstName lastName photoUrl _id')
 
-          // ✅ room check করো
-          const senderRoom = ioInstance!.sockets.adapter.rooms.get(userId)
-          const receiverRoom = ioInstance!.sockets.adapter.rooms.get(receiverId)
-          console.log(`🏠 sender room (${userId}):`, senderRoom?.size || 0)
-          console.log(
-            `🏠 receiver room (${receiverId}):`,
-            receiverRoom?.size || 0,
-          )
-
+          // Emit new message to both users
           ioInstance!.to(userId).emit('new-message', populated)
           ioInstance!.to(receiverId).emit('new-message', populated)
-          console.log('📤 new-message emitted to both users')
 
+          // Update chat list for both users
           const [senderChatList, receiverChatList] = await Promise.all([
             chatService.getMyChatList(userId, {}),
             chatService.getMyChatList(receiverId, {}),
@@ -149,8 +163,8 @@ const initializeSocketIO = (server: HttpServer) => {
 
           ioInstance!.to(userId).emit('chat-list', senderChatList)
           ioInstance!.to(receiverId).emit('chat-list', receiverChatList)
-          console.log('📋 chat-list emitted to both users')
 
+          // Unread count for receiver
           const unreadCount = await Message.countDocuments({
             receiver: receiverId,
             seen: false,

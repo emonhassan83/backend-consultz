@@ -26,7 +26,7 @@ const getMyChatList = catchAsync(async (req: Request, res: Response) => {
 })
 
 const getChatBookingById = catchAsync(async (req: Request, res: Response) => {
-  const result = await chatService.getChatBookingById(req.params.bookingId)
+  const result = await chatService.getChatBookingById(req.params.bookingId, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,

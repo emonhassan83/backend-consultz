@@ -136,12 +136,24 @@ const getMyChatList = async (
   return data
 }
 
-const getChatBookingById = async (bookingId: string) => {
+const getChatBookingById = async (bookingId: string, userId: string) => {
   const result = await Chat.findOne({ booking: bookingId }).populate({
     path: 'participants',
     select: 'firstName lastName photoUrl',
+    match: { _id: { $ne: userId } },
   })
   if (!result) throw new AppError(httpStatus.BAD_REQUEST, 'Chat not found')
+
+  // const isParticipant = result.participants.some(
+  //   (participant: any) => participant._id.toString() === userId,
+  // )
+
+  // if (!isParticipant) {
+  //   throw new AppError(
+  //     httpStatus.FORBIDDEN,
+  //     'You are not a participant of this chat',
+  //   )
+  // }
   return result
 }
 
