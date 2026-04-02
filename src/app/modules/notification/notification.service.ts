@@ -8,38 +8,70 @@ import { User } from '../user/user.model'
 import { sendNotification } from '../../utils/sentNotification'
 
 const createNotificationIntoDB = async (payload: TNotification) => {
-  const { receiver, message, description, reference, modelType, ...othersData } = payload
+  const {
+    receiver,
+    message,
+    description = '',
+    reference,
+    modelType,
+    ...othersData
+  } = payload;
 
-  const user = await User.findById(receiver)
-  if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Receiver user not found!')
+  // 1. Validate receiver
+  const user = await User.findById(receiver).select('fcmToken isDeleted');
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Receiver user not found!');
   }
 
-  const notification = await Notification.create(payload)
+  // 2. Create notification in database
+  const notification = await Notification.create({
+    receiver,
+    message,
+    description,
+    reference,
+    modelType,
+    ...othersData,        // যদি আরও কোনো ফিল্ড থাকে
+  });
+
   if (!notification) {
-    throw new AppError(httpStatus.CONFLICT, 'Notification not created!')
+    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to create notification');
   }
 
-  //@ts-ignore
-  const io = global?.socketio
-  if (io) {
-    const ver = 'notification::' + payload?.receiver
-    io.emit(ver, { ...payload, createdAt: moment().format('YYYY-MM-DD') })
+  // 3. Real-time socket notification (if socketio is available)
+  try {
+    // @ts-ignore
+    const io = global?.socketio;
+    if (io) {
+      const eventName = `notification::${receiver}`;
+      io.emit(eventName, {
+        ...notification.toObject(),
+        createdAt: new Date(), // or moment().format('YYYY-MM-DD HH:mm:ss')
+      });
+    }
+  } catch (socketError: any) {
+    console.warn('Socket emission failed (non-critical):', socketError.message);
   }
 
-  // sent notification to receiver using fcm
-   const notifyPayload = {
+  // 4. Push notification via FCM (if token exists)
+  if (user.fcmToken) {
+    const notifyPayload = {
       receiver: user._id,
       message,
       description,
       reference: reference || null,
       model_type: modelType,
-    }
-  
-    await sendNotification([user.fcmToken], notifyPayload)
+    };
 
-  return notification
-}
+    try {
+      await sendNotification([user.fcmToken], notifyPayload);
+    } catch (fcmError: any) {
+      console.warn('FCM notification failed (non-critical):', fcmError.message);
+      // Don't throw error here — notification creation should still succeed
+    }
+  }
+
+  return notification;
+};
 
 const sendGeneralNotificationIntoDB = async (payload: TNotification) => {
   const { message, description, ...othersData } = payload
@@ -71,48 +103,48 @@ const sendGeneralNotificationIntoDB = async (payload: TNotification) => {
 
 const getAllNotificationFromDB = async (
   query: Record<string, unknown>,
-  userId: string   // ← receiver হিসেবে userId নেওয়া উচিত
+  userId: string, // ← receiver হিসেবে userId নেওয়া উচিত
 ) => {
   // Base filter: শুধু এই user-এর notification
   const baseFilter = {
     receiver: userId,
     isDeleted: false,
-  };
+  }
 
   // 1. Unread message count (read: false)
   const unreadCount = await Notification.countDocuments({
     ...baseFilter,
     read: false,
-  });
+  })
 
   // 2. Get all notifications with pagination
   const notificationQuery = new QueryBuilder(
     Notification.find(baseFilter)
       .populate([
-        { 
-          path: 'reference', 
-          select: 'description sessionType' // প্রয়োজন অনুযায়ী populate করো
-        }
+        {
+          path: 'reference',
+          select: 'description sessionType', // প্রয়োজন অনুযায়ী populate করো
+        },
       ])
       .select('message description date read modelType createdAt'),
     query,
   )
     .filter()
-    .sort()   // newest first
+    .sort() // newest first
     .paginate()
-    .fields();
+    .fields()
 
-  const notifications = await notificationQuery.modelQuery;
-  const meta = await notificationQuery.countTotal();
+  const notifications = await notificationQuery.modelQuery
+  const meta = await notificationQuery.countTotal()
 
   return {
     meta,
     data: {
-      unreadMessage: unreadCount,     // ← নতুন যোগ করা হলো
-      notifications,                  // list of notifications
+      unreadMessage: unreadCount, // ← নতুন যোগ করা হলো
+      notifications, // list of notifications
     },
-  };
-};
+  }
+}
 
 const getANotificationFromDB = async (id: string) => {
   const notification = await Notification.findById(id)
@@ -189,5 +221,5 @@ export const NotificationService = {
   getANotificationFromDB,
   markAsDoneFromDB,
   deleteANotificationFromDB,
-  deleteAllNotificationsFromDB
+  deleteAllNotificationsFromDB,
 }
