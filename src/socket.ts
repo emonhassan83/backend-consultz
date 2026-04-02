@@ -90,10 +90,17 @@ const initializeSocketIO = (server: HttpServer) => {
             userId,
           })
 
-          if (!receiverId || !text?.trim()) {
+          if (!receiverId) {
             return callbackFn(callback, {
               success: false,
-              message: 'receiverId and text are required',
+              message: 'receiverId is required',
+            })
+          }
+
+          if (!text?.trim() && (!imageUrl || imageUrl.length === 0)) {
+            return callbackFn(callback, {
+              success: false,
+              message: 'text or imageUrl is required',
             })
           }
 
