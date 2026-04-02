@@ -19,7 +19,7 @@ import {
 } from './auth.interface'
 import { generateOtp } from '../../utils/generateOtp'
 import moment from 'moment'
-import { REGISTER_WITH, USER_STATUS } from '../user/user.constant'
+import { REGISTER_WITH } from '../user/user.constant'
 
 const loginUser = async (payload: TLoginUser) => {
   //* checking if the user is exist

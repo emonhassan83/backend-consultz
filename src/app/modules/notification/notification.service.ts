@@ -57,28 +57,54 @@ const sendGeneralNotificationIntoDB = async (payload: TNotification) => {
   // return
 }
 
-const getAllNotificationFromDB = async (query: Record<string, unknown>) => {
-  const notificationQuery = new QueryBuilder(Notification.find(), query)
-    .filter()
-    .sort()
-    .paginate()
-    .fields()
+const getAllNotificationFromDB = async (
+  query: Record<string, unknown>,
+  userId: string   // ← receiver হিসেবে userId নেওয়া উচিত
+) => {
+  // Base filter: শুধু এই user-এর notification
+  const baseFilter = {
+    receiver: userId,
+    isDeleted: false,
+  };
 
-  const result = await notificationQuery.modelQuery
-  const meta = await notificationQuery.countTotal()
-  if (!notificationQuery) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Notification not found!')
-  }
+  // 1. Unread message count (read: false)
+  const unreadCount = await Notification.countDocuments({
+    ...baseFilter,
+    read: false,
+  });
+
+  // 2. Get all notifications with pagination
+  const notificationQuery = new QueryBuilder(
+    Notification.find(baseFilter)
+      .populate([
+        { 
+          path: 'reference', 
+          select: 'description sessionType' // প্রয়োজন অনুযায়ী populate করো
+        }
+      ])
+      .select('message description date read modelType createdAt'),
+    query,
+  )
+    .filter()
+    .sort()   // newest first
+    .paginate()
+    .fields();
+
+  const notifications = await notificationQuery.modelQuery;
+  const meta = await notificationQuery.countTotal();
 
   return {
     meta,
-    result,
-  }
-}
+    data: {
+      unreadMessage: unreadCount,     // ← নতুন যোগ করা হলো
+      notifications,                  // list of notifications
+    },
+  };
+};
 
 const getANotificationFromDB = async (id: string) => {
   const notification = await Notification.findById(id)
-  if (!notification) {
+  if (!notification || notification?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Notification not found!')
   }
 
