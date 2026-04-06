@@ -21,8 +21,8 @@ const createMessages = catchAsync(async (req: Request, res: Response) => {
 })
 
 // Get messages by chat ID
-const getMessagesByChatId = catchAsync(async (req: Request, res: Response) => {
-  const result = await messagesService.getMessagesByChatId(req.params.chatId, req.query)
+const getMessagesByBookingId = catchAsync(async (req: Request, res: Response) => {
+  const result = await messagesService.getMessagesByBookingId(req.params.bookingId, req.query)
 
   sendResponse(res, {
     statusCode: 200,
@@ -116,7 +116,7 @@ const deleteMessagesByChatId = catchAsync(async (req: Request, res: Response) =>
 
 export const messagesController = {
   createMessages,
-  getMessagesByChatId,
+  getMessagesByBookingId,
   getMessagesById,
   updateMessages,
   deleteMessages,

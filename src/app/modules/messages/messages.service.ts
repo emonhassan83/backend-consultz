@@ -99,15 +99,20 @@ const updateMessages = async (id: string, payload: Partial<TMessages>) => {
 }
 
 // Get messages by chat ID
-const getMessagesByChatId = async (
-  chatId: string,
+const getMessagesByBookingId = async (
+  bookingId: string,
   query: Record<string, any>,
 ) => {
+  const chat = await Chat.findOne({ booking: bookingId })
+  if (!chat) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Chat not found')
+  }
+
   const messageQuery = new QueryBuilder(
-    Message.find({ chat: chatId })
+    Message.find({ chat: chat._id })
       .populate([{ path: 'sender', select: 'firstName lastName photoUrl _id' }])
       .select('text imageUrl seen sender createdAt')
-      .sort({ createdAt: -1 }),
+      .sort({ createdAt: 1 }),
     query,
   )
     .filter()
@@ -180,10 +185,15 @@ const deleteMessagesByChatId = async (chatId: string) => {
   session.startTransaction()
 
   try {
-    const messageDeleteResult = await Message.deleteMany({ chat: chatId }).session(session)
+    const messageDeleteResult = await Message.deleteMany({
+      chat: chatId,
+    }).session(session)
 
     if (messageDeleteResult.deletedCount === 0) {
-      throw new AppError(httpStatus.NOT_FOUND, 'No messages found for this chat')
+      throw new AppError(
+        httpStatus.NOT_FOUND,
+        'No messages found for this chat',
+      )
     }
 
     await session.commitTransaction()
@@ -198,7 +208,7 @@ const deleteMessagesByChatId = async (chatId: string) => {
 
 export const messagesService = {
   createMessages,
-  getMessagesByChatId,
+  getMessagesByBookingId,
   getMessagesById,
   updateMessages,
   getAllMessages,
