@@ -162,7 +162,7 @@ const returnUrl = async (query: Record<string, any>) => {
           message: 'Payment Method Added!',
           description: `Congratulations! You have earned 200 points for successfully adding your payment method via Stripe. 🎉`,
           reference: user._id,
-          modelType: modeType.Payment,
+          modelType: modeType.Achievement,
         })
       }
     }

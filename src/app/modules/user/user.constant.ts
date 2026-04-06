@@ -16,6 +16,7 @@ export const DAY_MAP = {
 
 export const REGISTER_WITH = {
   google: 'google',
+  apple: 'apple',
   linkedin: 'linkedin',
   credentials: 'credentials',
 } as const

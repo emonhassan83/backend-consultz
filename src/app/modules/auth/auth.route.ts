@@ -20,9 +20,9 @@ router.post(
 )
 
 router.post(
-  '/linkedin',
-  validateRequest(AuthValidation.linkedinZodValidationSchema),
-  AuthControllers.registerWithLinkedin,
+  '/apple',
+  validateRequest(AuthValidation.appleZodValidationSchema),
+  AuthControllers.registerWithApple,
 )
 
 router.post(

@@ -705,7 +705,7 @@ const changeUserStatusFromDB = async (payload: {
         message: 'Expert Account Approved!',
         description: `You have earned 300 points. Start accepting bookings now! 🎉`,
         reference: updatedUser._id,
-        modelType: modeType.User,
+        modelType: modeType.Achievement,
       })
     }
   }
@@ -809,7 +809,7 @@ const updateUserInfoFromDB = async (
             description:
               'Congratulations! You earned 150 points for adding your social profiles. 🎉',
               reference: user._id,
-              modelType: modeType.User,
+              modelType: modeType.Achievement,
           })
         }
       }
@@ -878,7 +878,7 @@ const updateUserInfoFromDB = async (
             message: 'Profile Completed!',
             description: `Congratulations! You have earned ${pointsToAdd} points for fully completing your ${isExpert ? 'expert' : 'consult'} profile. 🎉`,
             reference: user._id,
-            modelType: modeType.User,
+            modelType: modeType.Achievement,
           })
         }
       }

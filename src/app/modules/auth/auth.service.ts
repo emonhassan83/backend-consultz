@@ -101,7 +101,8 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
   const user = await User.isUserExistsByEmail(payload.email as string)
 
   const updateData: any = {
-    name: payload.name,
+    firstName: payload.firstName,
+    lastName: payload.lastName,
     email: payload.email,
     photoUrl: payload.photoUrl,
     fcmToken: payload.fcmToken,
@@ -170,7 +171,7 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
   return generateTokens(newUser)
 }
 
-const registerWithLinkedin = async (payload: TAppleLoginPayload) => {
+const registerWithApple = async (payload: TAppleLoginPayload) => {
   if (payload.role === 'admin') {
     throw new AppError(
       httpStatus.FORBIDDEN,
@@ -181,7 +182,8 @@ const registerWithLinkedin = async (payload: TAppleLoginPayload) => {
   const user = await User.isUserExistsByEmail(payload.email as string)
 
   const updateData: any = {
-    name: payload.name,
+    firstName: payload.firstName,
+    lastName: payload.lastName,
     email: payload.email,
     photoUrl: payload.photoUrl,
     fcmToken: payload.fcmToken,
@@ -195,7 +197,7 @@ const registerWithLinkedin = async (payload: TAppleLoginPayload) => {
   }
 
   if (user) {
-    if (user.registerWith !== REGISTER_WITH.linkedin) {
+    if (user.registerWith !== REGISTER_WITH.apple) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
         `This account is registered with ${user.registerWith}, please use that method.`,
@@ -230,7 +232,7 @@ const registerWithLinkedin = async (payload: TAppleLoginPayload) => {
 
   const newUser = await User.create({
     ...updateData,
-    registerWith: REGISTER_WITH.linkedin,
+    registerWith: REGISTER_WITH.apple,
     verification: { otp: 0, expiresAt: new Date(), status: true },
     expireAt: null,
   })
@@ -455,7 +457,7 @@ const resetPassword = async (
 export const AuthServices = {
   loginUser,
   registerWithGoogle,
-  registerWithLinkedin,
+  registerWithApple,
   changePassword,
   refreshToken,
   forgetPassword,

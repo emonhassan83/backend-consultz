@@ -169,7 +169,7 @@ const createBookings = async (payload: TBookings, userId: string) => {
           description:
             'Congratulations! You have earned 300 points for booking your first consultation. 🎉 Keep exploring!',
           reference: createdBooking._id as string,
-          modelType: modeType.Booking,
+          modelType: modeType.Achievement,
         })
       }
     }
@@ -610,7 +610,7 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
           message: 'Booking Confirmed!',
           description: `You have earned 50 points for booking a consultation. Keep booking more! 🎉`,
           reference: updatedBooking._id as string,
-          modelType: modeType.Booking,
+          modelType: modeType.Achievement,
         })
       }
     }
@@ -638,7 +638,7 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
           message: 'Repeat Booking Bonus!',
           description: `You have earned 150 points for re-booking the same expert within 30 days!`,
           reference: updatedBooking._id as string,
-          modelType: modeType.Booking,
+          modelType: modeType.Achievement,
         })
       }
     }
@@ -665,7 +665,7 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
           message: 'Booking Streak Bonus!',
           description: `Congratulations! You have earned 300 bonus points for booking 3 sessions within 30 days!`,
           reference: updatedBooking._id as string,
-          modelType: modeType.Booking,
+          modelType: modeType.Achievement,
         })
       }
     }
@@ -924,7 +924,7 @@ const completedBooking = async (
           message: 'Session Completed!',
           description: `You have earned 100 points for attending and completing your consultation. Great job! 🎉`,
           reference: updatedBooking._id as string,
-          modelType: modeType.Booking,
+          modelType: modeType.Achievement,
         })
       }
     }
@@ -961,7 +961,7 @@ const completedBooking = async (
             message: 'Weekly Performance Bonus!',
             description: `Congratulations! You completed 5+ sessions this week and earned 300 bonus points! Keep it up! 🎉`,
             reference: updatedBooking._id as string,
-            modelType: modeType.Booking,
+            modelType: modeType.Achievement,
           })
         }
       }

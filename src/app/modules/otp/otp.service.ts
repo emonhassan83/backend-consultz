@@ -140,7 +140,7 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
       description:
         'Congratulations! You have earned 100 points for fully completing your profile. 🎉',
       reference: user._id,
-      modelType: modeType.User,
+      modelType: modeType.Achievement,
     })
   }
 

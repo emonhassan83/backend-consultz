@@ -86,7 +86,7 @@ const createReviews = async (
             message: '5-Star Review Received!',
             description: 'Congratulations! You earned 200 points for receiving a 5-star review. Keep up the great work! 🎉',
             reference: newReview._id,
-            modelType: modeType.Reviews
+            modelType: modeType.Achievement
           });
         }
       }
@@ -118,7 +118,7 @@ const createReviews = async (
             message: 'High Rating Streak Bonus!',
             description: 'You maintained 4.7+ average rating over the last 30 days and earned 500 bonus points! Excellent work! 🎉',
             reference: newReview._id,
-            modelType: modeType.Reviews
+            modelType: modeType.Achievement
           });
         }
       }
@@ -151,7 +151,7 @@ const createReviews = async (
         message: 'Review Submitted Successfully!',
         description: `You earned ${totalPointsAwarded} points for leaving a verified review. Thank you! 🎉`,
         reference: newReview._id,
-        modelType: modeType.Reviews
+        modelType: modeType.Achievement
       });
     }
 

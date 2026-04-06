@@ -1,6 +1,7 @@
 import { Types } from 'mongoose'
 
 export enum modeType {
+  Achievement = 'Achievement',
   Auth = 'Auth',
   User = 'User',
   Follow = 'Follow',

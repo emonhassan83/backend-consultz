@@ -236,7 +236,7 @@ export const initializeCronJobs = () => {
               description:
                 'Congratulations! You had zero no-shows in the last 30 days and earned 300 points. Keep it up! 🎉',
                 reference: expert._id,
-                modelType: modeType.User,
+                modelType: modeType.Achievement,
             })
           }
         }
@@ -299,7 +299,7 @@ export const initializeCronJobs = () => {
               description:
                 'You earned 50 points this week for maintaining fast response time to booking requests. Excellent! 🎉',
               reference: expert._id,
-              modelType: modeType.User,
+              modelType: modeType.Achievement,
             })
           }
         }

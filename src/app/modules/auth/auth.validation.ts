@@ -36,7 +36,7 @@ const googleZodValidationSchema = z.object({
   }),
 })
 
-const linkedinZodValidationSchema = z.object({
+const appleZodValidationSchema = z.object({
   body: z.object({
     token: z.string({
       required_error: 'token is required!',
@@ -87,5 +87,5 @@ export const AuthValidation = {
   forgetPasswordValidationSchema,
   resetPasswordValidationSchema,
   googleZodValidationSchema,
-  linkedinZodValidationSchema,
+  appleZodValidationSchema,
 }

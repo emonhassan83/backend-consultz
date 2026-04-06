@@ -16,7 +16,8 @@ export interface TLoginUser {
 }
 
 export interface TGoogleLoginPayload {
-  name?: string
+  firstName?: string
+  lastName?: string
   email: string
   role?: TUserRole
   photoUrl?: string
@@ -27,7 +28,8 @@ export interface TGoogleLoginPayload {
 }
 
 export interface TAppleLoginPayload {
-  name?: string
+  firstName?: string
+  lastName?: string
   email: string
   photoUrl?: string
   role?: TUserRole
