@@ -46,7 +46,7 @@ export const sendWithdrawNotify = async (
     message,
     description,
     reference: withdraw._id as string,
-    model_type: modeType.Withdraw,
+    modelType: modeType.Withdraw,
   }
 
   await sendNotification([user.fcmToken], notifyPayload)

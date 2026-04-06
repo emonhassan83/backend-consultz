@@ -28,6 +28,7 @@ import { ProfileView } from '../profileView/profileView.model'
 import dayjs from 'dayjs'
 import { Withdraw } from '../withdraw/withdraw.model'
 import { WITHDRAW_STATUS } from '../withdraw/withdraw.constant'
+import { modeType } from '../notification/notification.interface'
 
 const registerUserIntoDB = async (
   payload: TUser & { referralCode?: string },
@@ -700,14 +701,17 @@ const changeUserStatusFromDB = async (payload: {
     // Send push notification to expert (if enabled)
     if (updatedUser.fcmToken && updatedUser.pushNotify?.points) {
       await sendNotification([updatedUser.fcmToken], {
+        receiver: updatedUser._id,
         message: 'Expert Account Approved!',
         description: `You have earned 300 points. Start accepting bookings now! 🎉`,
+        reference: updatedUser._id,
+        modelType: modeType.User,
       })
     }
   }
 
   // 4. notify to admin and user
-  await sendUserStatusNotifYToUser(status, updatedUser)
+  // await sendUserStatusNotifYToUser(status, updatedUser)
   await sendUserStatusNotifYToAdmin(status, updatedUser)
 
   // 5. Blocked or Active email sent to user
@@ -800,9 +804,12 @@ const updateUserInfoFromDB = async (
 
         if (user.fcmToken && user.pushNotify?.points) {
           await sendNotification([user.fcmToken], {
+            receiver: user._id,
             message: 'Social Profiles Added!',
             description:
               'Congratulations! You earned 150 points for adding your social profiles. 🎉',
+              reference: user._id,
+              modelType: modeType.User,
           })
         }
       }
@@ -867,8 +874,11 @@ const updateUserInfoFromDB = async (
 
         if (user.fcmToken && user.pushNotify?.points) {
           await sendNotification([user.fcmToken], {
+            receiver: user._id,
             message: 'Profile Completed!',
             description: `Congratulations! You have earned ${pointsToAdd} points for fully completing your ${isExpert ? 'expert' : 'consult'} profile. 🎉`,
+            reference: user._id,
+            modelType: modeType.User,
           })
         }
       }

@@ -5,6 +5,7 @@ import AppError from '../../errors/AppError'
 import StripeService from '../../class/stripe/stripe'
 import { sendNotification } from '../../utils/sentNotification'
 import mongoose from 'mongoose'
+import { modeType } from '../notification/notification.interface'
 
 // Create Stripe Express account and return onboarding link
 const stripLinkAccount = async (userId: string) => {
@@ -157,8 +158,11 @@ const returnUrl = async (query: Record<string, any>) => {
       // 1. Send push notification (if enabled)
       if (user.fcmToken && user.pushNotify?.points) {
         await sendNotification([user.fcmToken], {
+          receiver: user._id,
           message: 'Payment Method Added!',
           description: `Congratulations! You have earned 200 points for successfully adding your payment method via Stripe. 🎉`,
+          reference: user._id,
+          modelType: modeType.Payment,
         })
       }
     }

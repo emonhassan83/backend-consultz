@@ -77,7 +77,7 @@ export const paymentNotifyToAdmin = async (
     message,
     description,
     reference: payment.booking,
-    model_type: modeType.Payment,
+    modelType: modeType.Payment,
   }
 
   await sendNotification([admin.fcmToken], notifyPayload)
@@ -107,7 +107,7 @@ export const paymentNotifyToUser = async (
     message,
     description,
     reference: payment._id,
-    model_type: modeType.Payment,
+    modelType: modeType.Payment,
   }
 
   await sendNotification([user.fcmToken], notifyPayload)

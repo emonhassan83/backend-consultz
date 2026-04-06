@@ -22,6 +22,7 @@ import {
 } from '../../utils/emailNotify'
 import { sendNotification } from '../../utils/sentNotification'
 import isoWeek from 'dayjs/plugin/isoWeek'
+import { modeType } from '../notification/notification.interface'
 dayjs.extend(isoWeek)
 dayjs.extend(customParseFormat)
 dayjs.extend(utc)
@@ -163,9 +164,12 @@ const createBookings = async (payload: TBookings, userId: string) => {
       // Send push notification (if enabled)
       if (userData.fcmToken && userData.pushNotify?.points) {
         await sendNotification([userData.fcmToken], {
+          receiver: consult._id,
           message: 'First Consultation Booked!',
           description:
             'Congratulations! You have earned 300 points for booking your first consultation. 🎉 Keep exploring!',
+          reference: createdBooking._id as string,
+          modelType: modeType.Booking,
         })
       }
     }
@@ -602,8 +606,11 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
       // Send push notification (if enabled)
       if (user.fcmToken && user.pushNotify?.points) {
         await sendNotification([user.fcmToken], {
+          receiver: user._id,
           message: 'Booking Confirmed!',
           description: `You have earned 50 points for booking a consultation. Keep booking more! 🎉`,
+          reference: updatedBooking._id as string,
+          modelType: modeType.Booking,
         })
       }
     }
@@ -627,8 +634,11 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
 
       if (user!.fcmToken && user!.pushNotify?.points) {
         await sendNotification([user!.fcmToken], {
+          receiver: user!._id,
           message: 'Repeat Booking Bonus!',
           description: `You have earned 150 points for re-booking the same expert within 30 days!`,
+          reference: updatedBooking._id as string,
+          modelType: modeType.Booking,
         })
       }
     }
@@ -651,8 +661,11 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
 
       if (user!.fcmToken && user!.pushNotify?.points) {
         await sendNotification([user!.fcmToken], {
+          receiver: user!._id,
           message: 'Booking Streak Bonus!',
           description: `Congratulations! You have earned 300 bonus points for booking 3 sessions within 30 days!`,
+          reference: updatedBooking._id as string,
+          modelType: modeType.Booking,
         })
       }
     }
@@ -907,8 +920,11 @@ const completedBooking = async (
       // Send push notification to booker (if enabled)
       if (booker.fcmToken && booker.pushNotify?.points) {
         await sendNotification([booker.fcmToken], {
+          receiver: booker._id,
           message: 'Session Completed!',
           description: `You have earned 100 points for attending and completing your consultation. Great job! 🎉`,
+          reference: updatedBooking._id as string,
+          modelType: modeType.Booking,
         })
       }
     }
@@ -941,8 +957,11 @@ const completedBooking = async (
         // Send bonus notification
         if (consultant.fcmToken && consultant.pushNotify?.points) {
           await sendNotification([consultant.fcmToken], {
+            receiver: consultant._id,
             message: 'Weekly Performance Bonus!',
             description: `Congratulations! You completed 5+ sessions this week and earned 300 bonus points! Keep it up! 🎉`,
+            reference: updatedBooking._id as string,
+            modelType: modeType.Booking,
           })
         }
       }

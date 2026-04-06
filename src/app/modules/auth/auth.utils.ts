@@ -90,7 +90,7 @@ export const authNotifyUser = async (
     message,
     description,
     reference: user._id,
-    model_type: modeType.User,
+    modelType: modeType.User,
   }
 
   await sendNotification([user.fcmToken], notifyPayload)

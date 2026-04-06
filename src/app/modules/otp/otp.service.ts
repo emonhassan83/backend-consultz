@@ -12,6 +12,7 @@ import twilio from 'twilio'
 import { USER_ROLE } from '../user/user.constant'
 import { sendExpertPendingEmail } from '../user/user.utils'
 import { sendNotification } from '../../utils/sentNotification'
+import { modeType } from '../notification/notification.interface'
 
 const verifyWithEmail = async (token: string, otp: string | number) => {
   if (!token) {
@@ -134,9 +135,12 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
   // Send push notification to the user
   if (user.fcmToken && user.pushNotify?.points) {
     await sendNotification([user.fcmToken], {
+      receiver: user._id,
       message: 'Earn Points!',
       description:
         'Congratulations! You have earned 100 points for fully completing your profile. 🎉',
+      reference: user._id,
+      modelType: modeType.User,
     })
   }
 

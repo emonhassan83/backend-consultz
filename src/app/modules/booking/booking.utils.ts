@@ -115,13 +115,13 @@ export const sendBookingsNotification = async (
     default:
       throw new Error('Invalid booking notification action')
   }
-
+  
   const notifyPayload = {
     receiver: user._id,
     message,
     description,
     reference: booking._id as string,
-    model_type: modeType.Booking,
+    modelType: modeType.Booking,
   }
 
   await sendNotification([user.fcmToken], notifyPayload)

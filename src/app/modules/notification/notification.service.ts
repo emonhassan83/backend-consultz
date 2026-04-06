@@ -59,7 +59,7 @@ const createNotificationIntoDB = async (payload: TNotification) => {
       message,
       description,
       reference: reference || null,
-      model_type: modelType,
+      modelType: modelType,
     };
 
     try {

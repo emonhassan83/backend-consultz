@@ -69,6 +69,7 @@ export const sendUserFollowNotify = async (
     const notifyPayload = {
       receiver: following._id,
       message,
+      description,
       reference: connection._id,
       modelType: modeType.Follow,
     };

@@ -7,6 +7,7 @@ import AppError from '../../errors/AppError'
 import { User } from '../user/user.model'
 import { Booking } from '../booking/booking.models'
 import { sendNotification } from '../../utils/sentNotification'
+import { modeType } from '../notification/notification.interface'
 
 const createReviews = async (
   payload: Omit<TReviews, 'user' | 'expert'>,
@@ -81,8 +82,11 @@ const createReviews = async (
         // Send push notification to expert (if enabled)
         if (expert.fcmToken && expert.pushNotify?.points) {
           await sendNotification([expert.fcmToken], {
+            receiver: expert._id,
             message: '5-Star Review Received!',
             description: 'Congratulations! You earned 200 points for receiving a 5-star review. Keep up the great work! 🎉',
+            reference: newReview._id,
+            modelType: modeType.Reviews
           });
         }
       }
@@ -110,8 +114,11 @@ const createReviews = async (
         // Send bonus notification
         if (expert.fcmToken && expert.pushNotify?.points) {
           await sendNotification([expert.fcmToken], {
+            receiver: expert._id,
             message: 'High Rating Streak Bonus!',
             description: 'You maintained 4.7+ average rating over the last 30 days and earned 500 bonus points! Excellent work! 🎉',
+            reference: newReview._id,
+            modelType: modeType.Reviews
           });
         }
       }
@@ -140,8 +147,11 @@ const createReviews = async (
     // 8. Send push notification to reviewer (if enabled)
     if (updatedReviewer?.fcmToken && updatedReviewer.pushNotify?.points) {
       await sendNotification([updatedReviewer.fcmToken], {
+        receiver: updatedReviewer._id,
         message: 'Review Submitted Successfully!',
         description: `You earned ${totalPointsAwarded} points for leaving a verified review. Thank you! 🎉`,
+        reference: newReview._id,
+        modelType: modeType.Reviews
       });
     }
 

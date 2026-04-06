@@ -78,12 +78,13 @@ const startCalling = async (userId: string, payload: ICalling) => {
     // Send  Receiver
     if (receiver.fcmToken) {
       const notificationPayload = {
+        receiver: receiver._id,
         message: payload.isVideo
           ? 'Incoming Video Call'
           : 'Incoming Voice Call',
         description: `${user.firstName} is calling you`,
         reference: calling[0]._id,
-        model_type: modeType.Calling,
+        modelType: modeType.Calling,
       }
 
       await sendNotification([receiver.fcmToken], notificationPayload)
@@ -189,10 +190,11 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
     ])
 
     const notificationPayload = {
+      receiver: caller?._id.toString() === userId ? receiver?._id : caller?._id,
       message: 'Call Ended',
       description: `Your ${calling.isVideo ? 'video' : 'voice'} call has ended. Duration: ${Math.floor(durationSeconds / 60)} min ${durationSeconds % 60} sec`,
       reference: calling._id,
-      model_type: modeType.Calling,
+      modelType: modeType.Calling,
     }
 
     const tokens: string[] = []

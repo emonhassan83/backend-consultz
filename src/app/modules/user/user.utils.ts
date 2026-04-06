@@ -172,7 +172,7 @@ export const sendUserStatusNotifYToAdmin = async (
     message,
     description,
     reference: user._id,
-    model_type: modeType.User,
+    modelType: modeType.User,
   }
 
   await sendNotification([admin.fcmToken], notifyPayload)
@@ -200,7 +200,7 @@ export const sendUserStatusNotifYToUser = async (
     message,
     description,
     reference: user._id,
-    model_type: modeType.User,
+    modelType: modeType.User,
   }
 
   await sendNotification([user.fcmToken], notifyPayload)

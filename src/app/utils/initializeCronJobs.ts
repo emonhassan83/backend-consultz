@@ -29,6 +29,7 @@ import { sendNotification } from './sentNotification'
 import { Payment } from '../modules/payment/payment.model'
 import Stripe from 'stripe'
 import config from '../config'
+import { modeType } from '../modules/notification/notification.interface'
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2025-02-24.acacia',
@@ -230,9 +231,12 @@ export const initializeCronJobs = () => {
           // Send push notification (if enabled)
           if (expert.fcmToken && expert.pushNotify?.points) {
             await sendNotification([expert.fcmToken], {
+              receiver: expert._id,
               message: 'Reliability Bonus Awarded!',
               description:
                 'Congratulations! You had zero no-shows in the last 30 days and earned 300 points. Keep it up! 🎉',
+                reference: expert._id,
+                modelType: modeType.User,
             })
           }
         }
@@ -290,9 +294,12 @@ export const initializeCronJobs = () => {
           // Send push notification
           if (expert.fcmToken && expert.pushNotify?.points) {
             await sendNotification([expert.fcmToken], {
+              receiver: expert._id,
               message: 'Fast Response Reward!',
               description:
                 'You earned 50 points this week for maintaining fast response time to booking requests. Excellent! 🎉',
+              reference: expert._id,
+              modelType: modeType.User,
             })
           }
         }

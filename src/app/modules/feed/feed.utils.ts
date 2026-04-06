@@ -202,7 +202,7 @@ export const sendFeedNotificationToUser = async (
     message,
     description,
     reference: feed._id,
-    model_type: modeType.Feed,
+    modelType: modeType.Feed,
   };
 
   await sendNotification([user.fcmToken], notifyPayload);

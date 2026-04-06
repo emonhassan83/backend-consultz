@@ -29,7 +29,7 @@ export const notifyExpertOnNewReview = async (
       message,
       description,
       reference: reviewId,
-      model_type: modeType.Reviews,
+      modelType: modeType.Reviews,
     };
 
     await sendNotification([expert.fcmToken], notifyPayload);
@@ -65,7 +65,7 @@ export const notifyUserToLeaveReview = async (
       message,
       description,
       reference: bookingId,
-      model_type: modeType.Booking,
+      modelType: modeType.Booking,
     };
 
     await sendNotification([user.fcmToken], notifyPayload);
