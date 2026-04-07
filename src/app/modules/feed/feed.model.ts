@@ -11,11 +11,13 @@ const feedSchema = new Schema<TFeed>(
     },
     content: {
       type: [String],
-      required: true,
+      required: false,
+      default: [],
     },
     description: {
       type: String,
-      required: true,
+      required: false,
+      default: null,
     },
     contentMeta: {
       type: Schema.Types.ObjectId,

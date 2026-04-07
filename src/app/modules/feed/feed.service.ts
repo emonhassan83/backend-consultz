@@ -23,61 +23,75 @@ const createFeedIntoDB = async (
   userId: string,
   files: Express.Multer.File[],
 ) => {
-  const user = await User.findById(userId)
+  const user = await User.findById(userId);
   if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'This profile is not found !')
+    throw new AppError(httpStatus.NOT_FOUND, 'This profile is not found!');
   }
 
+  // File upload
   if (files?.length) {
-    const uploadedUrls: string[] = []
+    const uploadedUrls: string[] = [];
 
     for (const file of files) {
-      const mimeType = file.mimetype
+      const mimeType = file.mimetype;
 
       if (!mimeType.startsWith('image/') && !mimeType.startsWith('video/')) {
         throw new AppError(
           httpStatus.UNPROCESSABLE_ENTITY,
           'Please upload a valid image or video file',
-        )
+        );
       }
 
-      const contentType = mimeType.split('/')[0] // 'image' or 'video'
-      const randomId = Math.floor(100000 + Math.random() * 900000)
-      const filePath = `${contentType}s/${randomId}`
+      const contentType = mimeType.split('/')[0];
+      const randomId = Math.floor(100000 + Math.random() * 900000);
+      const filePath = `${contentType}s/${randomId}`;
 
-      const url = (await uploadToS3({ file, fileName: filePath })) as string
-      uploadedUrls.push(url)
+      const url = (await uploadToS3({ file, fileName: filePath })) as string;
+      uploadedUrls.push(url);
     }
 
-    payload.content = uploadedUrls
+    payload.content = uploadedUrls;
   }
 
-  // create meta content
-  const contentMeta = await ContentMetaService.createContentMetaIntoDB({})
+  // Create ContentMeta
+  const contentMeta = await ContentMetaService.createContentMetaIntoDB({});
   if (!contentMeta) {
-    throw new AppError(httpStatus.CONFLICT, 'Feed post not created!')
+    throw new AppError(httpStatus.CONFLICT, 'Feed post not created!');
   }
 
-  // add contentMeta to payload
-  payload.contentMeta = contentMeta?._id
-  payload.author = user._id
+  // Assign to payload
+  payload.contentMeta = contentMeta?._id;
+  payload.author = user._id;
 
-  const feed = await Feed.create(payload)
-  if (!feed) {
-    throw new AppError(httpStatus.CONFLICT, 'Feed post not created!')
+  // Create Feed
+  const createdFeed = await Feed.create(payload);
+  if (!createdFeed) {
+    throw new AppError(httpStatus.CONFLICT, 'Feed post not created!');
   }
-
-  // update to assign content and modelType meta content
+  
+  // Update ContentMeta with feed reference
   await ContentMetaService.updateAContentMetaFromDB(contentMeta?._id, {
-    // @ts-ignore
-    content: feed?._id,
-  })
+    content: createdFeed?._id as any,
+  });
+  
+  const feed = await createdFeed.populate([
+    { path: 'author', select: 'firstName lastName headline photoUrl' },
+    { path: 'contentMeta', select: 'like comment likeBy' },
+  ]);
+  // Notify followers
+  await notifyFollowersOnNewPost(feed._id.toString());
 
-  // sent follow user to notify
-  await notifyFollowersOnNewPost(feed._id.toString())
+  // 🔥 IMPORTANT: Enrich the newly created feed with same logic as getAllFeedsFromDB
+  const enrichedFeed = await enrichFeedWithUserInfo(feed, userId);
 
-  return feed
-}
+  // Add isReported (if you have this logic)
+  const isReported = false;
+  
+  return {
+    ...enrichedFeed,
+    isReported,
+  };
+};
 
 const getAllFeedsFromDB = async (
   query: Record<string, unknown>,

@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 const createValidationSchema = z.object({
   body: z.object({
-    description: z.string().min(1, 'Description is required')
+    description: z.string().min(1, 'Description is required').optional(),
   }),
 })
 
