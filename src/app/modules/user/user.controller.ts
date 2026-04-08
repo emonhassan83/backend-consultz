@@ -10,7 +10,7 @@ import { USER_ROLE, USER_STATUS } from './user.constant'
 
 const registerUser = catchAsync(async (req, res) => {
   const result = await UserService.registerUserIntoDB(req?.body)
-  const sendOtp = await otpServices.sendOtpInPhone(result._id.toString(), {
+  const sendOtp = await otpServices.sendOtpViaTokenInPhone(result._id.toString(), {
     phoneNumber: result.phoneNumber as string,
   })
   const { _id, id, firstName, lastName, email, phoneNumber, status } = result
