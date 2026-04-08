@@ -120,12 +120,12 @@ const getAllNotificationFromDB = async (
   // 2. Get all notifications with pagination
   const notificationQuery = new QueryBuilder(
     Notification.find(baseFilter)
-      .populate([
-        {
-          path: 'reference',
-          select: 'description sessionType', // প্রয়োজন অনুযায়ী populate করো
-        },
-      ])
+      // .populate([
+      //   {
+      //     path: 'reference',
+      //     select: 'description sessionType', // প্রয়োজন অনুযায়ী populate করো
+      //   },
+      // ])
       .select('message description date read modelType createdAt'),
     query,
   )

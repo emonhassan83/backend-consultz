@@ -119,7 +119,7 @@ export const notifyFollowersOnNewPost = async (feedId: string) => {
       .map(user => ({
         receiver: user._id,
         fcmToken: user.fcmToken,
-        message: `${authorName} has posted a new video`,
+        message: `${authorName} has posted a new update!`,
         description: firstLine,
         reference: feed._id.toString(),
         model_type: modeType.Feed,
