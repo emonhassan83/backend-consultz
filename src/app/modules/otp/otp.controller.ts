@@ -39,8 +39,19 @@ const sendOtpInEmail = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-const sendOtpInPhone = catchAsync(async (req: Request, res: Response) => {
-  const result = await otpServices.sendOtpInPhone(req.user._id, req.body)
+const sendOtpViaTokenInPhone = catchAsync(async (req: Request, res: Response) => {
+  const result = await otpServices.sendOtpViaTokenInPhone(req.user._id, req.body)
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'OTP sent successfully',
+    data: result,
+  })
+})
+
+const sendOtpViaDirectPhone = catchAsync(async (req: Request, res: Response) => {
+  const result = await otpServices.sendOtpViaDirectPhone(req.body)
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -54,5 +65,6 @@ export const otpControllers = {
   verifyWithEmail,
   verifyWithPhoneNumber,
   sendOtpInEmail,
-  sendOtpInPhone
+  sendOtpViaTokenInPhone,
+  sendOtpViaDirectPhone
 }

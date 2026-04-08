@@ -25,10 +25,16 @@ router.post(
 )
 
 router.post(
-  '/send-otp-in-phone',
+  '/send-otp-via-token-in-phone',
   auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult),
   validateRequest(resentOtpValidations.resentOtpInPhone),
-  otpControllers.sendOtpInPhone,
+  otpControllers.sendOtpViaTokenInPhone,
+)
+
+router.post(
+  '/send-otp-via-direct-phone',
+  validateRequest(resentOtpValidations.resentOtpInPhone),
+  otpControllers.sendOtpViaDirectPhone,
 )
 
 export const otpRoutes = router

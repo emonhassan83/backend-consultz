@@ -231,14 +231,94 @@ const sendOtpInEmail = async (email: string) => {
   return { token }
 }
 
-const sendOtpInPhone = async (
+const sendOtpViaTokenInPhone = async (
   userId: string,
   payload: { phoneNumber: string },
 ) => {
   const { phoneNumber } = payload
 
   const user = await User.findById(userId)
-  if (!user) {
+  if (!user || user?.isDeleted) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'User not found')
+  }
+
+  const otp = generateOtp()
+  const expiresAt = moment().add(5, 'minute')
+
+  // ডাটাবেসে OTP সেভ করা
+  const updateOtp = await User.findByIdAndUpdate(
+    user?._id,
+    {
+      $set: {
+        verification: {
+          otp,
+          expiresAt,
+          status: true,
+        },
+      },
+    },
+    { new: true },
+  )
+
+  if (!updateOtp) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Failed to resend OTP. Please try again later',
+    )
+  }
+
+  const jwtPayload = {
+    phoneNumber: user?.phoneNumber,
+    userId: user?._id,
+  }
+  const token = jwt.sign(jwtPayload, config.jwt_access_secret as Secret, {
+    expiresIn: '5m',
+  })
+
+  // === মক মোড চেক করা ===
+  const isDevelopment = process.env.NODE_ENV !== 'production'
+
+  if (isDevelopment) {
+    console.log('🔑 [MOCK OTP] Phone:', phoneNumber)
+    console.log('🔑 [MOCK OTP] Code:', otp)
+    console.log(
+      '🔑 [MOCK OTP] Expires at:',
+      expiresAt.format('YYYY-MM-DD HH:mm:ss'),
+    )
+    console.log('⚠️  Real SMS skipped in development mode')
+
+    // টেস্টের জন্য OTP রিটার্ন করছি (প্রোডাকশনে এটা রিমুভ করবেন)
+    return {
+      token,
+      otp,
+      mock: true,
+    }
+  }
+
+  // === প্রোডাকশন মোড: রিয়েল Twilio SMS ===
+  const client = twilio(config.twilio.accountSid, config.twilio.authToken)
+
+  try {
+    await client.messages.create({
+      body: `Your verification code is ${otp}. It expires in 5 minutes. Do not share it.`,
+      from: config.twilio.phoneNumber,
+      to: phoneNumber,
+    })
+
+    return {
+      token,
+    }
+  } catch (error: any) {
+    console.error('Twilio SMS Error:', error)
+    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to send OTP')
+  }
+}
+
+const sendOtpViaDirectPhone = async (payload: { phoneNumber: string }) => {
+  const { phoneNumber } = payload
+
+  const user = await User.findOne({ phoneNumber })
+  if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.BAD_REQUEST, 'User not found')
   }
 
@@ -318,5 +398,6 @@ export const otpServices = {
   verifyWithEmail,
   verifyWithPhoneNumber,
   sendOtpInEmail,
-  sendOtpInPhone,
+  sendOtpViaTokenInPhone,
+  sendOtpViaDirectPhone,
 }

@@ -140,7 +140,10 @@ const createValidationSchema = z.object({
         message: 'Confirm password cannot be more than 16 characters',
       }),
     dob: z.string({ required_error: 'Date of birth is required!' }),
-    phoneNumber: z.string({ required_error: 'Phone number is required!' }),
+    phoneNumber: z
+      .string({ required_error: 'Phone number is required!' })
+      .min(6, { message: 'Contact number must be at least 6 digits long' })
+      .max(15, { message: 'Contact number must be at most 15 digits long' }),
   }),
 })
 
