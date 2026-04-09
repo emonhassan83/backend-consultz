@@ -3,10 +3,10 @@ import app from './app'
 import mongoose from 'mongoose'
 import config from './app/config'
 import { errorlogger, logger } from './app/utils/logger'
-import initializeSocketIO from './socket'
 import { seeder } from './app/seeder/seed'
 import colors from 'colors'
 import { initializeCronJobs } from './app/utils/initializeCronJobs'
+import initializeSocketIO from './app/socket/socket.init'
 
 let server: Server
 export const io = initializeSocketIO(createServer(app))

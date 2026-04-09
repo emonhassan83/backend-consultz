@@ -7,3 +7,10 @@ export interface UploadedFiles {
   videos?: Express.Multer.File[];
   documents?: Express.Multer.File[];
 }
+export const USER_ROLE = {
+  admin: 'admin',
+  expert: 'expert',
+  consult: 'consult',
+} as const
+
+export type USER_ROLE = typeof USER_ROLE[keyof typeof USER_ROLE]
