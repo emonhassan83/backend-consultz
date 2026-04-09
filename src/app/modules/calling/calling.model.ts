@@ -1,5 +1,5 @@
-import { Schema, model } from 'mongoose';
-import { CALLING_STATUS } from './calling.constant';
+import { Schema, model } from 'mongoose'
+import { CALLING_STATUS } from './calling.constant'
 
 const callingSchema = new Schema(
   {
@@ -13,17 +13,28 @@ const callingSchema = new Schema(
       ref: 'User',
       required: true,
     },
+    participants: [
+      {
+        user: { type: Schema.Types.ObjectId, ref: 'User' },
+        role: { type: String, enum: ['caller', 'receiver'] },
+        status: {
+          type: String,
+          enum: ['ringing', 'accepted', 'rejected', 'left'],
+        },
+        joinedAt: Date,
+        leftAt: Date,
+        agoraUid: Number,
+      },
+    ],
+
     booking: {
       type: Schema.Types.ObjectId,
       ref: 'Booking',
       required: true,
     },
+
     channelName: {
       type: String,
-      required: true,
-    },
-    callId: {
-      type: Number,
       required: true,
     },
     isVideo: {
@@ -47,10 +58,6 @@ const callingSchema = new Schema(
       type: Number,
       default: 0, // seconds
     },
-    token: {
-      type: String,
-      required: true,
-    },
     tokenExpireAt: {
       type: Number,
       required: true,
@@ -63,6 +70,6 @@ const callingSchema = new Schema(
   {
     timestamps: true,
   },
-);
+)
 
-export const Calling = model('Calling', callingSchema);
+export const Calling = model('Calling', callingSchema)

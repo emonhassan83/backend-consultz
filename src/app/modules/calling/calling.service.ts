@@ -17,55 +17,60 @@ import { Payment } from '../payment/payment.model'
 import { Contents } from '../contents/contents.models'
 import dayjs from 'dayjs'
 
+/* =========================================================
+   🚀 START CALL
+========================================================= */
 const startCalling = async (userId: string, payload: ICalling) => {
   const session = await mongoose.startSession()
   session.startTransaction()
 
   try {
-    // validate user
-    const user = await User.findById(userId)
-    if (!user || user?.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'User not found')
+    /* 1. Validate caller */
+    const caller = await User.findById(userId)
+    if (!caller || caller.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Caller not found')
     }
 
-    // Find Booking and authorization checked
+    /* 2. Validate booking */
     const booking = await Booking.findOne({
       _id: payload.bookingId,
-      consult: user._id,
+      consult: userId,
       status: BOOKING_STATUS.confirmed,
       isDeleted: false,
     }).session(session)
+
     if (!booking) {
       throw new AppError(
-        httpStatus.NOT_FOUND,
+        httpStatus.BAD_REQUEST,
         'Valid confirmed booking not found',
       )
     }
 
-    // Receiver (client) find out
+    /* 3. Get receiver */
     const receiver = await User.findById(booking.user).session(session)
     if (!receiver || receiver.isDeleted) {
       throw new AppError(httpStatus.NOT_FOUND, 'Receiver not found')
     }
 
-    // Unique channel name (booking ID + timestamp)
+    /* 4. Create unique channel */
     const channelName = `booking_${booking._id}_${Date.now()}`
 
-    // Agora token generate
+    /* 5. Generate token */
+    const uid = Number(Date.now())
     const tokenData = generateAgoraToken({
       channelName,
-      uid: Number(Date.now()), // unique UID
+      uid,
     })
 
-    // Calling record create
-    const calling = await Calling.create(
+    /* 6. Save calling */
+    const [calling] = await Calling.create(
       [
         {
-          caller: user._id,
+          caller: caller._id,
           receiver: receiver._id,
           booking: booking._id,
           channelName,
-          callId: tokenData.uid,
+          callId: uid,
           isVideo: payload.isVideo,
           token: tokenData.token,
           tokenExpireAt: tokenData.expireAt,
@@ -75,27 +80,26 @@ const startCalling = async (userId: string, payload: ICalling) => {
       { session },
     )
 
-    // Send  Receiver
+    /* 7. Send notification */
     if (receiver.fcmToken) {
-      const notificationPayload = {
+      await sendNotification([receiver.fcmToken], {
         receiver: receiver._id,
         message: payload.isVideo
           ? 'Incoming Video Call'
           : 'Incoming Voice Call',
-        description: `${user.firstName} is calling you`,
-        reference: calling[0]._id,
+        description: `${caller.firstName} is calling you`,
+        reference: calling._id,
         modelType: modeType.Calling,
-      }
-
-      await sendNotification([receiver.fcmToken], notificationPayload)
+      })
     }
 
     await session.commitTransaction()
 
     return {
-      callId: calling[0]._id,
+      callId: calling._id,
       channelName,
       token: tokenData.token,
+      uid,
       expireAt: tokenData.expireAt,
       isVideo: payload.isVideo,
     }
@@ -107,6 +111,40 @@ const startCalling = async (userId: string, payload: ICalling) => {
   }
 }
 
+/* =========================================================
+   📡 GENERATE TOKEN (Rejoin নিরাপদ)
+========================================================= */
+const generateCallToken = async (callId: string, userId: string) => {
+  const call = await Calling.findById(callId)
+
+  if (!call || call.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Call not found')
+  }
+
+  if (
+    call.caller.toString() !== userId &&
+    call.receiver.toString() !== userId
+  ) {
+    throw new AppError(httpStatus.FORBIDDEN, 'Unauthorized')
+  }
+
+  const uid = Number(Date.now())
+
+  const tokenData = generateAgoraToken({
+    channelName: call.channelName,
+    uid,
+  })
+
+  return {
+    token: tokenData.token,
+    uid,
+    expireAt: tokenData.expireAt,
+  }
+}
+
+/* =========================================================
+   🛑 END CALL (CRITICAL BUSINESS LOGIC)
+========================================================= */
 const endCalling = async (payload: { callId: string }, userId: string) => {
   const { callId } = payload
 
@@ -114,62 +152,55 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
   session.startTransaction()
 
   try {
-    // Find calling and validate
-    const calling = await Calling.findOne({
+    const call = await Calling.findOne({
       _id: callId,
       $or: [{ caller: userId }, { receiver: userId }],
       isDeleted: false,
     }).session(session)
 
-    if (!calling) {
+    if (!call) {
       throw new AppError(
         httpStatus.NOT_FOUND,
         'Call session not found or unauthorized',
       )
     }
 
-    // If call already ended
-    if (calling.status === CALLING_STATUS.COMPLETED) {
+    if (call.status === CALLING_STATUS.COMPLETED) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Call already ended')
     }
 
-    // Call end
+    /* duration calculate */
     const now = new Date()
-    const startTime = calling.createdAt
-    const durationSeconds = Math.floor(
+    const startTime = call.startedAt || call.createdAt
+    const duration = Math.floor(
       (now.getTime() - startTime.getTime()) / 1000,
     )
 
-    calling.status = CALLING_STATUS.COMPLETED
-    calling.endedAt = now
-    calling.duration = durationSeconds
-    await calling.save({ session })
+    call.status = CALLING_STATUS.COMPLETED
+    call.endedAt = now
+    call.duration = duration
+    await call.save({ session })
 
-    // Find and update booking
-    const booking = await Booking.findById(calling.booking).session(session)
-    if (!booking) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Related booking not found')
-    }
+    /* booking complete */
+    const booking = await Booking.findById(call.booking).session(session)
+    if (!booking) throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
 
     booking.status = BOOKING_STATUS.completed
     await booking.save({ session })
 
-    // Find the payment record
+    /* payment */
     const payment = await Payment.findOne({
       booking: booking._id,
       isDeleted: false,
     }).session(session)
-    if (!payment) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Related payment not found')
-    }
+    if (!payment) throw new AppError(httpStatus.NOT_FOUND, 'Payment not found')
 
-    const contents = await Contents.findOne({ isDeleted: false }).lean()
+    /* withdraw create */
+    const contents = await Contents.findOne().lean()
     const holdDays = contents?.paymentHoldDays || 7
 
-    // Calculate future proceedAt date (now + holdDays)
-    const proceedAtDate = dayjs(now).add(holdDays, 'day').toDate();
+    const proceedAt = dayjs(now).add(holdDays, 'day').toDate()
 
-    // Atomic Withdraw request creation with future proceedAt
     const [withdraw] = await Withdraw.create(
       [
         {
@@ -177,32 +208,30 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
           booking: booking._id,
           amount: payment.consultAmount,
           status: WITHDRAW_STATUS.proceed,
-          proceedAt: proceedAtDate, // ← This is the key change: now + holdDays
+          proceedAt,
         },
       ],
       { session },
-    );
+    )
 
-    // Both particles send notification
+    /* notification */
     const [caller, receiver] = await Promise.all([
-      User.findById(calling.caller).session(session),
-      User.findById(calling.receiver).session(session),
+      User.findById(call.caller),
+      User.findById(call.receiver),
     ])
-
-    const notificationPayload = {
-      receiver: caller?._id.toString() === userId ? receiver?._id : caller?._id,
-      message: 'Call Ended',
-      description: `Your ${calling.isVideo ? 'video' : 'voice'} call has ended. Duration: ${Math.floor(durationSeconds / 60)} min ${durationSeconds % 60} sec`,
-      reference: calling._id,
-      modelType: modeType.Calling,
-    }
 
     const tokens: string[] = []
     if (caller?.fcmToken) tokens.push(caller.fcmToken)
     if (receiver?.fcmToken) tokens.push(receiver.fcmToken)
 
-    if (tokens.length > 0) {
-      await sendNotification(tokens, notificationPayload)
+    if (tokens.length) {
+      await sendNotification(tokens, {
+        receiver: caller?._id,
+        message: 'Call Ended',
+        description: `Your ${call.isVideo ? 'video' : 'voice'} call has ended. Duration: ${Math.floor(duration / 60)} min`,
+        reference: call._id,
+        modelType: modeType.Calling,
+      })
     }
 
     // sent notify to consult
@@ -212,7 +241,7 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
 
     await session.commitTransaction()
 
-    return calling
+    return call
   } catch (error) {
     await session.abortTransaction()
     throw error
@@ -221,7 +250,23 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
   }
 }
 
+/* =========================================================
+   📊 GET MY CALLS
+========================================================= */
+const getMyCalls = async (userId: string) => {
+  const result = await Calling.find({
+    $or: [{ caller: userId }, { receiver: userId }],
+    isDeleted: false,
+  })
+    .populate('caller receiver booking')
+    .sort({ createdAt: -1 })
+
+  return result
+}
+
 export const CallingService = {
   startCalling,
+  generateCallToken,
   endCalling,
+  getMyCalls
 }

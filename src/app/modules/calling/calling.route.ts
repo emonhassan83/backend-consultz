@@ -21,4 +21,17 @@ router.post(
   CallingController.endCalling,
 )
 
+router.post(
+  '/token',
+  auth(USER_ROLE.expert, USER_ROLE.consult),
+  zodValidationRequest(CallingValidation.callTokenZod),
+  CallingController.generateToken,
+)
+
+router.get(
+  '/my-calls',
+  auth(USER_ROLE.expert, USER_ROLE.consult),
+  CallingController.getMyCalls,
+)
+
 export const CallingRoutes = router
