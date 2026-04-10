@@ -1,5 +1,6 @@
 import { Socket } from 'socket.io'
+import disconnectHandler from './handlers/disconnect.handler'
 
 export const registerSocketEvents = (socket: Socket) => {
-  console.log(`New client connected: ${socket.id}`)
+  socket.on('disconnect', disconnectHandler)
 }
