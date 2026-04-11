@@ -19,7 +19,7 @@ const callingSchema = new Schema(
         role: { type: String, enum: ['caller', 'receiver'] },
         status: {
           type: String,
-          enum: ['ringing', 'accepted', 'rejected', 'left'],
+          enum: Object.values(CALLING_STATUS),
         },
         joinedAt: Date,
         leftAt: Date,
@@ -44,7 +44,7 @@ const callingSchema = new Schema(
     status: {
       type: String,
       enum: Object.values(CALLING_STATUS),
-      default: CALLING_STATUS.PENDING,
+      default: CALLING_STATUS.pending,
     },
     startedAt: {
       type: Date,

@@ -74,7 +74,7 @@ const startCalling = async (userId: string, payload: ICalling) => {
           isVideo: payload.isVideo,
           token: tokenData.token,
           tokenExpireAt: tokenData.expireAt,
-          status: CALLING_STATUS.PENDING,
+          status: CALLING_STATUS.pending,
         },
       ],
       { session },
@@ -165,7 +165,7 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
       )
     }
 
-    if (call.status === CALLING_STATUS.COMPLETED) {
+    if (call.status === CALLING_STATUS.completed) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Call already ended')
     }
 
@@ -176,7 +176,7 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
       (now.getTime() - startTime.getTime()) / 1000,
     )
 
-    call.status = CALLING_STATUS.COMPLETED
+    call.status = CALLING_STATUS.completed
     call.endedAt = now
     call.duration = duration
     await call.save({ session })
