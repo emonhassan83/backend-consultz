@@ -9,7 +9,7 @@ import { callbackFn } from '../../../utils/CallbackFn'
 
 const sendMessageHandler = eventHandler(
   async (socket: TSocket, payload: any, callback: any) => {
-    const userId = socket.data.user._id.toString()
+    const userId = socket.auth._id.toString()
     const { receiverId, text, imageUrl = [], bookingId } = payload
 
     console.log('📨 send-message received:', {

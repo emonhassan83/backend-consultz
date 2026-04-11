@@ -6,11 +6,11 @@ export type TSocketUser = { _id: string; email: string; role?: USER_ROLE }
 export type TAckRes = { success: boolean; message?: string };
 export type TAckFn = (response: TAckRes) => void;
 
-export type TSocketHandler<TData> = (
+export type TSocketHandler<TData = any> = (
   socket: TSocket,
-  data: TData,
-  ack: TAckFn
-) => Promise<void>;
+  data?: TData,      // ✅ optional
+  ack?: TAckFn,
+) => Promise<void>
 
 export type TError = {
   message: string;
@@ -19,4 +19,5 @@ export type TError = {
 
 export type TSocket = Socket & {
   auth: TSocketUser;
+  data?: { user?: any };
 };

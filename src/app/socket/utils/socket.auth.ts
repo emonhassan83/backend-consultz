@@ -18,7 +18,11 @@ export const socketAuth = (socket: Socket, next: (err?: Error) => void) => {
     ) as TSocketUser
 
     // @ts-ignore
-    socket.auth = { _id: decoded.id, email: decoded.email, role: decoded.role }
+    socket.auth = {
+      _id: decoded._id,
+      email: decoded.email,
+      role: decoded.role,
+    }
     next()
   } catch (err: unknown) {
     console.error(err)

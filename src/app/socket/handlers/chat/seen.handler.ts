@@ -7,7 +7,7 @@ import { Types } from 'mongoose';
 import { callbackFn } from '../../../utils/CallbackFn';
 
 const seenHandler = eventHandler(async (socket: TSocket, { chatId }: any, callback: any) => {
-  const userId = socket.data.user._id.toString();
+  const userId = socket.auth._id.toString();
 
   if (!chatId) {
     return callbackFn(callback, { success: false, message: 'chatId is required' });

@@ -5,7 +5,8 @@ import eventHandler from "../../utils/eventHandler"
 
 const myChatListHandler = eventHandler(
   async (socket: TSocket, _: any, callback: any) => {
-    const userId = socket.data.user._id.toString()
+    // ✅ auth থেকে নাও, data.user থেকে না
+    const userId = socket.auth._id.toString()
 
     try {
       console.log('📋 my-chat-list event received for userId:', userId)
@@ -14,12 +15,6 @@ const myChatListHandler = eventHandler(
       console.log('📋 chatList fetched, count:', chatList?.length || 0)
 
       socket.emit('chat-list', chatList)
-      console.log('📋 chat-list emitted to socket:', socket.id)
-
-      // ✅ socket room check করো
-      const rooms = [...socket.rooms]
-      console.log('🏠 socket rooms:', rooms)
-      console.log('🏠 userId room joined:', rooms.includes(userId))
 
       callbackFn(callback, { success: true, data: chatList })
     } catch (err: any) {
