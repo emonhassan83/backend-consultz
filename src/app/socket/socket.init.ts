@@ -15,37 +15,29 @@ const initializeSocketIO = (server: HttpServer) => {
   // Middleware
   ioInstance.use(socketAuth);
 
-  ioInstance.on('connection', (socket: any) => {
-    try {
-      // socketAuth middleware সফলভাবে চললে এখানে আসবে
-      const userId = socket.auth?._id?.toString();   // string করে নিন
+ioInstance.on('connection', (socket: any) => {
+  try {
+    const userId = socket.auth?._id?.toString();
+    if (!userId) {
+      socket.disconnect();
+      return;
+    }
 
-      if (!userId) {
-        console.error('No userId found after auth');
-        socket.disconnect();
-        return;
-      }
+    const tSocket = socket as TSocket;
+    tSocket.data = { user: socket.auth };   // যদি কোথাও data.user ব্যবহার করেন
 
-        // ✅ socket কে TSocket হিসেবে cast করো
-    const tSocket = socket as TSocket
+    tSocket.join(userId);
+    onlineUsers[userId] = tSocket;
 
-    // user data সেট করো
-    tSocket.data = { user: socket.auth }
+    console.log(`✅ User connected: ${userId}`);
 
-    // personal room এ join করো
-    tSocket.join(userId)
-
-    onlineUsers[userId] = tSocket
-
-    console.log(`✅ User connected: ${userId} | Socket ID: ${socket.id}`)
-
-    registerSocketEvents(tSocket) // ✅ TSocket পাঠাও
+    registerSocketEvents(tSocket);
 
   } catch (err: any) {
-    console.error('Connection error:', err.message)
-    socket.disconnect()
+    console.error('Connection error:', err.message);
+    socket.disconnect();
   }
-  });
+});
 
   return ioInstance
 }
