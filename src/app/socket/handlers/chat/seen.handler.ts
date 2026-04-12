@@ -1,3 +1,4 @@
+// src/app/socket/handlers/chat/seen.handler.ts
 import { TSocket } from '../../interface/socket.interface';
 import eventHandler from '../../utils/eventHandler';
 import { Chat } from '../../../modules/chat/chat.models';
@@ -19,7 +20,7 @@ const seenHandler = eventHandler(async (socket: TSocket, { chatId }: any, callba
       return callbackFn(callback, { success: false, message: 'Chat not found' });
     }
 
-     // current user ছাড়া বাকিদের messages seen করো
+    // 1. Current user ছাড়া বাকি সবার messages seen করো
     await Message.updateMany(
       {
         chat: chatId,
@@ -29,23 +30,33 @@ const seenHandler = eventHandler(async (socket: TSocket, { chatId }: any, callba
       { $set: { seen: true } }
     );
 
-    // সব participants এর chat-list এবং unread update করো
+    // 2. শুধুমাত্র এই chatId এর updated version নিন (full list না)
+    const updatedSingleChat = await chatService.getSingleChat(chatId, userId); 
+    if (!updatedSingleChat) {
+      return callbackFn(callback, { success: false, message: 'Failed to fetch updated chat' });
+    }
+
+    // 3. সব participants কে শুধু এই single chat
     const participantIds = chat.participants.map((p) => p.toString());
 
     await Promise.all(
       participantIds.map(async (participantId) => {
-        const [chatList, unreadCount] = await Promise.all([
-          chatService.getMyChatList(participantId, {}),
-          Message.countDocuments({ receiver: participantId, seen: false }),
-        ]);
+        // শুধু এই chat এর আপডেট পাঠান
+        socket.to(participantId).emit('chat-list', updatedSingleChat);
 
-        socket.to(participantId).emit('chat-list', chatList);
+        // Unread count আপডেট
+        const unreadCount = await Message.countDocuments({
+          receiver: participantId,
+          seen: false,
+        });
         socket.to(participantId).emit('new-notifications', unreadCount);
       })
     );
 
+    // Caller কে success পাঠান
     callbackFn(callback, { success: true });
   } catch (err: any) {
+    console.error('seen handler error:', err.message);
     callbackFn(callback, { success: false, message: err.message });
   }
 });

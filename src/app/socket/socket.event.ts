@@ -27,7 +27,7 @@ export const registerSocketEvents = (socket: Socket) => {
   tSocket.on('seen', (data, callback) => seenHandler.call(tSocket, data, callback));
 
   tSocket.on('typing', (data) => typingHandler.call(tSocket, data));
-  tSocket.on('stopTyping', (data) => stopTypingHandler.call(tSocket, data));
+  tSocket.on('stop-typing', (data) => stopTypingHandler.call(tSocket, data));
   tSocket.on('disconnect', () => disconnectHandler.call(tSocket, undefined));
 
   // 📞 calling events

@@ -10,6 +10,7 @@ const stopTypingHandler = eventHandler<any>(
 
     try {
       const chat = await Chat.findById(chatId);
+
       if (!chat) return;
 
       const otherUserId = chat.participants
@@ -17,7 +18,7 @@ const stopTypingHandler = eventHandler<any>(
         ?.toString();
 
       if (otherUserId) {
-        socket.to(otherUserId).emit('stop-typing', { userId, chatId });
+        socket.to(otherUserId).emit('stopTyping', { userId, chatId });
       }
     } catch (err: any) {
       console.error('stopTyping error:', err.message);

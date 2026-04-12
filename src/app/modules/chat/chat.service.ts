@@ -7,6 +7,7 @@ import { User } from '../user/user.model'
 import { Message } from '../messages/messages.models'
 import { Booking } from '../booking/booking.models'
 import { BOOKING_STATUS } from '../booking/booking.constants'
+import { Types } from 'mongoose'
 
 const createChat = async (payload: TChat) => {
   const { participants, booking: bookingId } = payload
@@ -136,6 +137,55 @@ const getMyChatList = async (
   return data
 }
 
+const getSingleChat = async (chatId: string, userId: string) => {
+  try {
+    // 1. Find the specific chat
+    const chatItem = await Chat.findById(chatId)
+      .populate({
+        path: 'participants',
+        select: 'firstName lastName photoUrl',
+        match: { _id: { $ne: userId } },   // অন্য participant শুধু
+      })
+      .select('_id participants status')
+      .lean();
+
+    if (!chatItem) {
+      return null;
+    }
+
+    const participant = chatItem?.participants?.[0] as any;
+
+    if (!participant || typeof participant !== 'object') {
+      return null;
+    }
+
+    const [lastMessage, unreadMessageCount] = await Promise.all([
+      Message.findOne({ chat: chatId })
+        .sort({ createdAt: -1 })
+        .select('text imageUrl seen sender createdAt')
+        .populate([
+          { path: 'sender', select: 'firstName lastName photoUrl' },
+        ])
+        .lean(),
+
+      Message.countDocuments({
+        chat: chatId,
+        seen: false,
+        sender: { $ne: new Types.ObjectId(userId) },
+      }),
+    ]);
+
+    return {
+      chat: chatItem,
+      lastMessage: lastMessage || null,
+      unreadMessageCount,
+    };
+  } catch (error: any) {
+    console.error('getSingleChat error:', error.message);
+    return null;
+  }
+};
+
 const getChatBookingById = async (bookingId: string, userId: string) => {
   const result = await Chat.findOne({ booking: bookingId }).populate({
     path: 'participants',
@@ -226,6 +276,7 @@ const checkUserExists = async (userId: string) => {
 export const chatService = {
   createChat,
   getMyChatList,
+  getSingleChat,
   getChatBookingById,
   getChatByUserId,
   updateChatList,
