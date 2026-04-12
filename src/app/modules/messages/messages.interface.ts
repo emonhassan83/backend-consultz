@@ -6,6 +6,7 @@ export interface TMessages {
   text?: string
   imageUrl?: string[]
   seen: boolean
+  isEdited: boolean
   chat: Types.ObjectId
   sender: Types.ObjectId
   receiver: Types.ObjectId

@@ -15,6 +15,10 @@ const messageSchema = new Schema<TMessages>(
       type: Boolean,
       default: false,
     },
+    isEdited: {
+      type: Boolean,
+      default: false,
+    },
     sender: {
       type: Schema.Types.ObjectId,
       required: true,

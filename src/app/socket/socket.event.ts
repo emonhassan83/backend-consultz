@@ -13,6 +13,8 @@ import { callCancel } from './handlers/calling/callCancel.handler';
 import { callDecline } from './handlers/calling/callDecline.handler';
 import { callEnd } from './handlers/calling/callEnd.handler';
 import { callInvite } from './handlers/calling/callInvite.handler';
+import editMessageHandler from './handlers/chat/editMessage.handler';
+import deleteMessageHandler from './handlers/chat/deleteMessage.handler';
 
 export const registerSocketEvents = (socket: Socket) => {
   const tSocket = socket as TSocket; // Cast to TSocket
@@ -20,6 +22,8 @@ export const registerSocketEvents = (socket: Socket) => {
    // chat events
   tSocket.on('my-chat-list', (data, callback) => myChatListHandler.call(tSocket, data, callback));
   tSocket.on('send-message', (data, callback) => sendMessageHandler.call(tSocket, data, callback));
+  tSocket.on('edit-message', (data, callback) => editMessageHandler.call(tSocket, data, callback));
+  tSocket.on('delete-message', (data, callback) => deleteMessageHandler.call(tSocket, data, callback));
   tSocket.on('seen', (data, callback) => seenHandler.call(tSocket, data, callback));
 
   tSocket.on('typing', (data) => typingHandler.call(tSocket, data));
