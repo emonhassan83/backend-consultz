@@ -8,10 +8,16 @@ import seenHandler from './handlers/chat/seen.handler';
 import typingHandler from './handlers/chat/typing.handler';
 import stopTypingHandler from './handlers/chat/stopTyping.handler';
 import disconnectHandler from './handlers/disconnect.handler';
+import { callAccept } from './handlers/calling/callAccept.handler';
+import { callCancel } from './handlers/calling/callCancel.handler';
+import { callDecline } from './handlers/calling/callDecline.handler';
+import { callEnd } from './handlers/calling/callEnd.handler';
+import { callInvite } from './handlers/calling/callInvite.handler';
 
 export const registerSocketEvents = (socket: Socket) => {
   const tSocket = socket as TSocket; // Cast to TSocket
 
+   // chat events
   tSocket.on('my-chat-list', (data, callback) => myChatListHandler.call(tSocket, data, callback));
   tSocket.on('send-message', (data, callback) => sendMessageHandler.call(tSocket, data, callback));
   tSocket.on('seen', (data, callback) => seenHandler.call(tSocket, data, callback));
@@ -19,6 +25,13 @@ export const registerSocketEvents = (socket: Socket) => {
   tSocket.on('typing', (data) => typingHandler.call(tSocket, data));
   tSocket.on('stopTyping', (data) => stopTypingHandler.call(tSocket, data));
   tSocket.on('disconnect', () => disconnectHandler.call(tSocket, undefined));
+
+  // 📞 calling events
+  tSocket.on('call-accept', (data, callback) => callAccept.call(tSocket, data, callback));
+  tSocket.on('call-cancel', (data, callback) => callCancel.call(tSocket, data, callback));
+  tSocket.on('call-decline', (data, callback) => callDecline.call(tSocket, data, callback));
+  tSocket.on('call-end', (data, callback) => callEnd.call(tSocket, data, callback));
+  tSocket.on('call-invite', (data, callback) => callInvite.call(tSocket, data, callback));
 };
 
 export default registerSocketEvents;

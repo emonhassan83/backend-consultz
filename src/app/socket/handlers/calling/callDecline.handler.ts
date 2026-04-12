@@ -3,6 +3,7 @@ import { TSocket } from '../../interface/socket.interface';
 import eventHandler from '../../utils/eventHandler';
 import { Calling } from '../../../modules/calling/calling.model';
 import { emitToParticipants } from '../../utils/emitToParticipants';
+import { CALLING_STATUS } from '../../../modules/calling/calling.constant';
 
 type TCallDeclinePayload = {
   callId: string;
@@ -19,7 +20,7 @@ export const callDecline = eventHandler<TCallDeclinePayload>(
 
     const participant = call.participants.find(p => p.user!.toString() === authId);
     if (participant) {
-      participant.status = 'rejected';
+      participant.status = CALLING_STATUS.rejected;
       participant.leftAt = new Date();
       await call.save();
     }

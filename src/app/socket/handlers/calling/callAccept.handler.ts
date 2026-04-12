@@ -3,6 +3,7 @@ import { TSocket } from '../../interface/socket.interface';
 import eventHandler from '../../utils/eventHandler';
 import { Calling } from '../../../modules/calling/calling.model';
 import { emitToParticipants } from '../../utils/emitToParticipants';
+import { CALLING_STATUS } from '../../../modules/calling/calling.constant';
 
 type TCallAcceptPayload = {
   callId: string;
@@ -20,7 +21,7 @@ export const callAccept = eventHandler<TCallAcceptPayload>(
     // Update participant's status
     const participant = call.participants.find(p => p.user!.toString() === authId);
     if (participant) {
-      participant.status = 'accepted';
+      participant.status = CALLING_STATUS.accepted;
       participant.joinedAt = new Date();
       await call.save();
     }
