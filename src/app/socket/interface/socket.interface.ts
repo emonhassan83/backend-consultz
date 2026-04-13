@@ -3,7 +3,7 @@ import { USER_ROLE } from '../../interface/common.interface'
 
 export type TSocketUser = { _id: string; email: string; role?: USER_ROLE }
 
-export type TAckRes = { success: boolean; message?: string };
+export type TAckRes = { success: boolean; message?: string; data?: any };
 export type TAckFn = (response: TAckRes) => void;
 
 export type TSocketHandler<TData = any> = (

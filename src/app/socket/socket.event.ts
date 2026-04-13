@@ -11,10 +11,11 @@ import disconnectHandler from './handlers/disconnect.handler';
 import { callAccept } from './handlers/calling/callAccept.handler';
 import { callCancel } from './handlers/calling/callCancel.handler';
 import { callDecline } from './handlers/calling/callDecline.handler';
-import { callEnd } from './handlers/calling/callEnd.handler';
+import callEnd from './handlers/calling/callEnd.handler';
 import { callInvite } from './handlers/calling/callInvite.handler';
 import editMessageHandler from './handlers/chat/editMessage.handler';
 import deleteMessageHandler from './handlers/chat/deleteMessage.handler';
+import callStart from './handlers/calling/callStart.handler';
 
 export const registerSocketEvents = (socket: Socket) => {
   const tSocket = socket as TSocket; // Cast to TSocket
@@ -31,6 +32,7 @@ export const registerSocketEvents = (socket: Socket) => {
   tSocket.on('disconnect', () => disconnectHandler.call(tSocket, undefined));
 
   // 📞 calling events
+  tSocket.on('call-start', (data, callback) => callStart.call(tSocket, data, callback));
   tSocket.on('call-accept', (data, callback) => callAccept.call(tSocket, data, callback));
   tSocket.on('call-cancel', (data, callback) => callCancel.call(tSocket, data, callback));
   tSocket.on('call-decline', (data, callback) => callDecline.call(tSocket, data, callback));
