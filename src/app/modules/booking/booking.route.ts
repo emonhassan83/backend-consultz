@@ -54,13 +54,13 @@ router.delete(
 
 router.get(
   '/consult/bookings_by_date',
-  auth(USER_ROLE.consult),
+  auth(USER_ROLE.consult, USER_ROLE.expert),
   bookingsController.getConsultBookingsByDate,
 )
 
 router.get(
   '/consult/my-bookings',
-  auth(USER_ROLE.consult),
+  auth(USER_ROLE.consult, USER_ROLE.expert),
   bookingsController.getMyBookings,
 )
 
