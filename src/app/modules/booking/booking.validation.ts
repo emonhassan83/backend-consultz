@@ -42,8 +42,17 @@ const completedValidationSchema = z.object({
   }),
 })
 
+const declineValidationSchema = z.object({
+  body: z.object({
+    reason: z.number({
+      required_error: "Record duration is required!"
+    }),
+  }),
+})
+
 export const BookingsValidation = {
   createValidationSchema,
   rescheduleValidationSchema,
-  completedValidationSchema
+  completedValidationSchema,
+  declineValidationSchema
 }

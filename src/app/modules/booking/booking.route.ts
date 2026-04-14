@@ -36,6 +36,7 @@ router.patch(
 router.patch(
   '/declined/:id',
   auth(USER_ROLE.expert),
+  zodValidationRequest(BookingsValidation.declineValidationSchema),
   bookingsController.declineBooking,
 )
 

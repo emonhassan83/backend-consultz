@@ -97,6 +97,7 @@ const declineBooking = catchAsync(async (req: Request, res: Response) => {
   const result = await bookingsService.declineBooking(
     req.params.id,
     req.user._id,
+    req.body
   )
 
   sendResponse(res, {
