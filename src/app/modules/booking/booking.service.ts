@@ -218,12 +218,10 @@ const getAllBookings = async (query: Record<string, any>) => {
   return { data, meta }
 }
 
-const getAllBookingsByDate = async (query: Record<string, any>) => {
+const getAllBookingsByDate = async (query: Record<string, any>, userId: string) => {
   const { 
     filterType, 
     date, 
-    user,      
-    consult, 
     ...restQuery 
   } = query;
 
@@ -294,17 +292,8 @@ const getAllBookingsByDate = async (query: Record<string, any>) => {
     isDeleted: false,
     paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
     slot: { $in: slotIds },
+    $or: [{ user: userId }, { consult: userId }],
   };
-
-  // ✅ Add user filter if provided (for regular users)
-  if (user) {
-    bookingFilter.user = new mongoose.Types.ObjectId(user);
-  }
-
-  // ✅ Add consult filter if provided (for experts/consultants)
-  if (consult) {
-    bookingFilter.consult = new mongoose.Types.ObjectId(consult);
-  }
 
   // 📋 Fetch bookings with filters
   const bookings: any[] = await Booking.find(bookingFilter)

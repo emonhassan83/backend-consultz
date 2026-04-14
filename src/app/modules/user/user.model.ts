@@ -225,6 +225,7 @@ const userSchema = new Schema<TUser, UserModel>(
       type: Boolean,
       default: false,
     },
+    isPhoneOtpVerified: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },
   },
   {

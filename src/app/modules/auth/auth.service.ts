@@ -19,7 +19,7 @@ import {
 } from './auth.interface'
 import { generateOtp } from '../../utils/generateOtp'
 import moment from 'moment'
-import { REGISTER_WITH } from '../user/user.constant'
+import { REGISTER_WITH, USER_STATUS } from '../user/user.constant'
 
 const loginUser = async (payload: TLoginUser) => {
   //* checking if the user is exist
@@ -33,8 +33,16 @@ const loginUser = async (payload: TLoginUser) => {
     throw new AppError(httpStatus.FORBIDDEN, 'Password do not matched')
 
   // if user is not verify yet throw error
-  if (!user?.verification?.status) {
+  if (!user?.verification?.status && !user?.isPhoneOtpVerified) {
     throw new AppError(httpStatus.FORBIDDEN, 'Your profile is not verified')
+  }
+
+  // CHECK USER PROFILE ACTIVE
+  if (user.status !== USER_STATUS.active) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+       'Your account is not active yet. Please wait for admin approval.',
+    )
   }
 
   //* create token and sent to the  client

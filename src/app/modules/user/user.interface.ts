@@ -102,6 +102,7 @@ export interface TUser {
   stripeCustomerId: string
   profileCompletionBonusClaimed: boolean
   socialProofBonusClaimed: boolean
+  isPhoneOtpVerified: boolean
   isDeleted: boolean
   createdAt?: Date
   updatedAt?: Date

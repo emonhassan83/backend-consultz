@@ -127,6 +127,7 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
         },
         expireAt: null, // set null to prevent verify user deletion data
         points: newPoints,
+        isPhoneOtpVerified: true
       },
     },
     { new: true },
