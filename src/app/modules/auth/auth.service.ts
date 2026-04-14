@@ -38,12 +38,12 @@ const loginUser = async (payload: TLoginUser) => {
   }
 
   // CHECK USER PROFILE ACTIVE
-  if (user.status !== USER_STATUS.active) {
-    throw new AppError(
-      httpStatus.FORBIDDEN,
-       'Your account is not active yet. Please wait for admin approval.',
-    )
-  }
+  // if (user.status !== USER_STATUS.active) {
+  //   throw new AppError(
+  //     httpStatus.FORBIDDEN,
+  //      'Your account is not active yet. Please wait for admin approval.',
+  //   )
+  // }
 
   //* create token and sent to the  client
   const jwtPayload = {
