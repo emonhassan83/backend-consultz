@@ -431,7 +431,7 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
       bookingId,
       { status: BOOKING_STATUS.cancelled },
       { new: true, session },
-    )
+    ).populate('user consult slot')
     if (!cancelledBooking) {
       throw new AppError(
         httpStatus.INTERNAL_SERVER_ERROR,
@@ -510,7 +510,7 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
         expert,
         cancelledBooking,
         slot,
-        "",
+        '',
         cancelledByEmail,
       )
     }
@@ -579,7 +579,7 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
       bookingId,
       { status: BOOKING_STATUS.confirmed, respondedAt: new Date() },
       { new: true, session },
-    ).populate('slot user')
+    ).populate('user consult slot')
 
     if (!updatedBooking) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Failed to confirm booking')
@@ -741,7 +741,7 @@ const declineBooking = async (
       bookingId,
       { status: BOOKING_STATUS.declined },
       { new: true, session },
-    )
+    ).populate('user consult slot')
 
     if (!updatedBooking) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Failed to decline booking')
@@ -787,7 +787,7 @@ const declineBooking = async (
     // 7. Push notification to booker
     if (booker && booker.fcmToken && booker.pushNotify?.bookingAndSchedule) {
       await sendBookingsNotification('declined', updatedBooking, booker, slot, {
-        cancelledBy: 'consult',
+        cancelledBy: 'booker',
       })
     }
 
@@ -805,7 +805,7 @@ const declineBooking = async (
         expert,
         updatedBooking,
         slot,
-          reason,
+        reason,
         'consult',
       )
     }
@@ -892,7 +892,7 @@ const completedBooking = async (
         },
       },
       { new: true, session },
-    )
+    ) .populate('user consult slot')
 
     if (!updatedBooking) {
       throw new AppError(
@@ -1015,13 +1015,13 @@ const rescheduleBooking = async (
 
   try {
     // 1. Find the booking
-    const booking = await Booking.findById(id).session(session)
+    const booking = await Booking.findById(id).populate('user consult slot').session(session)
     if (!booking || booking.isDeleted) {
       throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
     }
 
     // 2. Verify ownership (security)
-    if (booking.user.toString() !== currentUserId) {
+    if (booking.user.toString() !== currentUserId || booking.consult.toString() !== currentUserId) {
       throw new AppError(
         httpStatus.FORBIDDEN,
         'You are not authorized to reschedule this booking',
@@ -1029,12 +1029,12 @@ const rescheduleBooking = async (
     }
 
     // 3. Only confirmed bookings can be rescheduled
-    if (booking.status !== BOOKING_STATUS.confirmed) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'Only confirmed bookings can be rescheduled',
-      )
-    }
+    // if (booking.status !== BOOKING_STATUS.confirmed) {
+    //   throw new AppError(
+    //     httpStatus.BAD_REQUEST,
+    //     'Only confirmed bookings can be rescheduled',
+    //   )
+    // }
 
     // 4. Find the new slot
     const newSlot = await BookingSlots.findById(payload.slot).session(session)
