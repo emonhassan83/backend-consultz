@@ -892,7 +892,7 @@ const completedBooking = async (
         },
       },
       { new: true, session },
-    ) .populate('user consult slot')
+    ).populate('user consult slot')
 
     if (!updatedBooking) {
       throw new AppError(
@@ -1015,13 +1015,17 @@ const rescheduleBooking = async (
 
   try {
     // 1. Find the booking
-    const booking = await Booking.findById(id).populate('user consult slot').session(session)
+    const booking = await Booking.findById(id)
+      .populate('user consult slot')
+      .session(session)
     if (!booking || booking.isDeleted) {
       throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
     }
 
     // 2. Verify ownership (security)
-    if (booking.user.toString() !== currentUserId || booking.consult.toString() !== currentUserId) {
+    if (
+      (booking.user.toString() || booking.consult.toString()) !== currentUserId
+    ) {
       throw new AppError(
         httpStatus.FORBIDDEN,
         'You are not authorized to reschedule this booking',
