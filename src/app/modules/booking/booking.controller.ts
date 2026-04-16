@@ -14,6 +14,16 @@ const createBookings = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
+const getBookingCalender = catchAsync(async (req: Request, res: Response) => {
+  const result = await bookingsService.getBookingCalender(req.query, req.user._id)
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Booking calender fetched successfully',
+    data: result,
+  })
+})
+
 const getConsultBookings = catchAsync(async (req: Request, res: Response) => {
   req.query['consult'] = req.user._id
   const result = await bookingsService.getAllBookings(req.query)
@@ -163,6 +173,7 @@ const deleteBookings = catchAsync(async (req: Request, res: Response) => {
 
 export const bookingsController = {
   createBookings,
+  getBookingCalender,
   getAllBookings,
   getExpertBookingsByDate,
   getConsultBookingsByDate,

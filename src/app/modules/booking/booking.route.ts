@@ -54,6 +54,12 @@ router.delete(
 )
 
 router.get(
+  '/booking-calender',
+  auth(USER_ROLE.consult, USER_ROLE.expert),
+  bookingsController.getBookingCalender,
+)
+
+router.get(
   '/consult/bookings_by_date',
   auth(USER_ROLE.consult, USER_ROLE.expert),
   bookingsController.getConsultBookingsByDate,

@@ -23,6 +23,9 @@ import {
 import { sendNotification } from '../../utils/sentNotification'
 import isoWeek from 'dayjs/plugin/isoWeek'
 import { modeType } from '../notification/notification.interface'
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
+
+dayjs.extend(isSameOrBefore);   // ← একবারই ফাইলের উপরে রাখবে
 dayjs.extend(isoWeek)
 dayjs.extend(customParseFormat)
 dayjs.extend(utc)
@@ -189,6 +192,69 @@ const createBookings = async (payload: TBookings, userId: string) => {
     session.endSession()
   }
 }
+
+const getBookingCalender = async (
+  query: Record<string, any>,
+  userId: string
+) => {
+  const { date } = query; // "2026-04"
+
+  if (!date || !/^\d{4}-\d{2}$/.test(date)) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Invalid date format. Use YYYY-MM (e.g., 2026-04)'
+    );
+  }
+
+  const [year, month] = date.split('-').map(Number);
+
+  const startOfMonth = `${year}-${month.toString().padStart(2, '0')}-01`;
+  const endOfMonth = dayjs(`${year}-${month}-01`).endOf('month').format('YYYY-MM-DD');
+
+  // 1. Current user-এর সব active booking খুঁজে বের করা
+  const bookings = await Booking.find({
+    $or: [
+      { user: userId },
+      { consult: userId },
+    ],
+    isDeleted: false,
+    paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
+    status: { $nin: [BOOKING_STATUS.declined, BOOKING_STATUS.cancelled, BOOKING_STATUS.not_responded] },
+  }).select('slot').lean();
+
+  const slotIds = bookings.map(b => b.slot);
+
+  // 2. এই মাসের স্লটগুলো নেওয়া
+  const slots = await BookingSlots.find({
+    _id: { $in: slotIds },
+    date: { $gte: startOfMonth, $lte: endOfMonth },
+  }).select('date isBooked').lean();
+
+  // 3. Date wise isBooked map তৈরি
+  const bookedDates = new Set<string>();
+  slots.forEach(slot => {
+    if (slot.isBooked === true) {
+      bookedDates.add(slot.date);
+    }
+  });
+
+  // 4. পুরো মাসের সব তারিখ generate করা + isBooked flag
+  const calendarData: { date: string; isBooked: boolean }[] = [];
+
+  let currentDate = dayjs(startOfMonth);
+  const lastDate = dayjs(endOfMonth);
+
+  while (currentDate.isSameOrBefore(lastDate)) {
+    const dateStr = currentDate.format('YYYY-MM-DD');
+    calendarData.push({
+      date: dateStr,
+      isBooked: bookedDates.has(dateStr),
+    });
+    currentDate = currentDate.add(1, 'day');
+  }
+
+  return calendarData;
+};
 
 const getAllBookings = async (query: Record<string, any>) => {
   const bookingModel = new QueryBuilder(
@@ -1141,6 +1207,7 @@ const deleteBookings = async (id: string) => {
 
 export const bookingsService = {
   createBookings,
+  getBookingCalender,
   getAllBookings,
   getAllBookingsByDate,
   getBookingsById,
