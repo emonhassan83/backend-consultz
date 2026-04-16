@@ -1023,13 +1023,15 @@ const rescheduleBooking = async (
     }
 
     // 2. Verify ownership (security)
-    if (
-      (booking.user.toString() || booking.consult.toString()) !== currentUserId
-    ) {
+    // ✅ সঠিক Authorization Check
+    const isUser = booking.user._id.toString() === currentUserId;
+    const isConsult = booking.consult._id.toString() === currentUserId;
+
+    if (!isUser && !isConsult) {
       throw new AppError(
         httpStatus.FORBIDDEN,
-        'You are not authorized to reschedule this booking',
-      )
+        'You are not authorized to reschedule this booking. Only the booker or the consultant can reschedule.'
+      );
     }
 
     // 3. Only confirmed bookings can be rescheduled
