@@ -276,45 +276,15 @@ const sendOtpViaTokenInPhone = async (
     expiresIn: '5m',
   })
 
-  // // === মক মোড চেক করা ===
-  // // const isDevelopment = process.env.NODE_ENV !== 'production'
-  // const isDevelopment = false
-
-  // if (isDevelopment) {
-  //   console.log('🔑 [MOCK OTP] Phone:', phoneNumber)
-  //   console.log('🔑 [MOCK OTP] Code:', otp)
-  //   console.log(
-  //     '🔑 [MOCK OTP] Expires at:',
-  //     expiresAt.format('YYYY-MM-DD HH:mm:ss'),
-  //   )
-  //   console.log('⚠️  Real SMS skipped in development mode')
-
-  //   // টেস্টের জন্য OTP রিটার্ন করছি (প্রোডাকশনে এটা রিমুভ করবেন)
-  //   return {
-  //     token,
-  //     otp,
-  //     mock: true,
-  //   }
-  // }
-
   // === প্রোডাকশন মোড: রিয়েল Twilio SMS ===
   const client = twilio(config.twilio.accountSid, config.twilio.authToken)
 
   try {
-    console.log(phoneNumber);
-    const result = await client.messages.create({
-      body: `Welcome to Consultz, your verification code is ${otp}. It expires in 5 minutes. Do not share it.`,
+    await client.messages.create({
+      body: `Welcome to Consultz, your verification code is ${otp}. It expires in 5 minutes. Please do not sharing.`,
       from: config.twilio.phoneNumber,
       to: phoneNumber,
     })
-
-    // const result = await client.messages.create({
-    //   body: 'Your verification code is 123456. It expires in 5 minutes. Do not share it.',
-    //   from: '+15005550006', // Twilio test number (for success)
-    //   to: '+15005550006', // Twilio test number (for success)
-    // })
-
-    console.log(result)
 
     return {
       token,
@@ -366,33 +336,12 @@ const sendOtpViaDirectPhone = async (payload: { phoneNumber: string }) => {
     expiresIn: '5m',
   })
 
-  // // === মক মোড চেক করা ===
-  // // const isDevelopment = process.env.NODE_ENV !== 'production'
-  // const isDevelopment = false
-
-  // if (isDevelopment) {
-  //   console.log('🔑 [MOCK OTP] Phone:', phoneNumber)
-  //   console.log('🔑 [MOCK OTP] Code:', otp)
-  //   console.log(
-  //     '🔑 [MOCK OTP] Expires at:',
-  //     expiresAt.format('YYYY-MM-DD HH:mm:ss'),
-  //   )
-  //   console.log('⚠️  Real SMS skipped in development mode')
-
-  //   // টেস্টের জন্য OTP রিটার্ন করছি (প্রোডাকশনে এটা রিমুভ করবেন)
-  //   return {
-  //     token,
-  //     otp,
-  //     mock: true,
-  //   }
-  // }
-
   // === প্রোডাকশন মোড: রিয়েল Twilio SMS ===
   const client = twilio(config.twilio.accountSid, config.twilio.authToken)
 
   try {
     await client.messages.create({
-      body: `Your verification code is ${otp}. It expires in 5 minutes. Do not share it.`,
+      body: `Your verification code is ${otp}. It expires in 5 minutes. Please do not sharing.`,
       from: config.twilio.phoneNumber,
       to: phoneNumber,
     })
