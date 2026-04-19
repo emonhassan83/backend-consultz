@@ -32,7 +32,10 @@ export const registerSocketEvents = (socket: Socket) => {
   tSocket.on('disconnect', () => disconnectHandler.call(tSocket, undefined));
 
   // 📞 calling events
-  tSocket.on('call-start', (data, callback) => callStart.call(tSocket, data, callback));
+ tSocket.on('call-start', (data, callback) => {
+    console.log('📡 call-start event received | callback type:', typeof callback);
+    callStart.call(tSocket, data, callback);   // এটি ঠিক আছে
+  });
   tSocket.on('call-accept', (data, callback) => callAccept.call(tSocket, data, callback));
   tSocket.on('call-cancel', (data, callback) => callCancel.call(tSocket, data, callback));
   tSocket.on('call-decline', (data, callback) => callDecline.call(tSocket, data, callback));

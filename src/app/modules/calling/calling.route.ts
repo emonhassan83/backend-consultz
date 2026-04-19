@@ -9,7 +9,7 @@ const router = Router()
 
 router.post(
   '/start',
-  auth(USER_ROLE.expert),
+  auth(USER_ROLE.expert, USER_ROLE.consult),
   zodValidationRequest(CallingValidation.startCallingValidation),
   CallingController.startCalling,
 )

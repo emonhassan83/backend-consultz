@@ -94,6 +94,7 @@ const loginUser = async (payload: TLoginUser) => {
       role: user.role,
       isProfileSetup: user.isProfileSetup,
       status: user.status,
+      registerWith: user.registerWith
     },
   }
 }

@@ -32,6 +32,7 @@ export const verifyToken = (token: string, secret: string) => {
 
 export const generateTokens = (user: TUser) => {
   const jwtPayload = { _id: user._id, email: user.email, role: user.role }
+
   const userResponse = {
     firstName: user.firstName,
     lastName: user.lastName,
@@ -39,6 +40,7 @@ export const generateTokens = (user: TUser) => {
     role: user.role,
     isProfileSetup: user.isProfileSetup,
     status: user.status,
+    registerWith: user.registerWith
   }
 
   const accessToken = createToken(

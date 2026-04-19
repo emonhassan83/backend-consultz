@@ -58,6 +58,10 @@ const callingSchema = new Schema(
       type: Number,
       default: 0, // seconds
     },
+    token: {
+      type: String,
+      default: null,
+    },
     tokenExpireAt: {
       type: Number,
       required: true,

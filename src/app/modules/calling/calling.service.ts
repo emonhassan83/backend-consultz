@@ -34,7 +34,6 @@ const startCalling = async (userId: string, payload: ICalling) => {
     /* 2. Validate booking */
     const booking = await Booking.findOne({
       _id: payload.bookingId,
-      consult: userId,
       status: BOOKING_STATUS.confirmed,
       isDeleted: false,
     }).session(session)

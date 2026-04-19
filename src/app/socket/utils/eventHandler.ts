@@ -9,9 +9,12 @@ const eventHandler = <TData = any>(handler: TSocketHandler<TData>) => {
         console.error('❌ Invalid socket context in eventHandler');
         return;
       }
+
+      console.log(`🔧 eventHandler executing for event with ack type: ${typeof ack}`);
+
       await handler(this, data, ack);
     } catch (err: unknown) {
-      console.error('Error in eventHandler:', err);
+      console.error('❌ Error caught in eventHandler:', err);
       if (this && typeof this.emit === 'function') {
         handleSocketError(err, this, ack);
       }
