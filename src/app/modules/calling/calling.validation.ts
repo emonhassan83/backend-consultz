@@ -23,8 +23,7 @@ const endCallingValidation = z.object({
 
 const callTokenZod = z.object({
   body: z.object({
-    callId: objectIdSchema,
-    roomId: z.string().min(1),
+    callId: objectIdSchema
   }),
 })
 

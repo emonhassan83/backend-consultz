@@ -113,7 +113,12 @@ const startCalling = async (userId: string, payload: ICalling) => {
 /* =========================================================
    📡 GENERATE TOKEN (Rejoin নিরাপদ)
 ========================================================= */
-const generateCallToken = async (callId: string, userId: string) => {
+const generateCallToken = async (
+  userId: string,
+  payload: { callId: string },
+) => {
+  const { callId } = payload
+
   const call = await Calling.findById(callId)
 
   if (!call || call.isDeleted) {
@@ -171,9 +176,7 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
     /* duration calculate */
     const now = new Date()
     const startTime = call.startedAt || call.createdAt
-    const duration = Math.floor(
-      (now.getTime() - startTime.getTime()) / 1000,
-    )
+    const duration = Math.floor((now.getTime() - startTime.getTime()) / 1000)
 
     call.status = CALLING_STATUS.completed
     call.endedAt = now
@@ -267,5 +270,5 @@ export const CallingService = {
   startCalling,
   generateCallToken,
   endCalling,
-  getMyCalls
+  getMyCalls,
 }

@@ -5,18 +5,19 @@ import { Calling } from '../../../modules/calling/calling.model';
 import { Payment } from '../../../modules/payment/payment.model';
 import { Withdraw } from '../../../modules/withdraw/withdraw.model';
 import { User } from '../../../modules/user/user.model';
+import { Booking } from '../../../modules/booking/booking.models';
+import { Contents } from '../../../modules/contents/contents.models';
 import mongoose from 'mongoose';
 import httpStatus from 'http-status';
 import AppError from '../../../errors/AppError';
 import dayjs from 'dayjs';
 import { CALLING_STATUS } from '../../../modules/calling/calling.constant';
-import { Booking } from '../../../modules/booking/booking.models';
 import { BOOKING_STATUS } from '../../../modules/booking/booking.constants';
-import { Contents } from '../../../modules/contents/contents.models';
 import { WITHDRAW_STATUS } from '../../../modules/withdraw/withdraw.constant';
 import { sendNotification } from '../../../utils/sentNotification';
-import { modeType } from '../../../modules/notification/notification.interface';
 import { sendWithdrawNotify } from '../../../modules/withdraw/withdraw.utils';
+import { modeType } from '../../../modules/notification/notification.interface';
+import { callbackFn } from '../../../utils/CallbackFn';
 
 type TCallEndPayload = {
   callId: string;
@@ -24,12 +25,15 @@ type TCallEndPayload = {
 };
 
 const callEnd = eventHandler<TCallEndPayload>(
-  async (socket: TSocket, data, ack) => {
+  async (socket: TSocket, data, callback) => {
     const userId = socket.auth._id.toString();
     const { callId, duration: clientDuration } = data || {};
 
     if (!callId) {
-      return ack?.({ success: false, message: 'callId is required' });
+      return callbackFn(callback, { 
+        success: false, 
+        message: 'callId is required' 
+      });
     }
 
     const session = await mongoose.startSession();
@@ -122,6 +126,7 @@ const callEnd = eventHandler<TCallEndPayload>(
 
       // 8. Emit to all participants
       const participants = [call.caller.toString(), call.receiver.toString()];
+
       socket.to(participants).emit('callEnded', {
         callId: call._id,
         duration: finalDuration,
@@ -129,7 +134,7 @@ const callEnd = eventHandler<TCallEndPayload>(
         status: CALLING_STATUS.completed,
       });
 
-      // Caller-কে নিজের socket-এও পাঠান
+      // Caller নিজেও পায়
       socket.emit('callEnded', {
         callId: call._id,
         duration: finalDuration,
@@ -137,15 +142,26 @@ const callEnd = eventHandler<TCallEndPayload>(
         status: CALLING_STATUS.completed,
       });
 
-      ack?.({ 
-        success: true, 
-        message: 'Call ended successfully'
+      // ✅ callbackFn দিয়ে response দাও (chat এর মতো)
+      callbackFn(callback, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: 'Call ended successfully',
+        data: {
+          callId: call._id,
+          duration: finalDuration,
+          endedAt: now,
+        }
       });
 
     } catch (error: any) {
       await session.abortTransaction();
-      console.error('Call end error:', error.message);
-      ack?.({ success: false, message: error.message });
+      console.error('❌ Call end error:', error.message);
+
+      callbackFn(callback, {
+        success: false,
+        message: error.message || 'Failed to end call',
+      });
     } finally {
       session.endSession();
     }

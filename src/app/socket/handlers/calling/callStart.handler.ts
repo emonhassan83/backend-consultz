@@ -133,15 +133,7 @@ const callStart = eventHandler<TCallStartPayload>(
           message: 'Call started successfully',
           data: responseData,
         })
-      } else {
-        // যদি callback না থাকে, তাহলে direct emit করো
-        socket.emit('call-start-response', {
-          success: true,
-          message: 'Call started successfully',
-          data: responseData,
-        })
       }
-      console.log({ receiver })
 
       // Receiver কে notify
       const receiverRoom = receiver._id.toString()
@@ -155,6 +147,7 @@ const callStart = eventHandler<TCallStartPayload>(
           callerId: caller._id,
           callerName:
             `${caller.firstName || ''} ${caller.lastName || ''}`.trim(),
+          callerPhoto: caller.photoUrl,
           isVideo,
           channelName,
         })

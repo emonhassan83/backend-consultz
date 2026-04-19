@@ -2,34 +2,55 @@
 import { TSocket } from '../../interface/socket.interface';
 import eventHandler from '../../utils/eventHandler';
 import { Calling } from '../../../modules/calling/calling.model';
+import { callbackFn } from '../../../utils/CallbackFn';
 import { emitToParticipants } from '../../utils/emitToParticipants';
 import { CALLING_STATUS } from '../../../modules/calling/calling.constant';
+import httpStatus from 'http-status';
 
 type TCallCancelPayload = {
   callId: string;
 };
 
 export const callCancel = eventHandler<TCallCancelPayload>(
-  async (socket: TSocket, data, ack) => {
+  async (socket: TSocket, data, callback) => {
     const authId = socket.auth._id;
-    const call = await Calling.findById(data!.callId);
 
-    if (!call) {
-      return ack!({ success: false, message: 'Call not found.' });
+    if (!data?.callId) {
+      return callbackFn(callback, { success: false, message: 'callId is required' });
     }
 
-    // Only the caller can cancel the call
-    if (call.caller.toString() !== authId) {
-      return ack!({ success: false, message: 'Only the caller can cancel this call.' });
+    try {
+      const call = await Calling.findById(data.callId);
+
+      if (!call) {
+        return callbackFn(callback, { success: false, message: 'Call not found.' });
+      }
+
+      if (call.caller.toString() !== authId) {
+        return callbackFn(callback, { 
+          success: false, 
+          message: 'Only the caller can cancel this call.' 
+        });
+      }
+
+      call.status = CALLING_STATUS.cancelled;
+      await call.save();
+
+      emitToParticipants(call.participants.map(p => p?.user!.toString()), 'callCanceled', {
+        callId: call.id,
+      });
+
+      callbackFn(callback, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: 'Call canceled.',
+      });
+
+    } catch (err: any) {
+      console.error('callCancel error:', err.message);
+      callbackFn(callback, { success: false, message: err.message });
     }
-
-    call.status = CALLING_STATUS.cancelled;
-    await call.save();
-
-    emitToParticipants(call.participants.map(p => p?.user!.toString()), 'callCanceled', {
-      callId: call.id,
-    });
-
-    ack!({ success: true, message: 'Call canceled.' });
   }
 );
+
+export default callCancel;
