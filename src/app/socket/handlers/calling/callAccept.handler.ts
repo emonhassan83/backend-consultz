@@ -26,23 +26,36 @@ export const callAccept = eventHandler<TCallAcceptPayload>(
         return callbackFn(callback, { success: false, message: 'Call not found.' });
       }
 
-      // Update participant's status
-      const participant = call.participants.find(p => p.user!.toString() === authId);
-      if (participant) {
-        participant.status = CALLING_STATUS.accepted;
-        participant.joinedAt = new Date();
-        await call.save();
-      }
-
-      emitToParticipants(call.participants.map(p => p.user!.toString()), 'callAccepted', {
-        callId: call.id,
-        participants: call.participants,
+      // ✅ যেহেতু one-to-one call → receiver accept করলে উভয়ের status accepted হবে
+      const now = new Date();
+      call.participants.forEach((p) => {
+        p.status = CALLING_STATUS.accepted;
+        if (!p.joinedAt) {
+          p.joinedAt = now;
+        }
       });
 
+      // Call status update
+      call.status = CALLING_STATUS.accepted;
+      call.startedAt = now;
+      await call.save();
+
+      // Emit event to both participants
+      emitToParticipants(
+        call.participants.map((p) => p.user!.toString()),
+        'callAccepted',
+        {
+          callId: call.id,
+          participants: call.participants,
+          startedAt: call.startedAt,
+        }
+      );
+
+      // Ack response
       callbackFn(callback, {
         statusCode: httpStatus.OK,
         success: true,
-        message: 'Call accepted.',
+        message: 'Call accepted by receiver. Both participants marked as accepted.',
       });
 
     } catch (err: any) {
