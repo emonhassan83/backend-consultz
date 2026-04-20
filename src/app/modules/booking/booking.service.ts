@@ -111,7 +111,7 @@ const createBookings = async (payload: TBookings, userId: string) => {
     }
 
     const now = dayjs()
-    const minBufferMinutes = 60
+    const minBufferMinutes = 0
 
     if (slotDateTime.isBefore(now.add(minBufferMinutes, 'minute'))) {
       throw new AppError(

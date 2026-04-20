@@ -132,13 +132,11 @@ const createValidationSchema = z.object({
     password: z
       .string({ invalid_type_error: 'Password must be a string' })
       .min(8, { message: 'Password must be at least 8 characters' })
-      .max(16, { message: 'Password cannot be more than 16 characters' }),
+       .max(20, { message: 'Password cannot be more than 20 characters' }),
     confirmPass: z
       .string({ required_error: 'Confirm password is required' })
       .min(8, { message: 'Confirm password must be at least 8 characters' })
-      .max(16, {
-        message: 'Confirm password cannot be more than 16 characters',
-      }),
+       .max(20, { message: 'Password cannot be more than 20 characters' }),
     dob: z.string({ required_error: 'Date of birth is required!' }),
     phoneNumber: z
       .string({ required_error: 'Phone number is required!' })

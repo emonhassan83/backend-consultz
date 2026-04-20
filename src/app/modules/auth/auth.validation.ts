@@ -8,8 +8,8 @@ const loginValidationSchema = z.object({
         invalid_type_error: 'Password must be a string',
       })
       .min(6, { message: 'Password must be at least 6 characters' })
-      .max(12, { message: 'Password cannot be more than 12 characters' }),
-      fcmToken: z.string().optional(),
+      .max(20, { message: 'Password cannot be more than 20 characters' }),
+    fcmToken: z.string().optional(),
   }),
 })
 
@@ -20,11 +20,11 @@ const changePasswordValidationSchema = z.object({
         required_error: 'Old password is required',
       })
       .min(6, { message: 'Password must be at least 6 characters' })
-      .max(12, { message: 'Password cannot be more than 12 characters' }),
+      .max(20, { message: 'Password cannot be more than 20 characters' }),
     newPassword: z
       .string({ required_error: 'Password is required' })
       .min(6, { message: 'Password must be at least 6 characters' })
-      .max(12, { message: 'Password cannot be more than 12 characters' }),
+      .max(20, { message: 'Password cannot be more than 20 characters' }),
   }),
 })
 
@@ -70,13 +70,13 @@ const resetPasswordValidationSchema = z.object({
         required_error: 'User new password is required!',
       })
       .min(6, { message: 'Password must be at least 6 characters' })
-      .max(12, { message: 'Password cannot be more than 12 characters' }),
+      .max(20, { message: 'Password cannot be more than 20 characters' }),
     confirmPassword: z
       .string({
         required_error: 'User confirm password is required!',
       })
       .min(6, { message: 'Password must be at least 6 characters' })
-      .max(12, { message: 'Password cannot be more than 12 characters' }),
+      .max(20, { message: 'Password cannot be more than 20 characters' }),
   }),
 })
 
