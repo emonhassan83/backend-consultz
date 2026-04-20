@@ -422,6 +422,132 @@ const getTopExpertsFromDB = async (
   return { meta, result }
 }
 
+// ====================== PUBLIC VERSIONS (Non-Auth) ======================
+
+// 1. Public Interest Experts
+const getPublicInterestExpertsFromDB = async (query: Record<string, unknown>) => {
+  const { interests } = query;
+
+  let matchConditions: any[] = [];
+
+  if (interests) {
+    const interestList = (interests as string).split(',').map(i => i.trim());
+    if (interestList.length > 0) {
+      matchConditions.push({ expertise: { $in: interestList } });
+    }
+  }
+
+  // Fallback: যদি interests না দেয়া হয় তাহলে সব expert দেখাবে
+  if (matchConditions.length === 0) {
+    matchConditions = [{}];
+  }
+
+  const baseFilter = {
+    isDeleted: false,
+    status: USER_STATUS.active,
+    role: USER_ROLE.expert,
+    $or: matchConditions,
+  };
+
+  const usersQuery = new QueryBuilder(
+    User.find(baseFilter).select(
+      '_id firstName lastName photoUrl headline followers avgRating ratingCount',
+    ),
+    query,
+  )
+    .sortByCustom({
+      avgRating: -1,
+      followers: -1,
+      points: -1,
+    })
+    .paginate()
+    .fields();
+
+  const experts = await usersQuery.modelQuery;
+  const meta = await usersQuery.countTotal();
+
+  const result = experts.map((expert: any) => ({
+    ...expert.toObject(),
+    isFollowing: false,           // non-auth user → always false
+    totalBookings: 0,             // non-auth → hide sensitive count
+  }));
+
+  return { meta, result };
+};
+
+// 2. Public Property Experts
+const getPublicPropertyExpertsFromDB = async (query: Record<string, unknown>) => {
+  const baseFilter = {
+    isDeleted: false,
+    status: USER_STATUS.active,
+    role: USER_ROLE.expert,
+    $or: [
+      { expertise: { $in: ['Property & Real Estate'] } },
+      { skills: { $in: PROPERTY_SKILLS } },
+    ],
+  };
+
+  const usersQuery = new QueryBuilder(
+    User.find(baseFilter).select(
+      '_id firstName lastName photoUrl headline followers avgRating ratingCount',
+    ),
+    query,
+  )
+    .sortByCustom({
+      avgRating: -1,
+      followers: -1,
+      points: -1,
+    })
+    .paginate()
+    .fields();
+
+  const experts = await usersQuery.modelQuery;
+  const meta = await usersQuery.countTotal();
+
+  const result = experts.map((expert: any) => ({
+    ...expert.toObject(),
+    isFollowing: false,
+    totalBookings: 0,
+  }));
+
+  return { meta, result };
+};
+
+// 3. Public Top Experts
+const getPublicTopExpertsFromDB = async (query: Record<string, unknown>) => {
+  const baseFilter = {
+    isDeleted: false,
+    status: USER_STATUS.active,
+    role: USER_ROLE.expert,
+    avgRating: { $gte: 4 },
+  };
+
+  const usersQuery = new QueryBuilder(
+    User.find(baseFilter).select(
+      '_id firstName lastName photoUrl headline avgRating ratingCount followers',
+    ),
+    query,
+  )
+    .sortByCustom({
+      avgRating: -1,
+      ratingCount: -1,
+      followers: -1,
+    })
+    .paginate()
+    .fields();
+
+  const experts = await usersQuery.modelQuery;
+  const meta = await usersQuery.countTotal();
+
+  const result = experts.map((expert: any) => ({
+    ...expert.toObject(),
+    isFollowing: false,
+    totalBookings: 0,
+  }));
+
+  return { meta, result };
+};
+
 // 4. Investment experts
 const getInvestmentExperts = async (
   userId: string,
@@ -985,6 +1111,9 @@ export const UserService = {
   getInvestmentExperts,
   getInterestExpertsFromDB,
   getTopExpertsFromDB,
+  getPublicInterestExpertsFromDB,
+  getPublicPropertyExpertsFromDB,
+  getPublicTopExpertsFromDB,
   getPropertyExpertsFromDB,
   geUserByIdFromDB,
   changeUserStatusFromDB,

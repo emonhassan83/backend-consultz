@@ -70,6 +70,45 @@ const getPropertyExperts = catchAsync(async (req, res) => {
   })
 })
 
+// Public Interest Experts (No Auth)
+const getPublicInterestExperts = catchAsync(async (req, res) => {
+  const result = await UserService.getPublicInterestExpertsFromDB(req.query);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Interest experts retrieved successfully!',
+    meta: result.meta,
+    data: result.result,
+  });
+});
+
+// Public Property Experts
+const getPublicPropertyExperts = catchAsync(async (req, res) => {
+  const result = await UserService.getPublicPropertyExpertsFromDB(req.query);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Property experts retrieved successfully!',
+    meta: result.meta,
+    data: result.result,
+  });
+});
+
+// Public Top Experts
+const getPublicTopExperts = catchAsync(async (req, res) => {
+  const result = await UserService.getPublicTopExpertsFromDB(req.query);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Top experts retrieved successfully!',
+    meta: result.meta,
+    data: result.result,
+  });
+});
+
 const getInvestmentExperts = catchAsync(async (req, res) => {
   req.query['role'] = USER_ROLE.expert
   const result = await UserService.getInvestmentExperts(req.user._id, req.query)
@@ -213,6 +252,9 @@ export const UserControllers = {
   getInterestExpert,
   getTopExperts,
   getPropertyExperts,
+  getPublicInterestExperts,
+  getPublicPropertyExperts,
+  getPublicTopExperts,
   getUserById,
   getMyProfile,
   changeUserStatus,

@@ -60,6 +60,11 @@ router.get(
   UserControllers.getInvestmentExperts,
 )
 
+// Public Routes (No Authentication)
+router.get('/public/interest-experts', UserControllers.getPublicInterestExperts)
+router.get('/public/property-experts', UserControllers.getPublicPropertyExperts)
+router.get('/public/top-experts', UserControllers.getPublicTopExperts)
+
 router.get(
   '/interest-experts',
   auth(USER_ROLE.expert, USER_ROLE.consult),
@@ -86,6 +91,10 @@ router.get(
 
 router.get('/', auth(USER_ROLE.admin), UserControllers.getAllUsers)
 
-router.get('/:id', auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult), UserControllers.getUserById)
+router.get(
+  '/:id',
+  auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult),
+  UserControllers.getUserById,
+)
 
 export const UserRoutes = router
