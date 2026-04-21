@@ -55,7 +55,7 @@ const startCalling = async (userId: string, payload: ICalling) => {
     const channelName = `booking_${booking._id}_${Date.now()}`
 
     /* 5. Generate token */
-    const uid = Number(Date.now())
+    const uid = generate32BitUid()
     const tokenData = generateAgoraToken({
       channelName,
       uid,

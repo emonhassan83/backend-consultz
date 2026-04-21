@@ -9,7 +9,7 @@ import httpStatus from 'http-status'
 import AppError from '../../../errors/AppError'
 import { Booking } from '../../../modules/booking/booking.models'
 import { BOOKING_STATUS } from '../../../modules/booking/booking.constants'
-import { generateAgoraToken } from '../../../modules/calling/calling.utils'
+import { generate32BitUid, generateAgoraToken } from '../../../modules/calling/calling.utils'
 import { CALLING_STATUS } from '../../../modules/calling/calling.constant'
 import onlineUsers from '../../utils/onlineUsers'
 
@@ -76,7 +76,7 @@ const callStart = eventHandler<TCallStartPayload>(
       }
 
       const channelName = `booking_${booking._id}_${Date.now()}`
-      const uid = Number(Date.now())
+      const uid = generate32BitUid()
       const tokenData = generateAgoraToken({ channelName, uid })
 
       const [calling] = await Calling.create(
