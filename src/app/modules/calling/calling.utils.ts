@@ -1,6 +1,10 @@
 import { RtcTokenBuilder, RtcRole } from 'agora-access-token';
 import config from '../../config';
 
+export const generate32BitUid = () => {
+  return Math.floor(Math.random() * 0xFFFFFFFF);
+};
+
 export const generateAgoraToken = ({
   channelName,
   uid,

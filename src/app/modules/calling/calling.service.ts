@@ -1,6 +1,6 @@
 import { Calling } from './calling.model'
 import { User } from '../user/user.model'
-import { generateAgoraToken } from './calling.utils'
+import { generate32BitUid, generateAgoraToken } from './calling.utils'
 import AppError from '../../errors/AppError'
 import httpStatus from 'http-status'
 import mongoose from 'mongoose'
@@ -132,7 +132,7 @@ const generateCallToken = async (
     throw new AppError(httpStatus.FORBIDDEN, 'Unauthorized')
   }
 
-  const uid = Number(Date.now())
+  const uid = generate32BitUid()
 
   const tokenData = generateAgoraToken({
     channelName: call.channelName,
