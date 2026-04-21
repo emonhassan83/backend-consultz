@@ -57,6 +57,11 @@ const registerUserIntoDB = async (
       const user = await existingUser.save()
       return user
     }
+    if (!existingUser.isPhoneOtpVerified) {
+      existingUser.set({ ...payload })
+      const user = await existingUser.save()
+      return user
+    }
 
     // Already active user
     throw new AppError(

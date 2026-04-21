@@ -93,10 +93,9 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
       'Session has expired. Please try to submit OTP within 5 minute',
     )
   }
-
   // console.log(decode)
 
-  const user = await User.findOne({ phoneNumber: decode?.phoneNumber }).select(
+  const user = await User.findById(decode.userId).select(
     'verification status ',
   )
   if (!user) {
@@ -108,6 +107,7 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
       'OTP has expired. Please resend it',
     )
   }
+  
   if (Number(otp) !== Number(user?.verification?.otp)) {
     throw new AppError(httpStatus.BAD_REQUEST, 'OTP did not match')
   }
