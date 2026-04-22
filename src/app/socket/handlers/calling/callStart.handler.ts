@@ -9,9 +9,13 @@ import httpStatus from 'http-status'
 import AppError from '../../../errors/AppError'
 import { Booking } from '../../../modules/booking/booking.models'
 import { BOOKING_STATUS } from '../../../modules/booking/booking.constants'
-import { generate32BitUid, generateAgoraToken } from '../../../modules/calling/calling.utils'
+import {
+  generate32BitUid,
+  generateAgoraToken,
+} from '../../../modules/calling/calling.utils'
 import { CALLING_STATUS } from '../../../modules/calling/calling.constant'
 import onlineUsers from '../../utils/onlineUsers'
+import { sendDataMessageToToken } from '../../../utils/sentNotification'
 
 type TCallStartPayload = {
   bookingId: string
@@ -22,20 +26,12 @@ const callStart = eventHandler<TCallStartPayload>(
   async (socket: TSocket, payload, callback) => {
     const callerId = socket.auth._id.toString()
 
-    console.log('🔥 callStart handler started')
-    console.log('Payload received:', payload)
-    console.log('Callback type received:', typeof callback)
+    console.log('\n📞 callStart handler triggered')
+    console.log('   Caller   :', callerId)
+    console.log('   Payload  :', payload)
 
+    // ─── Payload Validation ───────────────────────────────────────────
     if (!payload?.bookingId) {
-      console.log('❌ Missing bookingId')
-      return callbackFn(callback, {
-        success: false,
-        message: 'bookingId is required',
-      })
-    }
-
-    if (!payload?.bookingId) {
-      console.log('❌ Missing bookingId')
       return callbackFn(callback, {
         success: false,
         message: 'bookingId is required',
@@ -48,11 +44,13 @@ const callStart = eventHandler<TCallStartPayload>(
     session.startTransaction()
 
     try {
+      // ─── 1. Validate Caller ──────────────────────────────────────────
       const caller = await User.findById(callerId)
       if (!caller || caller.isDeleted) {
         throw new AppError(httpStatus.NOT_FOUND, 'Caller not found')
       }
 
+      // ─── 2. Validate Booking ─────────────────────────────────────────
       const booking = await Booking.findOne({
         _id: bookingId,
         status: BOOKING_STATUS.confirmed,
@@ -67,6 +65,7 @@ const callStart = eventHandler<TCallStartPayload>(
         )
       }
 
+      // ─── 3. Determine Receiver ───────────────────────────────────────
       const receiverId =
         booking.user.toString() === callerId ? booking.consult : booking.user
 
@@ -75,10 +74,12 @@ const callStart = eventHandler<TCallStartPayload>(
         throw new AppError(httpStatus.NOT_FOUND, 'Receiver not found')
       }
 
+      // ─── 4. Generate Agora Token ─────────────────────────────────────
       const channelName = `booking_${booking._id}_${Date.now()}`
       const uid = generate32BitUid()
       const tokenData = generateAgoraToken({ channelName, uid })
 
+      // ─── 5. Create Calling Document ──────────────────────────────────
       const [calling] = await Calling.create(
         [
           {
@@ -113,52 +114,74 @@ const callStart = eventHandler<TCallStartPayload>(
       )
 
       await session.commitTransaction()
+      console.log(`✅ Call document created | CallId: ${calling._id}`)
 
-      const responseData = {
+      // ─── 6. Respond to Caller ────────────────────────────────────────
+      callbackFn(callback, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: 'Call started successfully',
+        data: {
+          callId: calling._id,
+          channelName,
+          token: tokenData.token,
+          uid,
+          expireAt: tokenData.expireAt,
+          isVideo,
+        },
+      })
+
+      // ─── 7. Notify Receiver ──────────────────────────────────────────
+      const callerName =
+        `${caller.firstName || ''} ${caller.lastName || ''}`.trim() || 'User'
+
+      const callIncomingPayload = {
         callId: calling._id,
-        channelName,
-        token: tokenData.token,
-        uid,
-        expireAt: tokenData.expireAt,
+        callerId: caller._id,
+        callerName,
+        callerPhoto: caller.photoUrl || '',
         isVideo,
+        channelName,
       }
 
-      console.log(`✅ Call created successfully | CallId: ${calling._id}`)
-
-      // ✅ খুব গুরুত্বপূর্ণ: callbackFn সঠিকভাবে কল করো
-      if (typeof callback === 'function') {
-        callbackFn(callback, {
-          statusCode: httpStatus.OK,
-          success: true,
-          message: 'Call started successfully',
-          data: responseData,
-        })
-      }
-
-      // Receiver কে notify
       const receiverRoom = receiver._id.toString()
-      console.log(`📨 Attempting to send callIncoming to room: ${receiverRoom}`)
-
       const receiverSocket = onlineUsers[receiverRoom]
 
+      // Socket — app foreground/active হলে কাজ করে
       if (receiverSocket) {
-        receiverSocket.emit('callIncoming', {
-          callId: calling._id,
-          callerId: caller._id,
-          callerName:
-            `${caller.firstName || ''} ${caller.lastName || ''}`.trim(),
-          callerPhoto: caller.photoUrl,
-          isVideo,
-          channelName,
-        })
-        console.log(`✅ callIncoming event sent to receiver ${receiverRoom}`)
+        receiverSocket.emit('callIncoming', callIncomingPayload)
+        console.log(`✅ callIncoming sent via socket  → ${receiverRoom}`)
       } else {
-        console.log(`⚠️ Receiver ${receiverRoom} is not online right now`)
-        // এখানে FCM push notification পাঠাতে পারো (optional)
+        console.log(`⚠️  Receiver offline (socket)   → ${receiverRoom}`)
+      }
+
+      // FCM — app background/killed/offline সব অবস্থায় কাজ করে
+      // Socket পাঠালেও FCM পাঠাও — app background এ socket miss হতে পারে
+      if (receiver.fcmToken) {
+        sendDataMessageToToken(receiver.fcmToken, {
+          type: 'incoming_call',
+          call_id: calling._id.toString(),
+          caller_id: caller._id.toString(),
+          caller_name: callerName,
+          caller_photo: caller.photoUrl || '',
+          is_video: String(isVideo),
+          channel_name: channelName,
+          agora_token: tokenData.token,
+          agora_uid: String(uid),
+          token_expire_at: String(tokenData.expireAt),
+        })
+          .then(() =>
+            console.log(`✅ FCM call notification sent    → ${receiverRoom}`),
+          )
+          .catch((err: any) =>
+            console.error(`❌ FCM send failed: ${err.message}`),
+          )
+      } else {
+        console.log(`⚠️  Receiver has no FCM token    → ${receiverRoom}`)
       }
     } catch (error: any) {
       await session.abortTransaction()
-      console.error('❌ Call start error:', error.message)
+      console.error('❌ callStart error:', error.message)
 
       callbackFn(callback, {
         success: false,

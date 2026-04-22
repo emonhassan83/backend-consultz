@@ -23,6 +23,16 @@ admin.initializeApp({
   credential: admin.credential.cert(firebaseConfig as admin.ServiceAccount),
 });
 
+const normalizeDataPayload = (data?: Record<string, any>) => {
+  if (!data) return undefined;
+  return Object.fromEntries(
+    Object.entries(data).map(([key, value]) => [
+      key,
+      value === undefined || value === null ? "" : String(value),
+    ])
+  );
+};
+
 export const sendNotification = async (
   fcmToken: string[],
   payload: TNotification,
@@ -97,4 +107,19 @@ export const sendNotification = async (
       );
     }
   }
+};
+
+export const sendDataMessageToToken = async (
+  fcmToken: string,
+  data: Record<string, any>
+) => {
+  if (!fcmToken) return null;
+  const payload = normalizeDataPayload(data);
+  return admin.messaging().send({
+    token: fcmToken,
+    data: payload,
+    android: {
+      priority: "high",
+    },
+  });
 };
