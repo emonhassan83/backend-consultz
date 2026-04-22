@@ -278,14 +278,24 @@ const getInterestExpertsFromDB = async (
   let matchConditions: any[] = []
 
   if (role === USER_ROLE.expert) {
-    if (expertise?.length) {
-      matchConditions.push({ expertise: { $in: expertise } })
-    }
-  } else {
-    if (interests?.length) {
-      matchConditions.push({ expertise: { $in: interests } })
-    }
+  if (expertise?.length) {
+    matchConditions.push({
+      $or: [
+        { expertise: { $in: expertise } },
+        { skills: { $in: expertise } },
+      ],
+    })
   }
+} else {
+  if (interests?.length) {
+    matchConditions.push({
+      $or: [
+        { expertise: { $in: interests } },
+        { skills: { $in: interests } },
+      ],
+    })
+  }
+}
 
   // 🔥 Fallback: যদি কোনো condition না থাকে, তাহলে সব expert দেখাবে
   if (matchConditions.length === 0) {
@@ -436,11 +446,17 @@ const getPublicInterestExpertsFromDB = async (query: Record<string, unknown>) =>
   let matchConditions: any[] = [];
 
   if (interests) {
-    const interestList = (interests as string).split(',').map(i => i.trim());
-    if (interestList.length > 0) {
-      matchConditions.push({ expertise: { $in: interestList } });
-    }
+  const interestList = (interests as string).split(',').map(i => i.trim());
+  if (interestList.length > 0) {
+    matchConditions.push({
+      $or: [
+        { expertise: { $in: interestList } },
+        { skills: { $in: interestList } }, // 👈 skills ফিল্ডেও match করো
+      ],
+    });
   }
+}
+
 
   // Fallback: যদি interests না দেয়া হয় তাহলে সব expert দেখাবে
   if (matchConditions.length === 0) {
