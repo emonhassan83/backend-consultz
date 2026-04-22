@@ -164,10 +164,10 @@ const callStart = eventHandler<TCallStartPayload>(
           caller_id: caller._id.toString(),
           caller_name: callerName,
           caller_photo: caller.photoUrl || '',
-          is_video: String(isVideo),
+          is_video: isVideo,
           channel_name: channelName,
           agora_token: tokenData.token,
-          agora_uid: String(uid),
+          agora_uid: Number(uid),
           token_expire_at: String(tokenData.expireAt),
         })
           .then(() =>
