@@ -95,9 +95,7 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
   }
   // console.log(decode)
 
-  const user = await User.findById(decode.userId).select(
-    'verification status ',
-  )
+  const user = await User.findById(decode.userId).select('verification status ')
   if (!user) {
     throw new AppError(httpStatus.BAD_REQUEST, 'User not found')
   }
@@ -107,7 +105,7 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
       'OTP has expired. Please resend it',
     )
   }
-  
+
   if (Number(otp) !== Number(user?.verification?.otp)) {
     throw new AppError(httpStatus.BAD_REQUEST, 'OTP did not match')
   }
@@ -276,7 +274,7 @@ const sendOtpViaTokenInPhone = async (
     expiresIn: '5m',
   })
 
-    // === মক মোড চেক করা ===
+  // === মক মোড চেক করা ===
   const isDevelopment = config.node_env !== 'production'
 
   if (isDevelopment) {
@@ -300,12 +298,13 @@ const sendOtpViaTokenInPhone = async (
   const client = twilio(config.twilio.accountSid, config.twilio.authToken)
 
   try {
-    await client.messages.create({
+    const res = await client.messages.create({
       body: `Welcome to Consultz, your verification code is ${otp}. It expires in 5 minutes. Please do not sharing.`,
       from: config.twilio.phoneNumber,
       to: phoneNumber,
     })
-
+    console.log(res);
+    
     return {
       token,
     }
@@ -380,11 +379,12 @@ const sendOtpViaDirectPhone = async (payload: { phoneNumber: string }) => {
   const client = twilio(config.twilio.accountSid, config.twilio.authToken)
 
   try {
-    await client.messages.create({
+    const res = await client.messages.create({
       body: `Your verification code is ${otp}. It expires in 5 minutes. Please do not sharing.`,
       from: config.twilio.phoneNumber,
       to: phoneNumber,
     })
+    console.log(res)
 
     return {
       token,
