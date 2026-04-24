@@ -80,64 +80,64 @@ const verifyWithEmail = async (token: string, otp: string | number) => {
 
 const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
   if (!token) {
-    throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized')
+    throw new AppError(httpStatus.UNAUTHORIZED, "You are not authorized")
   }
 
-  let decode
+  let decode: JwtPayload
   try {
-    decode = jwt.verify(token, config.jwt_access_secret as Secret) as JwtPayload
+    decode = jwt.verify(token, process.env.JWT_ACCESS_SECRET as Secret) as JwtPayload
   } catch (err) {
     console.error(err)
     throw new AppError(
       httpStatus.FORBIDDEN,
-      'Session has expired. Please try to submit OTP within 5 minute',
+      "Session has expired. Please try to submit OTP within 5 minute"
     )
   }
-  // console.log(decode)
 
-  const user = await User.findById(decode.userId).select('verification status ')
+  const user = await User.findById(decode.userId).select("verification status points isPhoneOtpVerified fcmToken pushNotify role email")
   if (!user) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'User not found')
-  }
-  if (new Date() > user!.verification!.expiresAt!) {
-    throw new AppError(
-      httpStatus.FORBIDDEN,
-      'OTP has expired. Please resend it',
-    )
+    throw new AppError(httpStatus.BAD_REQUEST, "User not found")
   }
 
-  if (Number(otp) !== Number(user?.verification?.otp)) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'OTP did not match')
+  if (new Date() > user.verification?.expiresAt!) {
+    throw new AppError(httpStatus.FORBIDDEN, "OTP has expired. Please resend it")
   }
 
-  // If OTP is correct, update verification status and return access token
-  const pointsToAdd = 100
+  if (Number(otp) !== Number(user.verification?.otp)) {
+    throw new AppError(httpStatus.BAD_REQUEST, "OTP did not match")
+  }
+
+  // ✅ Only give points if this is the first time phone verified
+  let pointsToAdd = 0
+  if (!user.isPhoneOtpVerified) {
+    pointsToAdd = 100
+  }
+
   const newPoints = (user.points || 0) + pointsToAdd
 
   const updateUser = await User.findByIdAndUpdate(
-    user?._id,
+    user._id,
     {
       $set: {
         verification: {
           otp: 0,
-          expiresAt: moment().add(5, 'minute'),
+          expiresAt: moment().add(5, "minute"),
           status: true,
         },
-        expireAt: null, // set null to prevent verify user deletion data
+        expireAt: null,
         points: newPoints,
         isPhoneOtpVerified: true,
       },
     },
-    { new: true },
+    { new: true }
   )
 
-  // Send push notification to the user
-  if (user.fcmToken && user.pushNotify?.points) {
+  // Send push notification if first time points awarded
+  if (pointsToAdd > 0 && user.fcmToken && user.pushNotify?.points) {
     await sendNotification([user.fcmToken], {
       receiver: user._id,
-      message: 'Earn Points!',
-      description:
-        'Congratulations! You have earned 100 points for fully completing your profile. 🎉',
+      message: "Earn Points!",
+      description: "Congratulations! You have earned 100 points for verifying your phone number 🎉",
       reference: user._id,
       modelType: modeType.Achievement,
     })
@@ -151,13 +151,13 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
   const jwtPayload = {
     _id: updateUser?._id as Types.ObjectId,
     email: updateUser?.email as string,
-    role: updateUser?.role as 'admin' | 'consult' | 'expert',
+    role: updateUser?.role as "admin" | "consult" | "expert",
   }
 
   const accessToken = createToken(
     jwtPayload,
-    config.jwt_access_secret as string,
-    config.jwt_access_expires_in as TExpiresIn,
+    process.env.JWT_ACCESS_SECRET as string,
+    process.env.JWT_ACCESS_EXPIRES_IN as TExpiresIn
   )
 
   return { accessToken }

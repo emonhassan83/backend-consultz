@@ -16,6 +16,7 @@ import { callInvite } from './handlers/calling/callInvite.handler';
 import editMessageHandler from './handlers/chat/editMessage.handler';
 import deleteMessageHandler from './handlers/chat/deleteMessage.handler';
 import callStart from './handlers/calling/callStart.handler';
+import { bookingComplete } from './handlers/calling/bookingCompleted.handler';
 
 export const registerSocketEvents = (socket: Socket) => {
   const tSocket = socket as TSocket; // Cast to TSocket
@@ -40,6 +41,7 @@ export const registerSocketEvents = (socket: Socket) => {
   tSocket.on('call-cancel', (data, callback) => callCancel.call(tSocket, data, callback));
   tSocket.on('call-decline', (data, callback) => callDecline.call(tSocket, data, callback));
   tSocket.on('call-end', (data, callback) => callEnd.call(tSocket, data, callback));
+  tSocket.on('booking-complete', (data, callback) => bookingComplete.call(tSocket, data, callback));
   tSocket.on('call-invite', (data, callback) => callInvite.call(tSocket, data, callback));
 };
 

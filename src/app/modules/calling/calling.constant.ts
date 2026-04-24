@@ -5,6 +5,7 @@ export const CALLING_STATUS = {
   ringing: 'ringing',
   accepted: 'accepted',
   rejected: 'rejected',
+  ended: 'ended',
   completed: 'completed',
   missed: 'missed',
   cancelled: 'cancelled',

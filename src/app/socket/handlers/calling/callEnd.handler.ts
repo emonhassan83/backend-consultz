@@ -2,20 +2,12 @@
 import { TSocket } from '../../interface/socket.interface';
 import eventHandler from '../../utils/eventHandler';
 import { Calling } from '../../../modules/calling/calling.model';
-import { Payment } from '../../../modules/payment/payment.model';
-import { Withdraw } from '../../../modules/withdraw/withdraw.model';
 import { User } from '../../../modules/user/user.model';
-import { Booking } from '../../../modules/booking/booking.models';
-import { Contents } from '../../../modules/contents/contents.models';
 import mongoose from 'mongoose';
 import httpStatus from 'http-status';
 import AppError from '../../../errors/AppError';
-import dayjs from 'dayjs';
 import { CALLING_STATUS } from '../../../modules/calling/calling.constant';
-import { BOOKING_STATUS } from '../../../modules/booking/booking.constants';
-import { WITHDRAW_STATUS } from '../../../modules/withdraw/withdraw.constant';
 import { sendNotification } from '../../../utils/sentNotification';
-import { sendWithdrawNotify } from '../../../modules/withdraw/withdraw.utils';
 import { modeType } from '../../../modules/notification/notification.interface';
 import { callbackFn } from '../../../utils/CallbackFn';
 
@@ -51,9 +43,9 @@ const callEnd = eventHandler<TCallEndPayload>(
         throw new AppError(httpStatus.NOT_FOUND, 'Call session not found or unauthorized');
       }
 
-      if (call.status === CALLING_STATUS.completed) {
-        throw new AppError(httpStatus.BAD_REQUEST, 'Call already ended');
-      }
+      // if (call.status === CALLING_STATUS.completed) {
+      //   throw new AppError(httpStatus.BAD_REQUEST, 'Call already ended');
+      // }
 
       // 2. Calculate duration
       const now = new Date();
@@ -62,40 +54,40 @@ const callEnd = eventHandler<TCallEndPayload>(
         Math.floor((now.getTime() - startTime.getTime()) / 1000);
 
       // 3. Update call
-      call.status = CALLING_STATUS.completed;
+      call.status = CALLING_STATUS.ended;
       call.endedAt = now;
       call.duration = finalDuration;
       await call.save({ session });
 
-      // 4. Complete booking
-      const booking = await Booking.findById(call.booking).session(session);
-      if (!booking) throw new AppError(httpStatus.NOT_FOUND, 'Booking not found');
+      // // 4. Complete booking
+      // const booking = await Booking.findById(call.booking).session(session);
+      // if (!booking) throw new AppError(httpStatus.NOT_FOUND, 'Booking not found');
 
-      booking.status = BOOKING_STATUS.completed;
-      await booking.save({ session });
+      // booking.status = BOOKING_STATUS.completed;
+      // await booking.save({ session });
 
-      // 5. Payment & Withdraw
-      const payment = await Payment.findOne({
-        booking: booking._id,
-        isDeleted: false,
-      }).session(session);
+      // // 5. Payment & Withdraw
+      // const payment = await Payment.findOne({
+      //   booking: booking._id,
+      //   isDeleted: false,
+      // }).session(session);
 
-      if (!payment) throw new AppError(httpStatus.NOT_FOUND, 'Payment not found');
+      // if (!payment) throw new AppError(httpStatus.NOT_FOUND, 'Payment not found');
 
-      const contents = await Contents.findOne().lean();
-      const holdDays = contents?.paymentHoldDays || 7;
-      const proceedAt = dayjs(now).add(holdDays, 'day').toDate();
+      // const contents = await Contents.findOne().lean();
+      // const holdDays = contents?.paymentHoldDays || 7;
+      // const proceedAt = dayjs(now).add(holdDays, 'day').toDate();
 
-      const [withdraw] = await Withdraw.create(
-        [{
-          user: booking.consult,
-          booking: booking._id,
-          amount: payment.consultAmount,
-          status: WITHDRAW_STATUS.proceed,
-          proceedAt,
-        }],
-        { session }
-      );
+      // const [withdraw] = await Withdraw.create(
+      //   [{
+      //     user: booking.consult,
+      //     booking: booking._id,
+      //     amount: payment.consultAmount,
+      //     status: WITHDRAW_STATUS.proceed,
+      //     proceedAt,
+      //   }],
+      //   { session }
+      // );
 
       // 6. Notification to both users
       const [caller, receiver] = await Promise.all([
@@ -117,10 +109,10 @@ const callEnd = eventHandler<TCallEndPayload>(
         });
       }
 
-      // 7. Withdraw notification to consultant
-      if (caller?._id.toString() === booking.consult.toString()) {
-        await sendWithdrawNotify(WITHDRAW_STATUS.proceed, withdraw, caller);
-      }
+      // // 7. Withdraw notification to consultant
+      // if (caller?._id.toString() === booking.consult.toString()) {
+      //   await sendWithdrawNotify(WITHDRAW_STATUS.proceed, withdraw, caller);
+      // }
 
       await session.commitTransaction();
 
