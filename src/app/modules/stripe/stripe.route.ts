@@ -2,9 +2,17 @@ import { Router } from 'express'
 import auth from '../../middleware/auth'
 import { stripeController } from './stripe.controller'
 import { USER_ROLE } from '../user/user.constant'
+import zodValidationRequest from '../../middleware/validateRequest'
+import { StripeValidation } from './stripe.validation'
 
 const router = Router()
 
+router.post(
+  '/connect-existing',
+  auth(USER_ROLE.expert),
+  zodValidationRequest(StripeValidation.connectValidationSchema),
+  stripeController.connectExistingStripeAccount,
+)
 router.post(
   '/connect',
   auth(USER_ROLE.expert),

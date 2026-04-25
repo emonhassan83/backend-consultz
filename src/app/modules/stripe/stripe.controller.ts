@@ -3,6 +3,7 @@ import catchAsync from '../../utils/catchAsync'
 import { stripeService } from './stripe.service'
 import sendResponse from '../../utils/sendResponse'
 import httpStatus from 'http-status'
+import StripeService from '../../class/stripe/stripe'
 import config from '../../config'
 
 const stripLinkAccount = catchAsync(async (req: Request, res: Response) => {
@@ -14,6 +15,18 @@ const stripLinkAccount = catchAsync(async (req: Request, res: Response) => {
     data: result,
   })
 })
+
+// Connect Existing Account
+const connectExistingStripeAccount = catchAsync(async (req: Request, res: Response) => {
+  const result = await StripeService.connectExistingAccount(req.user._id, req.body);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: result.message,
+    data: result,
+  });
+});
 
 // checked stripe connected
 const checkStripeConnected = catchAsync(async (req: Request, res: Response) => {
@@ -80,6 +93,7 @@ const disconnectStripe = catchAsync(async (req: Request, res: Response) => {
 
 export const stripeController = {
   stripLinkAccount,
+  connectExistingStripeAccount,
   checkStripeConnected,
   handleStripeOAuth,
   refresh,

@@ -51,6 +51,45 @@ const stripLinkAccount = async (userId: string) => {
   }
 }
 
+// ================== Connect Existing Stripe Account ==================
+const connectExistingStripeAccount = async (userId: string, payload: { stripeAccountId: string }) => {
+  const { stripeAccountId } = payload;
+
+  if (!stripeAccountId || !stripeAccountId.startsWith('acct_')) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid Stripe Account ID. It must start with "acct_"');
+  }
+
+  // Verify that the Stripe Account really exists
+  try {
+    await StripeService.getStripe().accounts.retrieve(stripeAccountId);
+  } catch (err: any) {
+    console.error('Stripe Account Verification Failed:', err.message);
+    throw new AppError(httpStatus.BAD_REQUEST, 'This Stripe account does not exist or is not accessible.');
+  }
+
+  // Save to database
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    { stripeAccountId },
+    { new: true }
+  );
+
+  if (!updatedUser) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  // Generate onboarding / refresh link using your existing refresh logic
+  const accountLinkUrl = await refresh(stripeAccountId, { userId });
+
+  return {
+    success: true,
+    isNewAccount: false,
+    accountId: stripeAccountId,
+    url: accountLinkUrl,
+    message: 'Your existing Stripe account has been successfully connected!',
+  };
+};
+
 // Check if user has connected Stripe account
 const checkStripeConnected = async (userId: string) => {
   const user = await User.findById(userId)
@@ -251,6 +290,7 @@ const disconnectStripe = async (userId: string) => {
 
 export const stripeService = {
   stripLinkAccount,
+  connectExistingStripeAccount,
   checkStripeConnected,
   handleStripeOAuth,
   refresh,

@@ -1,5 +1,6 @@
 import { Stripe as StripeType } from 'stripe'
 import config from '../../config'
+import { User } from '../../modules/user/user.model'
 
 class StripeService<T> {
   private stripe() {
@@ -124,6 +125,41 @@ class StripeService<T> {
   public getStripe() {
     return this.stripe()
   }
+
+  // ================== NEW: Connect Existing Account ==================
+public async connectExistingAccount(userId: string, payload: { stripeAccountId: string }) {
+  const { stripeAccountId } = payload;
+
+  if (!stripeAccountId || !stripeAccountId.startsWith('acct_')) {
+    throw new Error('Invalid Stripe Account ID. It must start with "acct_"');
+  }
+
+  try {
+    // Verify the account exists in Stripe
+    await this.stripe().accounts.retrieve(stripeAccountId);
+
+    // Save to database
+    await User.findByIdAndUpdate(userId, {
+      stripeAccountId: stripeAccountId,
+    });
+
+    // Generate onboarding link using your existing connectAccount method
+    const refreshUrl = `${config.server_url}/stripe/refresh/${stripeAccountId}?userId=${userId}`;
+    const returnUrl = `${config.server_url}/stripe/return?userId=${userId}&stripeAccountId=${stripeAccountId}`;
+
+    const accountLink = await this.connectAccount(returnUrl, refreshUrl, stripeAccountId);
+
+    return {
+      success: true,
+      isNewAccount: false,
+      accountId: stripeAccountId,
+      url: accountLink.url,
+      message: 'Your existing Stripe account has been connected successfully!',
+    };
+  } catch (error) {
+    this.handleError(error, 'Error connecting existing Stripe account');
+  }
+}
 }
 
 export default new StripeService()
