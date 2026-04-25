@@ -89,7 +89,7 @@ export const bookingComplete = eventHandler<TBookingCompletePayload>(
       await sendWithdrawNotify(WITHDRAW_STATUS.proceed, withdraw, receiver!)
  
       // 6. Emit bookingCompleted back to client
-      socket.emit('bookingCompleted', {
+      socket.emit('bookingComplete', {
         bookingId,
         callId,
         duration,
