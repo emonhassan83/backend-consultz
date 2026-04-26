@@ -80,40 +80,43 @@ const verifyWithEmail = async (token: string, otp: string | number) => {
 
 const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
   if (!token) {
-    throw new AppError(httpStatus.UNAUTHORIZED, "You are not authorized")
+    throw new AppError(httpStatus.UNAUTHORIZED, "You are not authorized");
   }
 
-  let decode: JwtPayload
+  let decode: JwtPayload;
   try {
-    decode = jwt.verify(token, process.env.JWT_ACCESS_SECRET as Secret) as JwtPayload
+    decode = jwt.verify(token, process.env.JWT_ACCESS_SECRET as string) as JwtPayload;
   } catch (err) {
-    console.error(err)
+    console.error(err);
     throw new AppError(
       httpStatus.FORBIDDEN,
-      "Session has expired. Please try to submit OTP within 5 minute"
-    )
+      "Session has expired. Please try to submit OTP within 5 minutes"
+    );
   }
 
-  const user = await User.findById(decode.userId).select("verification status points isPhoneOtpVerified fcmToken pushNotify role email")
+  const user = await User.findById(decode.userId).select(
+    "verification status points isPhoneOtpVerified fcmToken pushNotify role email name"
+  );
+
   if (!user) {
-    throw new AppError(httpStatus.BAD_REQUEST, "User not found")
+    throw new AppError(httpStatus.BAD_REQUEST, "User not found");
   }
 
-  if (new Date() > user.verification?.expiresAt!) {
-    throw new AppError(httpStatus.FORBIDDEN, "OTP has expired. Please resend it")
+  if (new Date() > (user.verification?.expiresAt || 0)) {
+    throw new AppError(httpStatus.FORBIDDEN, "OTP has expired. Please resend it");
   }
 
   if (Number(otp) !== Number(user.verification?.otp)) {
-    throw new AppError(httpStatus.BAD_REQUEST, "OTP did not match")
+    throw new AppError(httpStatus.BAD_REQUEST, "OTP did not match");
   }
 
-  // ✅ Only give points if this is the first time phone verified
-  let pointsToAdd = 0
+  // Points for first time phone verification
+  let pointsToAdd = 0;
   if (!user.isPhoneOtpVerified) {
-    pointsToAdd = 100
+    pointsToAdd = 100;
   }
 
-  const newPoints = (user.points || 0) + pointsToAdd
+  const newPoints = (user.points || 0) + pointsToAdd;
 
   const updateUser = await User.findByIdAndUpdate(
     user._id,
@@ -121,7 +124,7 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
       $set: {
         verification: {
           otp: 0,
-          expiresAt: moment().add(5, "minute"),
+          expiresAt: moment().add(5, "minute").toDate(),
           status: true,
         },
         expireAt: null,
@@ -130,9 +133,9 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
       },
     },
     { new: true }
-  )
+  );
 
-  // Send push notification if first time points awarded
+  // Push notification for points
   if (pointsToAdd > 0 && user.fcmToken && user.pushNotify?.points) {
     await sendNotification([user.fcmToken], {
       receiver: user._id,
@@ -140,28 +143,39 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
       description: "Congratulations! You have earned 100 points for verifying your phone number 🎉",
       reference: user._id,
       modelType: modeType.Achievement,
-    })
+    });
   }
 
-  // Send pending review email to expert
+  // Expert pending review email
   if (user.role === USER_ROLE.expert) {
-    await sendExpertPendingEmail(user)
+    await sendExpertPendingEmail(user);
   }
 
+  // ✅ JWT Token Creation with proper expiresIn handling
   const jwtPayload = {
     _id: updateUser?._id as Types.ObjectId,
     email: updateUser?.email as string,
     role: updateUser?.role as "admin" | "consult" | "expert",
-  }
+  };
+
+  // 🔥 Safe expiresIn handling
+  const expiresIn = process.env.JWT_ACCESS_EXPIRES_IN || '7d';
+
+  // Type guard + fallback
+  const validExpiresIn: TExpiresIn = 
+    typeof expiresIn === 'number' || 
+    ['30s','1m','5m','10m','1h','1d','7d','30d','365d'].includes(expiresIn as string)
+      ? (expiresIn as TExpiresIn)
+      : '7d';   // default fallback
 
   const accessToken = createToken(
     jwtPayload,
     process.env.JWT_ACCESS_SECRET as string,
-    process.env.JWT_ACCESS_EXPIRES_IN as TExpiresIn
-  )
+    validExpiresIn
+  );
 
-  return { accessToken }
-}
+  return { accessToken };
+};
 
 const sendOtpInEmail = async (email: string) => {
   const user = await User.findOne({ email })
