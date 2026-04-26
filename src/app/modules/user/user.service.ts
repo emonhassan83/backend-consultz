@@ -15,6 +15,7 @@ import {
   generateUserStatusEmail,
   getFollowingStatusBatch,
   getTotalBookingsBatch,
+  sendSlotRegenerationNotification,
   sendUserStatusNotifYToAdmin,
   sendUserStatusNotifYToUser,
 } from './user.utils'
@@ -29,6 +30,8 @@ import dayjs from 'dayjs'
 import { Withdraw } from '../withdraw/withdraw.model'
 import { WITHDRAW_STATUS } from '../withdraw/withdraw.constant'
 import { modeType } from '../notification/notification.interface'
+import { BookingSlots } from '../bookingSlots/bookingSlots.model'
+import { generateHourlySlots } from '../bookingSlots/bookingSlots.utils'
 
 const registerUserIntoDB = async (
   payload: TUser & { referralCode?: string },
@@ -868,6 +871,90 @@ const changeUserStatusFromDB = async (payload: {
 
   return updatedUser
 }
+
+export const regenerateSlotsForExpert = async (expertId: string): Promise<void> => {
+  // Proper typing
+  const expert = await User.findById(expertId).select('availability').lean();
+  
+  if (!expert || !expert.availability?.length) {
+    console.log(`[Slot Regeneration] No availability found for expert: ${expertId}`);
+    return;
+  }
+
+  console.log(`[Slot Regeneration] Started for expert: ${expertId}`);
+
+  const currentMonth = dayjs().startOf('month');
+  const futureMonths = 6; // আগামী ৬ মাস
+
+  for (let i = 0; i < futureMonths; i++) {
+    const targetMonth = currentMonth.add(i, 'month');
+    const year = targetMonth.year();
+    const month = targetMonth.month() + 1;
+
+    const monthPrefix = `${year}-${month.toString().padStart(2, '0')}`;
+
+    // Get existing slots
+    const existingSlots = await BookingSlots.find({
+      author: new Types.ObjectId(expertId),
+      date: { $regex: `^${monthPrefix}` },
+    }).select('date time isBooked').lean();
+
+    // Protect booked slots
+    const bookedDates = new Set(
+      existingSlots
+        .filter((slot: any) => slot.isBooked === true)
+        .map((slot: any) => slot.date)
+    );
+
+    // Delete only empty slots
+    await BookingSlots.deleteMany({
+      author: new Types.ObjectId(expertId),
+      date: { $regex: `^${monthPrefix}` },
+      isBooked: false,
+    });
+
+    // Generate new slots from current availability
+    const daysInMonth = targetMonth.daysInMonth();
+    const slotsToInsert: any[] = [];
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const currentDate = dayjs(`${year}-${month}-${d}`);
+      const weekDay = currentDate.format('ddd').toLowerCase();
+
+      const dayAvailability = expert.availability.find(
+        (a: any) => a.day === weekDay
+      );
+
+      if (dayAvailability?.slots?.length) {
+        dayAvailability.slots.forEach((slotRange: any) => {
+          const hourlySlots = generateHourlySlots(slotRange.from, slotRange.to);
+
+          hourlySlots.forEach((time: string) => {
+            const dateStr = currentDate.format('YYYY-MM-DD');
+
+            // Skip if already booked
+            if (bookedDates.has(dateStr)) return;
+
+            slotsToInsert.push({
+              author: new Types.ObjectId(expertId),
+              date: dateStr,
+              time,
+              isBooked: false,
+            });
+          });
+        });
+      }
+    }
+
+    if (slotsToInsert.length > 0) {
+      await BookingSlots.insertMany(slotsToInsert, { ordered: false });
+      console.log(`[Slot Regeneration] Created ${slotsToInsert.length} slots for ${monthPrefix}`);
+    }
+  }
+
+  // Optional: Send notification to expert
+  await sendSlotRegenerationNotification(expertId);
+};
 
 const changeUserNotifyFromDB = async (id: string, payload: any) => {
   // 1️⃣ Validate user

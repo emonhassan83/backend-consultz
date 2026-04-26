@@ -11,6 +11,7 @@ import {
 } from './user.constant'
 import { generateCryptoString } from '../../utils/generateCryptoString'
 import { generateReferralCode } from '../../utils/generateReferralCode'
+import { regenerateSlotsForExpert } from './user.service'
 
 // 🎓 Education
 const EducationSchema = new Schema(
@@ -248,14 +249,51 @@ userSchema.pre('save', async function (next) {
   next()
 })
 
-//* Static method: find user by username (assuming username == email or name)
-userSchema.statics.isUserExistsByUserName = async function (
-  name: string,
-): Promise<TUser | null> {
-  return await this.findOne({
-    $or: [{ firstName: name }, { lastName: name }, { email: name }],
-  })
-}
+// user.model.ts এর শেষে (schema definition-এর পর)
+userSchema.pre('save', async function (next) {
+  // TypeScript safe check
+  const isAvailabilityModified = this.isModified('availability');
+
+  if (isAvailabilityModified) {
+    // Old user fetch with proper typing
+    const oldUser = await this.model('User')
+      .findById(this._id)
+      .select('availability')
+      .lean() as TUser | null;
+
+    const oldAvailability = oldUser?.availability || [];
+    const newAvailability = (this as any).availability || []; // safe cast
+
+    const hasAvailabilityChanged = 
+      JSON.stringify(oldAvailability) !== JSON.stringify(newAvailability);
+
+    if (hasAvailabilityChanged) {
+      // Flag set for post-save hook
+      (this as any).regenerateSlotsAfterSave = true;
+    }
+  }
+
+  next();
+});
+
+userSchema.post('save', async function (doc: any) {
+  // Type-safe flag check
+  if (doc.regenerateSlotsAfterSave === true) {
+    const expertId = doc._id.toString(); // safe conversion
+
+    // Async regeneration (non-blocking)
+    setImmediate(async () => {
+      try {
+        await regenerateSlotsForExpert(expertId);
+      } catch (err) {
+        console.error(`[Slot Regeneration] Failed for expert ${expertId}:`, err);
+      }
+    });
+
+    // Clean up flag
+    doc.regenerateSlotsAfterSave = false;
+  }
+});
 
 //* Static method: find user by email
 userSchema.statics.isUserExistsByEmail = async function (

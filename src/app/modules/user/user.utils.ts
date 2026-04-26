@@ -10,6 +10,7 @@ import emailSender from '../../utils/emailSender'
 import config from '../../config'
 import { BOOKING_STATUS } from '../booking/booking.constants';
 import { Booking } from '../booking/booking.models';
+import { User } from './user.model';
 
 export const calculateProfileSetupProgress = (user: any): number => {
   if (!user || !user.role) {
@@ -298,3 +299,16 @@ export const sendExpertPendingEmail = async (user: TUser) => {
   `,
   )
 }
+
+
+export const sendSlotRegenerationNotification = async (expertId: string) => {
+  const expert = await User.findById(expertId);
+  if (!expert?.fcmToken) return;
+
+  await sendNotification([expert.fcmToken], {
+    receiver: expert._id,
+    message: 'Availability Updated',
+    description: 'Your availability has been updated. Slots have been regenerated for upcoming months.',
+    modelType: modeType.User,
+  });
+};
