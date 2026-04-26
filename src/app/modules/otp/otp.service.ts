@@ -9,7 +9,7 @@ import emailSender from '../../utils/emailSender'
 import { createToken, TExpiresIn } from '../auth/auth.utils'
 import { Types } from 'mongoose'
 import twilio from 'twilio'
-import { USER_ROLE } from '../user/user.constant'
+import { USER_ROLE, USER_STATUS } from '../user/user.constant'
 import { sendExpertPendingEmail } from '../user/user.utils'
 import { sendNotification } from '../../utils/sentNotification'
 import { modeType } from '../notification/notification.interface'
@@ -95,7 +95,7 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
   }
 
   const user = await User.findById(decode.userId).select(
-    "verification status points isPhoneOtpVerified fcmToken pushNotify role email name"
+    "verification status points isPhoneOtpVerified fcmToken pushNotify role email firstName lastName"
   );
 
   if (!user) {
@@ -147,7 +147,7 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
   }
 
   // Expert pending review email
-  if (user.role === USER_ROLE.expert) {
+  if (user.status === USER_STATUS.pending && user.role === USER_ROLE.expert) {
     await sendExpertPendingEmail(user);
   }
 
