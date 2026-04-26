@@ -249,48 +249,42 @@ userSchema.pre('save', async function (next) {
   next()
 })
 
-// user.model.ts এর শেষে (schema definition-এর পর)
-userSchema.pre('save', async function (next) {
-  // TypeScript safe check
-  const isAvailabilityModified = this.isModified('availability');
+// ====================== AVAILABILITY CHANGE DETECTION ======================
 
-  if (isAvailabilityModified) {
-    // Old user fetch with proper typing
+userSchema.pre('save', async function (next) {
+  if (this.isModified('availability')) {
     const oldUser = await this.model('User')
       .findById(this._id)
       .select('availability')
       .lean() as TUser | null;
 
     const oldAvailability = oldUser?.availability || [];
-    const newAvailability = (this as any).availability || []; // safe cast
+    const newAvailability = this.get('availability') || [];
 
-    const hasAvailabilityChanged = 
-      JSON.stringify(oldAvailability) !== JSON.stringify(newAvailability);
+    const hasChanged = JSON.stringify(oldAvailability) !== JSON.stringify(newAvailability);
 
-    if (hasAvailabilityChanged) {
-      // Flag set for post-save hook
+    if (hasChanged) {
       (this as any).regenerateSlotsAfterSave = true;
     }
   }
-
   next();
 });
 
 userSchema.post('save', async function (doc: any) {
-  // Type-safe flag check
   if (doc.regenerateSlotsAfterSave === true) {
-    const expertId = doc._id.toString(); // safe conversion
+    const expertId = doc._id.toString();
 
-    // Async regeneration (non-blocking)
+    // Non-blocking regeneration
     setImmediate(async () => {
       try {
         await regenerateSlotsForExpert(expertId);
+        console.log(`[Slot Regeneration] Completed for expert: ${expertId}`);
       } catch (err) {
         console.error(`[Slot Regeneration] Failed for expert ${expertId}:`, err);
       }
     });
 
-    // Clean up flag
+    // Clean flag
     doc.regenerateSlotsAfterSave = false;
   }
 });
