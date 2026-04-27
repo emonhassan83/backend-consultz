@@ -37,11 +37,14 @@ export default {
   },
   payment_success_url: process.env.PAYMENT_SUCCESS_URL,
   payment_cancel_url: process.env.PAYMENT_CANCEL_URL,
-  aws: {
+   aws: {
     accessKeyId: process.env.S3_BUCKET_ACCESS_KEY,
     secretAccessKey: process.env.S3_BUCKET_SECRET_ACCESS_KEY,
+    s3BaseUrl: process.env.S3_BASE_URL,
+    s3_api: process.env.S3_API,
     region: process.env.AWS_REGION,
-    bucket: process.env.AWS_BUCKET_NAME
+    bucket: process.env.AWS_BUCKET_NAME,
+    endpoint: process.env.SPACES_API,  
   },
   twilio: {
     accountSid: process.env.TWILIO_ACCOUNT_SID,

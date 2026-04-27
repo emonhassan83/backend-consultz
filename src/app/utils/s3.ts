@@ -1,80 +1,84 @@
 import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
+  ObjectCannedACL,
   PutObjectCommand,
-} from '@aws-sdk/client-s3'
-import httpStatus from 'http-status'
-import config from '../config'
-import { s3Client } from '../constants/aws'
-import AppError from '../errors/AppError'
-import path from 'path';
+} from '@aws-sdk/client-s3';
+import httpStatus from 'http-status'; 
+import config from '../config';
+import { s3Client } from '../constants/aws';
+import AppError from '../errors/AppError';
 
 //upload a single file
 export const uploadToS3 = async (
-  { file, fileName }: { file: any; fileName?: string },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  { file, fileName }: { file: any; fileName: string },
 ): Promise<string | null> => {
-  const ext = path.extname(file.originalname);
-  const baseName = fileName || `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-  const finalKey = `${baseName}${ext || ''}`;
-
   const command = new PutObjectCommand({
     Bucket: config.aws.bucket,
-    Key: finalKey,
+    Key: fileName,
     Body: file.buffer,
     ContentType: file.mimetype,
+    ACL: ObjectCannedACL.public_read, //access public read
   });
 
   try {
-    await s3Client.send(command);
+    const key = await s3Client.send(command);
+    if (!key) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'File Upload failed');
+    }
+    const url = `${config?.aws?.s3BaseUrl}/${fileName}`;
 
-    const url = `https://${config.aws.bucket}.s3.${config.aws.region}.amazonaws.com/${finalKey}`;
     return url;
   } catch (error) {
     console.log(error);
     throw new AppError(httpStatus.BAD_REQUEST, 'File Upload failed');
   }
 };
-
+ 
 // delete file from s3 bucket
 export const deleteFromS3 = async (key: string) => {
   try {
     const command = new DeleteObjectCommand({
       Bucket: config.aws.bucket,
       Key: key,
-    })
-    await s3Client.send(command)
+    });
+    await s3Client.send(command);
   } catch (error) {
-    console.log('🚀 deleteFromS3 error:', error)
-    throw new Error('s3 file delete failed')
+    console.log('🚀 ~ deleteFromS3 ~ error:', error);
+    throw new Error('s3 file delete failed');
   }
-}
+};
 
 // upload multiple files
+
 export const uploadManyToS3 = async (
   files: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     file: any;
     path: string;
     key?: string;
   }[],
 ): Promise<{ url: string; key: string }[]> => {
   try {
-    const uploadPromises = files.map(async ({ file, path: folderPath, key }) => {
-      const ext = path.extname(file.originalname);
-      const randomPart = `${Math.floor(100000 + Math.random() * 900000)}${Date.now()}`;
-      const baseName = key || randomPart;
-      const newFileName = `${baseName}${ext || ''}`;
-      const fileKey = `${folderPath}/${newFileName}`;
+    const uploadPromises = files.map(async ({ file, path, key }) => {
+      const newFileName = key
+        ? key
+        : `${Math.floor(100000 + Math.random() * 900000)}${Date.now()}`;
+
+      const fileKey = `${path}/${newFileName}`;
 
       const command = new PutObjectCommand({
         Bucket: config.aws.bucket as string,
         Key: fileKey,
         Body: file?.buffer,
         ContentType: file.mimetype,
+        ACL: ObjectCannedACL.public_read, //access public read
       });
 
-      await s3Client.send(command);
-
-      const url = `https://${config.aws.bucket}.s3.${config.aws.region}.amazonaws.com/${fileKey}`;
+      const nn = await s3Client.send(command);
+      // const url = `${config?.aws?.s3BaseUrl}/${fileKey}`;
+      const url = `${config?.aws?.s3BaseUrl}/${fileKey}`;
       return { url, key: newFileName };
     });
 
@@ -90,15 +94,18 @@ export const deleteManyFromS3 = async (keys: string[]) => {
     const deleteParams = {
       Bucket: config.aws.bucket,
       Delete: {
-        Objects: keys.map((key) => ({ Key: key })),
+        Objects: keys.map(key => ({ Key: key })),
         Quiet: false,
       },
-    }
-    const command = new DeleteObjectsCommand(deleteParams)
-    const response = await s3Client.send(command)
-    return response
+    };
+
+    const command = new DeleteObjectsCommand(deleteParams);
+
+    const response = await s3Client.send(command);
+
+    return response;
   } catch (error) {
-    console.error('Error deleting S3 files:', error)
-    throw new AppError(httpStatus.BAD_REQUEST, 'S3 file delete failed')
+    console.error('Error deleting S3 files:', error);
+    throw new AppError(httpStatus.BAD_REQUEST, 'S3 file delete failed');
   }
-}
+};

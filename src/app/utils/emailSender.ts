@@ -1,29 +1,37 @@
-import nodemailer from 'nodemailer'
 import config from '../config'
+import axios from 'axios';
+import httpStatus from 'http-status'
+import AppError from '../errors/AppError';
 
 const emailSender = async (email: string, subject: string, html: string) => {
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // Use `true` for port 465, `false` for all other ports
-    auth: {
-      user: config.emailSender.email,
-      pass: config.emailSender.app_pass,
-    },
-    tls: {
-      rejectUnauthorized: false,
-    },
-  })
+ try {
+    const emailData = {
+      to: email,
+      subject,
+      html,
+      nodemailer_host_email: config.emailSender.email,
+      nodemailer_host_pass: config.emailSender.app_pass,
+    };
 
-  const info = await transporter.sendMail({
-    from: '"consultz" <emonhasan7650@gmail.com>', // sender address
-    to: email, // list of receivers
-    subject, // Subject line
-    //text: "Hello world?", // plain text body
-    html, // html body
-  })
+    const res = await axios.post(
+      'https://consultz.vercel.app/', // Replace with your email sending service URL
+      emailData,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
 
-  //console.log("Message sent: %s", info.messageId);
+    const result = res?.data;
+    if (!result.success) {
+      throw new AppError(httpStatus.BAD_REQUEST, result.message);
+    }
+    return result;
+  } catch (error) {
+    console.error('Email sending error:', error);
+    throw new AppError(httpStatus.BAD_REQUEST, 'Error sending email');
+  }
 }
 
 export default emailSender
