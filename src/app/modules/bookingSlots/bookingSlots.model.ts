@@ -10,6 +10,13 @@ const bookingSlotsSchema = new Schema<TBookingSlots>(
   }
 )
 
+// Composite unique index (duplicate prevent করবে)
+bookingSlotsSchema.index({ author: 1, date: 1, time: 1 }, { unique: true });
+
+// Query optimization
+bookingSlotsSchema.index({ author: 1, date: 1 });
+bookingSlotsSchema.index({ author: 1, isBooked: 1 });
+
 export const BookingSlots = model<TBookingSlots, TBookingSlotsModel>(
   'BookingSlots',
   bookingSlotsSchema,

@@ -238,56 +238,78 @@ const userSchema = new Schema<TUser, UserModel>(
 userSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 })
 userSchema.index({ referralCode: 1 })
 
-//* Hash password before saving
+// ====================== AVAILABILITY CHANGE DETECTION ======================
+
 userSchema.pre('save', async function (next) {
+  // Password hashing
   if (this.isModified('password')) {
     this.password = await bcrypt.hash(
       this.password,
       Number(config.bcrypt_salt_rounds),
     )
   }
+
+  // Availability change detection
+  if (this.isModified('availability') && !this.isNew) {
+    try {
+      const oldDoc = await this.model('User')
+        .findById(this._id)
+        .select('availability')
+        .lean() as TUser | null
+
+      // Store old availability in a temporary property
+      ;(this as any)._oldAvailability = oldDoc?.availability || []
+      ;(this as any)._availabilityChanged = true // ← Flag
+    } catch (err) {
+      console.error('Error fetching old availability:', err)
+    }
+  }
+
   next()
 })
 
-// ====================== AVAILABILITY CHANGE DETECTION ======================
+userSchema.post('save', async function (doc: any) {
+  const wasChanged = (doc as any)._availabilityChanged === true
 
-userSchema.pre('save', async function (next) {
-  if (this.isModified('availability')) {
-    const oldUser = await this.model('User')
-      .findById(this._id)
-      .select('availability')
-      .lean() as TUser | null;
+  if (wasChanged) {
+    const oldAvail = (doc as any)._oldAvailability || []
+    const newAvail = doc.availability || []
 
-    const oldAvailability = oldUser?.availability || [];
-    const newAvailability = this.get('availability') || [];
-
-    const hasChanged = JSON.stringify(oldAvailability) !== JSON.stringify(newAvailability);
+    const hasChanged = JSON.stringify(oldAvail) !== JSON.stringify(newAvail)
 
     if (hasChanged) {
-      (this as any).regenerateSlotsAfterSave = true;
+      console.log(
+        '[Availability Hook] ✅ Change detected! Triggering slot regeneration...',
+      )
+
+      const expertId = doc._id.toString()
+
+      // Non-blocking regeneration
+      setImmediate(async () => {
+        try {
+          const { regenerateSlotsForExpert } = await import('./user.service')
+          await regenerateSlotsForExpert(expertId)
+          console.log(
+            `[Slot Regeneration] ✅ Completed for expert: ${expertId}`,
+          )
+        } catch (err: any) {
+          console.error(
+            `[Slot Regeneration] ❌ Failed for expert ${expertId}:`,
+            err.message,
+          )
+        }
+      })
+    } else {
+      console.log(
+        '[Availability Hook] Change detected but content is same (no regeneration needed)',
+      )
     }
+
+    // Cleanup temporary properties
+    delete (doc as any)._oldAvailability
+    delete (doc as any)._availabilityChanged
   }
-  next();
-});
-
-userSchema.post('save', async function (doc: any) {
-  if (doc.regenerateSlotsAfterSave === true) {
-    const expertId = doc._id.toString();
-
-    // Non-blocking regeneration
-    setImmediate(async () => {
-      try {
-        await regenerateSlotsForExpert(expertId);
-        console.log(`[Slot Regeneration] Completed for expert: ${expertId}`);
-      } catch (err) {
-        console.error(`[Slot Regeneration] Failed for expert ${expertId}:`, err);
-      }
-    });
-
-    // Clean flag
-    doc.regenerateSlotsAfterSave = false;
-  }
-});
+})
 
 //* Static method: find user by email
 userSchema.statics.isUserExistsByEmail = async function (

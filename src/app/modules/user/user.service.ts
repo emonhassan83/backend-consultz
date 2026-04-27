@@ -31,7 +31,6 @@ import { Withdraw } from '../withdraw/withdraw.model'
 import { WITHDRAW_STATUS } from '../withdraw/withdraw.constant'
 import { modeType } from '../notification/notification.interface'
 import { BookingSlots } from '../bookingSlots/bookingSlots.model'
-import { generateHourlySlots } from '../bookingSlots/bookingSlots.utils'
 
 const registerUserIntoDB = async (
   payload: TUser & { referralCode?: string },
@@ -872,16 +871,32 @@ const changeUserStatusFromDB = async (payload: {
   return updatedUser
 }
 
-export const regenerateSlotsForExpert = async (expertId: string): Promise<void> => {
-  // Proper typing
-  const expert = await User.findById(expertId).select('availability').lean();
-  
-  if (!expert || !expert.availability?.length) {
-    console.log(`[Slot Regeneration] No availability found for expert: ${expertId}`);
-    return;
+// Helper: Generate hourly slots
+const generateHourlySlots = (from: string, to: string): string[] => {
+  const slots: string[] = [];
+  let current = dayjs(`2000-01-01 ${from}`);
+  const end = dayjs(`2000-01-01 ${to}`);
+
+  while (current.isBefore(end)) {
+    slots.push(current.format('HH:mm'));
+    current = current.add(1, 'hour');
   }
 
-  console.log(`[Slot Regeneration] Started for expert: ${expertId}`);
+  return slots;
+};
+
+export const regenerateSlotsForExpert = async (expertId: string): Promise<void> => {
+  console.log(`[Slot Regeneration] 🔄 Starting for expert: ${expertId}`);
+
+  // Fetch expert with lean for performance
+  const expert = await User.findById(expertId)
+    .select('availability')
+    .lean() as any;
+
+  if (!expert || !expert.availability?.length) {
+    console.log(`[Slot Regeneration] ⚠️ No availability found for expert: ${expertId}`);
+    return;
+  }
 
   const currentMonth = dayjs().startOf('month');
   const futureMonths = 6; // আগামী ৬ মাস
@@ -890,37 +905,42 @@ export const regenerateSlotsForExpert = async (expertId: string): Promise<void> 
     const targetMonth = currentMonth.add(i, 'month');
     const year = targetMonth.year();
     const month = targetMonth.month() + 1;
-
     const monthPrefix = `${year}-${month.toString().padStart(2, '0')}`;
 
-    // Get existing slots
-    const existingSlots = await BookingSlots.find({
-      author: new Types.ObjectId(expertId),
-      date: { $regex: `^${monthPrefix}` },
-    }).select('date time isBooked').lean();
+    console.log(`[Slot Regeneration] 📅 Processing month: ${monthPrefix}`);
 
-    // Protect booked slots
-    const bookedDates = new Set(
-      existingSlots
-        .filter((slot: any) => slot.isBooked === true)
-        .map((slot: any) => slot.date)
+    // Get existing booked slots (must protect these)
+    const bookedSlots = await BookingSlots.find({
+      author: expertId,
+      date: { $regex: `^${monthPrefix}` },
+      isBooked: true,
+    }).select('date time').lean();
+
+    const bookedSet = new Set(
+      bookedSlots.map((slot: any) => `${slot.date}|${slot.time}`)
     );
 
-    // Delete only empty slots
-    await BookingSlots.deleteMany({
-      author: new Types.ObjectId(expertId),
+    console.log(`[Slot Regeneration] 🔒 Found ${bookedSet.size} booked slots to preserve`);
+
+    // Delete ONLY unbooked slots for this month
+    const deleteResult = await BookingSlots.deleteMany({
+      author: expertId,
       date: { $regex: `^${monthPrefix}` },
       isBooked: false,
     });
 
-    // Generate new slots from current availability
+    console.log(`[Slot Regeneration] 🗑️ Deleted ${deleteResult.deletedCount} unbooked slots`);
+
+    // Generate new slots
     const daysInMonth = targetMonth.daysInMonth();
     const slotsToInsert: any[] = [];
 
     for (let d = 1; d <= daysInMonth; d++) {
       const currentDate = dayjs(`${year}-${month}-${d}`);
+      const dateStr = currentDate.format('YYYY-MM-DD');
       const weekDay = currentDate.format('ddd').toLowerCase();
 
+      // Find availability for this weekday
       const dayAvailability = expert.availability.find(
         (a: any) => a.day === weekDay
       );
@@ -930,13 +950,15 @@ export const regenerateSlotsForExpert = async (expertId: string): Promise<void> 
           const hourlySlots = generateHourlySlots(slotRange.from, slotRange.to);
 
           hourlySlots.forEach((time: string) => {
-            const dateStr = currentDate.format('YYYY-MM-DD');
+            const slotKey = `${dateStr}|${time}`;
 
             // Skip if already booked
-            if (bookedDates.has(dateStr)) return;
+            if (bookedSet.has(slotKey)) {
+              return;
+            }
 
             slotsToInsert.push({
-              author: new Types.ObjectId(expertId),
+              author: expertId,
               date: dateStr,
               time,
               isBooked: false,
@@ -946,14 +968,24 @@ export const regenerateSlotsForExpert = async (expertId: string): Promise<void> 
       }
     }
 
+    // Bulk insert new slots
     if (slotsToInsert.length > 0) {
-      await BookingSlots.insertMany(slotsToInsert, { ordered: false });
-      console.log(`[Slot Regeneration] Created ${slotsToInsert.length} slots for ${monthPrefix}`);
+      try {
+        await BookingSlots.insertMany(slotsToInsert, { ordered: false });
+        console.log(`[Slot Regeneration] ✅ Created ${slotsToInsert.length} slots for ${monthPrefix}`);
+      } catch (err: any) {
+        // Ignore duplicate key errors (E11000)
+        if (err.code !== 11000) {
+          throw err;
+        }
+        console.log(`[Slot Regeneration] ⚠️ Some duplicate slots skipped`);
+      }
+    } else {
+      console.log(`[Slot Regeneration] ℹ️ No new slots needed for ${monthPrefix}`);
     }
   }
 
-  // Optional: Send notification to expert
-  await sendSlotRegenerationNotification(expertId);
+  console.log(`[Slot Regeneration] ✅ Completed successfully for expert: ${expertId}`);
 };
 
 const changeUserNotifyFromDB = async (id: string, payload: any) => {
@@ -1042,8 +1074,8 @@ const updateUserInfoFromDB = async (
             message: 'Social Profiles Added!',
             description:
               'Congratulations! You earned 150 points for adding your social profiles. 🎉',
-              reference: user._id,
-              modelType: modeType.Achievement,
+            reference: user._id,
+            modelType: modeType.Achievement,
           })
         }
       }
@@ -1118,28 +1150,17 @@ const updateUserInfoFromDB = async (
       }
     }
 
-    // Step 4: Apply the final update
-    const updatedUser = await User.findByIdAndUpdate(userId, finalPayload, {
-      new: true,
-      runValidators: true,
-      session,
-    }).select(
-      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points socialProfiles hourlyRate bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability status createdAt role profileCompletionBonusClaimed socialProofBonusClaimed',
-    )
-
-    if (!updatedUser) {
-      throw new AppError(
-        httpStatus.NOT_FOUND,
-        'User not found and failed to update!',
-      )
-    }
+    // ✅ Step 4: Update document এবং save করো (middleware trigger হবে)
+    Object.assign(user, finalPayload)
+    
+    const updatedUser = await user.save({ session })
 
     await session.commitTransaction()
 
-    // 🔥 Calculate profile progress after update (without saving to DB)
+    // Calculate profile progress after update
     const profileSetupProgress = calculateProfileSetupProgress(updatedUser)
 
-    // 🎯 Return user data with calculated progress
+    // Return user data with calculated progress
     return {
       ...updatedUser.toObject(),
       profileSetupProgress,
