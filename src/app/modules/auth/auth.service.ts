@@ -19,7 +19,7 @@ import {
 } from './auth.interface'
 import { generateOtp } from '../../utils/generateOtp'
 import moment from 'moment'
-import { REGISTER_WITH, USER_STATUS } from '../user/user.constant'
+import { REGISTER_WITH, USER_ROLE, USER_STATUS } from '../user/user.constant'
 
 const loginUser = async (payload: TLoginUser) => {
   //* checking if the user is exist
@@ -113,6 +113,7 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
     firstName: payload.firstName,
     lastName: payload.lastName,
     email: payload.email,
+    role: payload.role,
     photoUrl: payload.photoUrl,
     fcmToken: payload.fcmToken,
   }
@@ -126,7 +127,6 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
   }
 
   if (user) {
-    // Validate registration method
     if (user.registerWith !== REGISTER_WITH.google) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
@@ -134,7 +134,6 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
       )
     }
 
-    // Reactivate if deleted
     if (user.isDeleted) {
       const updatedUser = await User.findByIdAndUpdate(
         user._id,
@@ -157,17 +156,19 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
       return generateTokens(updatedUser)
     }
 
-    // Otherwise, update coordinates & FCM token silently
     await User.findByIdAndUpdate(user._id, updateData, { new: true })
     return generateTokens(user)
   }
 
-  // Create new user if not exists
+  // ================== NEW USER CREATION ==================
+  const isExpert = payload.role === USER_ROLE.expert;
+
   const newUser = await User.create({
     ...updateData,
     registerWith: REGISTER_WITH.google,
     verification: { otp: 0, expiresAt: new Date(), status: true },
     expireAt: null,
+    status: isExpert ? USER_STATUS.pending : USER_STATUS.active,   // ← Key Change
   })
 
   if (!newUser) {
@@ -194,6 +195,7 @@ const registerWithApple = async (payload: TAppleLoginPayload) => {
     firstName: payload.firstName,
     lastName: payload.lastName,
     email: payload.email,
+    role: payload.role,
     photoUrl: payload.photoUrl,
     fcmToken: payload.fcmToken,
   }
@@ -239,11 +241,15 @@ const registerWithApple = async (payload: TAppleLoginPayload) => {
     return generateTokens(user)
   }
 
+  // ================== NEW USER CREATION ==================
+  const isExpert = payload.role === USER_ROLE.expert;
+
   const newUser = await User.create({
     ...updateData,
     registerWith: REGISTER_WITH.apple,
     verification: { otp: 0, expiresAt: new Date(), status: true },
     expireAt: null,
+    status: isExpert ? USER_STATUS.pending : USER_STATUS.active,   // ← Key Change
   })
 
   if (!newUser) {

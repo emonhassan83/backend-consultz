@@ -55,7 +55,7 @@ export const generateTokens = (user: TUser) => {
     config.jwt_refresh_expires_in as TExpiresIn,
   )
 
-  return { user: userResponse, accessToken, refreshToken }
+  return { user: userResponse, accessToken }
 }
 
 // sent notify to user
