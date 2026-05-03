@@ -29,7 +29,7 @@ export const USER_STATUS = {
 
 export const registerWith = [
   REGISTER_WITH.google,
-  REGISTER_WITH.linkedin,
+  REGISTER_WITH.apple,
   REGISTER_WITH.credentials,
 ]
 
