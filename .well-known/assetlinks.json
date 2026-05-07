@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.consultzuser.app",
+      "sha256_cert_fingerprints": [
+        "89:99:C4:F0:A2:44:CE:25:0D:78:D2:F1:AE:64:47:91:F0:AB:A4:9B:A9:99:BF:5E:8F:5F:40:E0:7C:7B:81:08"
+      ]
+    }
+  }
+]

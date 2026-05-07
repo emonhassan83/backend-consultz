@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser'
 import globalErrorHandler from './app/middleware/globalErrorHandler'
 import notFound from './app/middleware/notFound'
 import router from './app/routes'
+import path from 'path'
 
 const app: Application = express()
 
@@ -22,6 +23,15 @@ app.use(cookieParser())
 
 // application routes
 app.use('/api/v1', router)
+
+// Serve .well-known folder for Deep Linking
+app.use('/.well-known', express.static(path.join(process.cwd(), '.well-known'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('apple-app-site-association')) {
+      res.set('Content-Type', 'application/json');
+    }
+  }
+}));
 
 app.get('/', (req: Request, res: Response) => {
   res.json({
