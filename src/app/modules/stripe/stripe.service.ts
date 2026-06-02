@@ -15,15 +15,16 @@ const stripLinkAccount = async (userId: string) => {
   }
 
   try {
-    const account = await StripeService.getStripe().accounts.create({
+      const account = await StripeService.getStripe().accounts.create({
       type: 'express',
       country: 'US',
       email: user.email, // Important: Add email
+      business_type: 'individual',
       capabilities: {
         card_payments: { requested: true },
         transfers: { requested: true },
       },
-    })
+    });
 
     const accountId = account.id
 

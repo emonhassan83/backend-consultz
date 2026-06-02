@@ -97,16 +97,14 @@ const getAllFeedsFromDB = async (
   query: Record<string, unknown>,
   currentUserId: string,
 ) => {
-  // ✅ Current user check
+  // ── Current user check ────────────────────────────────────────────────────
   const currentUser = await User.findById(currentUserId).select('role');
-  if (!currentUser) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
-  }
+  if (!currentUser) throw new AppError(httpStatus.NOT_FOUND, 'User not found');
 
-  // ✅ Base filter
+  // ── Base filter ───────────────────────────────────────────────────────────
   let feedFilter: any = { isDeleted: false };
 
-  // ✅ Blocked users filter (non-admin)
+  // ── Blocked users filter ──────────────────────────────────────────────────
   if (currentUser.role !== USER_ROLE.admin) {
     const blockedDocs = await BlockProfile.find({ blocker: currentUserId }).select('blocked');
     const blockedIds = blockedDocs.map((doc) => doc.blocked);
@@ -115,57 +113,89 @@ const getAllFeedsFromDB = async (
     }
   }
 
-  // ✅ Status filter
+  // ── Status filter ─────────────────────────────────────────────────────────
   if (query.status) {
     feedFilter.status = query.status;
+    delete query.status;
   }
 
-  // ✅ Count active/restrict feeds
-  const activeCount = await Feed.countDocuments({ ...feedFilter, status: FEED_STATUS.active });
-  const restrictCount = await Feed.countDocuments({ ...feedFilter, status: FEED_STATUS.restrict });
+  // ── Search: description + author fields ───────────────────────────────────
+  if (query.searchTerm && typeof query.searchTerm === 'string') {
+    const term = query.searchTerm.trim();
 
-  // ✅ Build query
+    // Find authors whose name/expertise/skills match
+    const matchingAuthors = await User.find({
+      isDeleted: false,
+      $or: [
+        { firstName:  { $regex: term, $options: 'i' } },
+        { lastName:   { $regex: term, $options: 'i' } },
+        { expertise:  { $regex: term, $options: 'i' } },
+        { skills:     { $regex: term, $options: 'i' } },
+      ],
+    })
+      .select('_id')
+      .lean();
+
+    const authorIds = matchingAuthors.map((u) => u._id);
+
+    // Merge with any existing author filter (blocked users)
+    const authorConditions: any[] = [
+      { description: { $regex: term, $options: 'i' } },
+    ];
+
+    if (authorIds.length > 0) {
+      // Respect blocked users — only include non-blocked matching authors
+      const blockedNin = feedFilter.author?.$nin ?? [];
+      const filteredAuthorIds = blockedNin.length > 0
+        ? authorIds.filter(
+            (id) => !blockedNin.some((b: any) => b.toString() === id.toString()),
+          )
+        : authorIds;
+
+      if (filteredAuthorIds.length > 0) {
+        authorConditions.push({ author: { $in: filteredAuthorIds } });
+      }
+    }
+
+    feedFilter.$or = authorConditions;
+
+    // Remove author.$nin from top-level since it's now handled inside $or
+    delete feedFilter.author;
+
+    delete query.searchTerm; // prevent QueryBuilder from double-searching
+  }
+
+  // ── Count active/restrict ─────────────────────────────────────────────────
+  const [activeCount, restrictCount] = await Promise.all([
+    Feed.countDocuments({ ...feedFilter, status: FEED_STATUS.active }),
+    Feed.countDocuments({ ...feedFilter, status: FEED_STATUS.restrict }),
+  ]);
+
+  // ── Build query ───────────────────────────────────────────────────────────
   const feedQuery = new QueryBuilder(
-    Feed.find({ ...feedFilter }).populate([
-      { path: 'author', select: 'firstName lastName headline photoUrl' },
+    Feed.find(feedFilter).populate([
+      { path: 'author', select: 'firstName lastName headline photoUrl expertise skills' },
       { path: 'contentMeta', select: 'like comment likeBy' },
     ]),
     query,
   )
-    .search(['description', 'author.firstName', 'author.lastName']) // DB-level search
     .filter()
     .sortByCustom({ createdAt: -1 })
     .paginate()
     .fields();
 
-  let feedList = await feedQuery.modelQuery;
-  let meta = await feedQuery.countTotal();
+  const [feedList, meta] = await Promise.all([
+    feedQuery.modelQuery,
+    feedQuery.countTotal(),
+  ]);
 
-  // ✅ Safe searchTerm cast
-  const searchTerm =
-    typeof query.searchTerm === 'string'
-      ? query.searchTerm.trim().toLowerCase()
-      : '';
-
-  // ✅ Extra fallback filter (post-processing)
-  if (searchTerm) {
-    feedList = feedList.filter((feed: any) => {
-      const descMatch = feed.description?.toLowerCase().includes(searchTerm) || false;
-      const authorName = `${feed.author?.firstName ?? ''} ${feed.author?.lastName ?? ''}`
-        .trim()
-        .toLowerCase();
-      return descMatch || authorName.includes(searchTerm);
-    });
-
-    meta.total = feedList.length;
-    meta.totalPage = Math.ceil(feedList.length / (Number(query.limit) || 10));
-  }
-
-  // ✅ Batch check isReported
+  // ── Batch isReported check ────────────────────────────────────────────────
   const feedIds = feedList.map((f: any) => f._id.toString());
-  const reportedMap = feedIds.length > 0 ? await getReportedStatusBatch(feedIds) : new Map();
+  const reportedMap = feedIds.length > 0
+    ? await getReportedStatusBatch(feedIds)
+    : new Map();
 
-  // ✅ Enrich with user info + isReported
+  // ── Enrich feeds ──────────────────────────────────────────────────────────
   const enrichedFeedList = await Promise.all(
     feedList.map(async (feed: any) => {
       const enriched = await enrichFeedWithUserInfo(feed, currentUserId);

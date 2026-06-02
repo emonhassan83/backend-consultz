@@ -206,7 +206,7 @@ const getAllUsersFromDB = async (
     ),
     query,
   )
-    .search(['firstName', 'lastName'])
+    .search(['firstName', 'lastName', 'expertise', 'skills'])
     .filter()
     .sort()
     .paginate()
