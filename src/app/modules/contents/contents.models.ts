@@ -1,0 +1,44 @@
+import { Schema, model } from 'mongoose'
+import { TContents, TContentsModel } from './contents.interface'
+
+const contentsSchema = new Schema<TContents>(
+  {
+    aboutUs: {
+      type: String,
+    },
+    termsAndConditions: {
+      type: String,
+    },
+    privacyPolicy: {
+      type: String,
+    },
+    paymentHoldDays: {
+      type: Number,
+      min: 1,
+      max: 60
+    },
+    consultationFee: {
+      type: Number,
+      min: 0,
+      max: 40
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+    },
+  },
+  {
+    timestamps: true,
+  },
+)
+
+// filter out deleted documents
+
+export const Contents = model<TContents, TContentsModel>(
+  'Contents',
+  contentsSchema,
+)
