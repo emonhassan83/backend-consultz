@@ -56,4 +56,9 @@ export default {
     appCertificate: process.env.AGORA_APP_CERTIFICATE,
     tokenExpire: process.env.AGORA_TOKEN_EXPIRE
   },
+  apns: {
+    keyId: process.env.APNS_KEY_ID,
+    teamId: process.env.APNS_TEAM_ID,
+    bundleId: process.env.APNS_BUNDLE_ID,
+  },
 }
