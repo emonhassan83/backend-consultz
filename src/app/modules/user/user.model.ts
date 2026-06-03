@@ -4,6 +4,7 @@ import { Schema, model } from 'mongoose'
 import { TUser, UserModel } from './user.interface'
 import {
   DAY_MAP,
+  DEVICE_TYPE,
   REGISTER_WITH,
   registerWith,
   USER_ROLE,
@@ -74,6 +75,14 @@ const userSchema = new Schema<TUser, UserModel>(
     headline: { type: String, default: '' },
     bio: { type: String, default: '' },
     fcmToken: { type: String, default: null },
+    voipToken: {
+      type: String,
+      default: null,
+    },
+    deviceType: {
+      type: String,
+      enum: Object.values(DEVICE_TYPE)
+    },
     photoUrl: { type: String, default: null },
     coverPhoto: { type: String, default: null },
     phoneNumber: { type: String, default: null },
@@ -242,50 +251,58 @@ userSchema.index({ referralCode: 1 })
 
 userSchema.pre('save', async function (next) {
   if (this.isModified('password')) {
-    this.password = await bcrypt.hash(this.password, Number(config.bcrypt_salt_rounds));
+    this.password = await bcrypt.hash(
+      this.password,
+      Number(config.bcrypt_salt_rounds),
+    )
   }
 
   // Store old availability BEFORE save for comparison in post hook
   if (this.isModified('availability') && !this.isNew) {
-    const oldDoc = await this.model('User')
+    const oldDoc = (await this.model('User')
       .findById(this._id)
       .select('availability')
-      .lean() as TUser | null;
+      .lean()) as TUser | null
 
-    (this as any)._oldAvailability = JSON.stringify(oldDoc?.availability || []);
+    ;(this as any)._oldAvailability = JSON.stringify(oldDoc?.availability || [])
   }
 
-  next();
-});
+  next()
+})
 
 userSchema.post('save', async function (doc: any) {
-  const oldAvailability = (doc as any)._oldAvailability;
+  const oldAvailability = (doc as any)._oldAvailability
 
   // Only proceed if pre-hook stored old availability (meaning it was modified)
-  if (oldAvailability === undefined) return;
+  if (oldAvailability === undefined) return
 
-  const newAvailability = JSON.stringify(doc.availability || []);
-  const hasChanged = oldAvailability !== newAvailability;
+  const newAvailability = JSON.stringify(doc.availability || [])
+  const hasChanged = oldAvailability !== newAvailability
 
   // Cleanup temp props immediately
-  delete (doc as any)._oldAvailability;
+  delete (doc as any)._oldAvailability
 
   if (!hasChanged) {
-    console.log('[Availability Hook] Content unchanged — skipping regeneration');
-    return;
+    console.log('[Availability Hook] Content unchanged — skipping regeneration')
+    return
   }
 
-  console.log('[Availability Hook] ✅ Change detected — triggering slot regeneration');
+  console.log(
+    '[Availability Hook] ✅ Change detected — triggering slot regeneration',
+  )
 
   setImmediate(async () => {
     try {
-      await regenerateSlotsForExpert(doc._id.toString());
-      console.log(`[Slot Regeneration] ✅ Completed for expert: ${doc._id}`);
+      await regenerateSlotsForExpert(doc._id.toString())
+      console.log(`[Slot Regeneration] ✅ Completed for expert: ${doc._id}`)
     } catch (err: any) {
-      console.error(`[Slot Regeneration] ❌ Failed for expert ${doc._id}:`, err.message);
+      console.error(
+        `[Slot Regeneration] ❌ Failed for expert ${doc._id}:`,
+        err.message,
+      )
     }
-  });
-});
+  })
+})
 
 //* Static method: find user by email
 userSchema.statics.isUserExistsByEmail = async function (

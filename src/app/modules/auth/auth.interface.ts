@@ -13,6 +13,8 @@ export interface TLoginUser {
   latitude?: number
   longitude?: number
   fcmToken?: string
+  voipToken?: string
+  deviceType?: string
 }
 
 export interface TGoogleLoginPayload {
@@ -23,6 +25,8 @@ export interface TGoogleLoginPayload {
   photoUrl?: string
   token?: string // Google auth token or ID token
   fcmToken?: string
+  voipToken?: string
+  deviceType?: string
   latitude?: number
   longitude?: number
 }
@@ -35,6 +39,8 @@ export interface TAppleLoginPayload {
   role?: TUserRole
   token?: string // Apple identity token
   fcmToken?: string
+  voipToken?: string
+  deviceType?: string
   latitude?: number
   longitude?: number
 }

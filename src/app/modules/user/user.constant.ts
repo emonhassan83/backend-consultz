@@ -33,10 +33,16 @@ export const registerWith = [
   REGISTER_WITH.credentials,
 ]
 
+export const DEVICE_TYPE = {
+  android: 'android',
+  ios: 'ios',
+} as const
+
 export type TDaysMap = keyof typeof DAY_MAP
 export type TRegisterWith = keyof typeof REGISTER_WITH
 export type TUserRole = keyof typeof USER_ROLE
 export type TUserStatus = keyof typeof USER_STATUS
+export type TDeviceType = keyof typeof DEVICE_TYPE
 
 export const UserSearchableFields = ['name']
 

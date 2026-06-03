@@ -40,7 +40,8 @@ export const generateTokens = (user: TUser) => {
     role: user.role,
     isProfileSetup: user.isProfileSetup,
     status: user.status,
-    registerWith: user.registerWith
+    registerWith: user.registerWith,
+    deviceType: user.deviceType,
   }
 
   const accessToken = createToken(

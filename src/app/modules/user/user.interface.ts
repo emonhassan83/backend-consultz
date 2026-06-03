@@ -1,5 +1,5 @@
 import { Model, Types } from 'mongoose'
-import { TDaysMap, TUserRole, TUserStatus } from './user.constant'
+import { TDaysMap, TDeviceType, TUserRole, TUserStatus } from './user.constant'
 
 export type TAvailabilitySlot = {
   from: string; // "09:00"
@@ -40,6 +40,8 @@ export interface TUser {
   bio: string
   password: string
   fcmToken: string
+  voipToken: string
+  deviceType?: TDeviceType
   photoUrl?: string
   coverPhoto?: string
   phoneNumber?: string

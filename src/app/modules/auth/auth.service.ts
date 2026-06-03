@@ -19,7 +19,7 @@ import {
 } from './auth.interface'
 import { generateOtp } from '../../utils/generateOtp'
 import moment from 'moment'
-import { REGISTER_WITH, USER_ROLE, USER_STATUS } from '../user/user.constant'
+import { REGISTER_WITH, USER_STATUS } from '../user/user.constant'
 
 const loginUser = async (payload: TLoginUser) => {
   //* checking if the user is exist
@@ -67,9 +67,9 @@ const loginUser = async (payload: TLoginUser) => {
   //* 5. Prepare update object for FCM + location
   const updateData: any = {}
 
-  if (payload.fcmToken) {
-    updateData.fcmToken = payload.fcmToken
-  }
+  if (payload.fcmToken) updateData.fcmToken = payload.fcmToken;
+  if (payload.voipToken) updateData.voipToken = payload.voipToken;
+  if (payload.deviceType) updateData.deviceType = payload.deviceType; // 'android' or 'ios'
 
   // If coordinates provided, update GeoJSON location
   if (payload.latitude && payload.longitude) {
@@ -96,6 +96,7 @@ const loginUser = async (payload: TLoginUser) => {
       isProfileSetup: user.isProfileSetup,
       status: user.status,
       registerWith: user.registerWith,
+      deviceType: payload.deviceType || user.deviceType,
     },
   }
 }
@@ -116,6 +117,8 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
     email: payload.email,
     photoUrl: payload.photoUrl,
     fcmToken: payload.fcmToken,
+    voipToken: payload.voipToken,
+    deviceType: payload.deviceType,
   }
 
   if (payload.latitude && payload.longitude) {
@@ -196,6 +199,8 @@ const registerWithApple = async (payload: TAppleLoginPayload) => {
     email: payload.email,
     photoUrl: payload.photoUrl,
     fcmToken: payload.fcmToken,
+    voipToken: payload.voipToken,
+    deviceType: payload.deviceType,
   }
 
   if (payload.latitude && payload.longitude) {
