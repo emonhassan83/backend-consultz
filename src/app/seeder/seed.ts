@@ -9,7 +9,7 @@ import { categories } from '../utils/seedData'
 const adminUser = {
   firstName: 'vincent',
   lastName: 'wong',
-  email: 'admin@vincentwong.gmail.com',
+  email: 'vincentnetworkpropertybuyers@gmail.com',
   password: config.admin_pass,
   role: USER_ROLE.admin,
   contractNumber: '+876543345678',

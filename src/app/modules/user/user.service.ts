@@ -15,22 +15,21 @@ import {
   generateUserStatusEmail,
   getFollowingStatusBatch,
   getTotalBookingsBatch,
-  sendSlotRegenerationNotification,
   sendUserStatusNotifYToAdmin,
-  sendUserStatusNotifYToUser,
 } from './user.utils'
 import mongoose, { FilterQuery, Types } from 'mongoose'
 import { Booking } from '../booking/booking.models'
 import { BOOKING_STATUS } from '../booking/booking.constants'
-import config from '../../config'
 import { sendNotification } from '../../utils/sentNotification'
 import { Follow } from '../connection/connection.models'
 import { ProfileView } from '../profileView/profileView.model'
-import dayjs from 'dayjs'
 import { Withdraw } from '../withdraw/withdraw.model'
 import { WITHDRAW_STATUS } from '../withdraw/withdraw.constant'
 import { modeType } from '../notification/notification.interface'
 import { BookingSlots } from '../bookingSlots/bookingSlots.model'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+dayjs.extend(utc)
 
 const registerUserIntoDB = async (
   payload: TUser & { referralCode?: string },
@@ -80,10 +79,7 @@ const registerUserIntoDB = async (
     ...rest,
     email,
     password,
-    status:
-      payload.role === USER_ROLE.expert
-        ? USER_STATUS.pending
-        : payload.status || USER_STATUS.active,
+    status: USER_STATUS.active,
   }
 
   const newUser = await User.create(finalPayload)
@@ -147,7 +143,7 @@ const getAllUsersFromDB = async (
       .map((i) => i.trim())
       .filter(Boolean)
     if (interests.length > 0) {
-      orConditions.push({ interests: { $in: interests } })
+      orConditions.push({ expertise: { $in: interests } }) // ← was interests
     }
     delete query.interests
   }
@@ -158,7 +154,7 @@ const getAllUsersFromDB = async (
       .map((s) => s.trim())
       .filter(Boolean)
     if (styles.length > 0) {
-      orConditions.push({ learningStyles: { $in: styles } })
+      orConditions.push({ advisingStyles: { $in: styles } }) // ← was learningStyles
     }
     delete query.learningStyles
   }
@@ -210,7 +206,7 @@ const getAllUsersFromDB = async (
     ),
     query,
   )
-    .search(['firstName', 'lastName'])
+    .search(['firstName', 'lastName', 'expertise', 'skills'])
     .filter()
     .sort()
     .paginate()
@@ -280,24 +276,24 @@ const getInterestExpertsFromDB = async (
   let matchConditions: any[] = []
 
   if (role === USER_ROLE.expert) {
-  if (expertise?.length) {
-    matchConditions.push({
-      $or: [
-        { expertise: { $in: expertise } },
-        { skills: { $in: expertise } },
-      ],
-    })
+    if (expertise?.length) {
+      matchConditions.push({
+        $or: [
+          { expertise: { $in: expertise } },
+          { skills: { $in: expertise } },
+        ],
+      })
+    }
+  } else {
+    if (interests?.length) {
+      matchConditions.push({
+        $or: [
+          { expertise: { $in: interests } },
+          { skills: { $in: interests } },
+        ],
+      })
+    }
   }
-} else {
-  if (interests?.length) {
-    matchConditions.push({
-      $or: [
-        { expertise: { $in: interests } },
-        { skills: { $in: interests } },
-      ],
-    })
-  }
-}
 
   // 🔥 Fallback: যদি কোনো condition না থাকে, তাহলে সব expert দেখাবে
   if (matchConditions.length === 0) {
@@ -442,27 +438,28 @@ const getTopExpertsFromDB = async (
 // ====================== PUBLIC VERSIONS (Non-Auth) ======================
 
 // 1. Public Interest Experts
-const getPublicInterestExpertsFromDB = async (query: Record<string, unknown>) => {
-  const { interests } = query;
+const getPublicInterestExpertsFromDB = async (
+  query: Record<string, unknown>,
+) => {
+  const { interests } = query
 
-  let matchConditions: any[] = [];
+  let matchConditions: any[] = []
 
   if (interests) {
-  const interestList = (interests as string).split(',').map(i => i.trim());
-  if (interestList.length > 0) {
-    matchConditions.push({
-      $or: [
-        { expertise: { $in: interestList } },
-        { skills: { $in: interestList } }, // 👈 skills ফিল্ডেও match করো
-      ],
-    });
+    const interestList = (interests as string).split(',').map((i) => i.trim())
+    if (interestList.length > 0) {
+      matchConditions.push({
+        $or: [
+          { expertise: { $in: interestList } },
+          { skills: { $in: interestList } }, // 👈 skills ফিল্ডেও match করো
+        ],
+      })
+    }
   }
-}
-
 
   // Fallback: যদি interests না দেয়া হয় তাহলে সব expert দেখাবে
   if (matchConditions.length === 0) {
-    matchConditions = [{}];
+    matchConditions = [{}]
   }
 
   const baseFilter = {
@@ -470,7 +467,7 @@ const getPublicInterestExpertsFromDB = async (query: Record<string, unknown>) =>
     status: USER_STATUS.active,
     role: USER_ROLE.expert,
     $or: matchConditions,
-  };
+  }
 
   const usersQuery = new QueryBuilder(
     User.find(baseFilter).select(
@@ -484,22 +481,24 @@ const getPublicInterestExpertsFromDB = async (query: Record<string, unknown>) =>
       points: -1,
     })
     .paginate()
-    .fields();
+    .fields()
 
-  const experts = await usersQuery.modelQuery;
-  const meta = await usersQuery.countTotal();
+  const experts = await usersQuery.modelQuery
+  const meta = await usersQuery.countTotal()
 
   const result = experts.map((expert: any) => ({
     ...expert.toObject(),
-    isFollowing: false,           // non-auth user → always false
-    totalBookings: 0,             // non-auth → hide sensitive count
-  }));
+    isFollowing: false, // non-auth user → always false
+    totalBookings: 0, // non-auth → hide sensitive count
+  }))
 
-  return { meta, result };
-};
+  return { meta, result }
+}
 
 // 2. Public Property Experts
-const getPublicPropertyExpertsFromDB = async (query: Record<string, unknown>) => {
+const getPublicPropertyExpertsFromDB = async (
+  query: Record<string, unknown>,
+) => {
   const baseFilter = {
     isDeleted: false,
     status: USER_STATUS.active,
@@ -508,7 +507,7 @@ const getPublicPropertyExpertsFromDB = async (query: Record<string, unknown>) =>
       { expertise: { $in: ['Property & Real Estate'] } },
       { skills: { $in: PROPERTY_SKILLS } },
     ],
-  };
+  }
 
   const usersQuery = new QueryBuilder(
     User.find(baseFilter).select(
@@ -522,19 +521,19 @@ const getPublicPropertyExpertsFromDB = async (query: Record<string, unknown>) =>
       points: -1,
     })
     .paginate()
-    .fields();
+    .fields()
 
-  const experts = await usersQuery.modelQuery;
-  const meta = await usersQuery.countTotal();
+  const experts = await usersQuery.modelQuery
+  const meta = await usersQuery.countTotal()
 
   const result = experts.map((expert: any) => ({
     ...expert.toObject(),
     isFollowing: false,
     totalBookings: 0,
-  }));
+  }))
 
-  return { meta, result };
-};
+  return { meta, result }
+}
 
 // 3. Public Top Experts
 const getPublicTopExpertsFromDB = async (query: Record<string, unknown>) => {
@@ -543,7 +542,7 @@ const getPublicTopExpertsFromDB = async (query: Record<string, unknown>) => {
     status: USER_STATUS.active,
     role: USER_ROLE.expert,
     avgRating: { $gte: 4 },
-  };
+  }
 
   const usersQuery = new QueryBuilder(
     User.find(baseFilter).select(
@@ -557,19 +556,19 @@ const getPublicTopExpertsFromDB = async (query: Record<string, unknown>) => {
       followers: -1,
     })
     .paginate()
-    .fields();
+    .fields()
 
-  const experts = await usersQuery.modelQuery;
-  const meta = await usersQuery.countTotal();
+  const experts = await usersQuery.modelQuery
+  const meta = await usersQuery.countTotal()
 
   const result = experts.map((expert: any) => ({
     ...expert.toObject(),
     isFollowing: false,
     totalBookings: 0,
-  }));
+  }))
 
-  return { meta, result };
-};
+  return { meta, result }
+}
 
 // 4. Investment experts
 const getInvestmentExperts = async (
@@ -642,37 +641,21 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
   try {
     const user = await User.findById(viewedUserId)
       .select(
-        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline following followers points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education isTopExpert pushNotify emailNotify status createdAt',
+        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education isTopExpert pushNotify emailNotify status createdAt',
+        // ── removed: following, followers (now computed from Follow model)
       )
       .lean()
 
-    if (!user || user.isDeleted) {
+    if (!user || user.isDeleted)
       throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
-    }
 
     if (viewerId !== viewedUserId) {
       await ProfileView.findOneAndUpdate(
-        {
-          viewer: viewerId,
-          viewedUser: viewedUserId,
-        },
-        {
-          $setOnInsert: { viewedAt: new Date() },
-        },
-        {
-          upsert: true,
-          new: true,
-          session,
-        },
+        { viewer: viewerId, viewedUser: viewedUserId },
+        { $setOnInsert: { viewedAt: new Date() } },
+        { upsert: true, new: true, session },
       )
     }
-
-    let referralLink = ''
-    if (user.referralCode) {
-      referralLink = `${config.app_url}/signup?ref=${user.referralCode}`
-    }
-
-    const deeplink = `consultz://profile/${viewedUserId}`;
 
     const last7Days = dayjs().subtract(7, 'day').toDate()
 
@@ -683,23 +666,26 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       isFollowing,
       totalWithdrawResult,
       pendingWithdrawResult,
-      last7DaysFollowersCount, // ✅
-      totalFollowersCount, // ✅
+      last7DaysFollowersCount,
+      totalFollowersCount,
+      totalFollowingCount, // ── how many this user follows
     ] = await Promise.all([
       Booking.countDocuments({
         consult: viewedUserId,
         status: BOOKING_STATUS.completed,
       }),
+
       Booking.countDocuments({ consult: viewedUserId }),
+
       ProfileView.countDocuments({
         viewedUser: viewedUserId,
         viewedAt: { $gte: last7Days },
       }),
-      Follow.exists({
-        follower: viewerId,
-        following: viewedUserId,
-      }),
-      // ✅ completed withdraw total amount
+
+      // ── is the viewer following this user?
+      Follow.exists({ follower: viewerId, following: viewedUserId }),
+
+      // ── completed withdrawals total
       Withdraw.aggregate([
         {
           $match: {
@@ -707,14 +693,10 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
             status: WITHDRAW_STATUS.completed,
           },
         },
-        {
-          $group: {
-            _id: null,
-            total: { $sum: '$amount' },
-          },
-        },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
-      // ✅ proceed + hold withdraw
+
+      // ── pending (proceed + hold) withdrawals total
       Withdraw.aggregate([
         {
           $match: {
@@ -722,29 +704,25 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
             status: { $in: [WITHDRAW_STATUS.proceed, WITHDRAW_STATUS.hold] },
           },
         },
-        {
-          $group: {
-            _id: null,
-            total: { $sum: '$amount' },
-          },
-        },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
 
-      // last 7 days new followers
+      // ── new followers in last 7 days
       Follow.countDocuments({
         following: viewedUserId,
         createdAt: { $gte: last7Days },
       }),
-      // total followers
-      Follow.countDocuments({
-        following: viewedUserId,
-      }),
+
+      // ── total followers (others following this user)
+      Follow.countDocuments({ following: viewedUserId }),
+
+      // ── total following (this user follows others)
+      Follow.countDocuments({ follower: viewedUserId }),
     ])
 
     const totalWithdraw = totalWithdrawResult[0]?.total || 0
     const pendingWithdraw = pendingWithdrawResult[0]?.total || 0
 
-    // Growth rate calculate
     const followerGrowthRate =
       totalFollowersCount > 0
         ? parseFloat(
@@ -758,7 +736,6 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
         { $match: { consult: viewedUserId, status: BOOKING_STATUS.completed } },
         { $group: { _id: null, totalMinutes: { $sum: '$sessionDuration' } } },
       ])
-
       const minutes = totalMinutesResult[0]?.totalMinutes || 0
       advisingTimeInHours = Number((minutes / 60).toFixed(2))
     }
@@ -783,8 +760,6 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
     return {
       ...user,
       sessionDurations: sessionDurationsWithPrice,
-      referralLink,
-      deeplink,
       totalBookings: completedBookingsCount,
       profileSetupProgress,
       advisingTimeInHours,
@@ -794,6 +769,8 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       totalWithdraw,
       pendingWithdraw,
       followerGrowthRate,
+      followers: totalFollowersCount, // ── people following this user
+      following: totalFollowingCount, // ── people this user follows
     }
   } catch (error) {
     await session.abortTransaction()
@@ -871,122 +848,134 @@ const changeUserStatusFromDB = async (payload: {
   return updatedUser
 }
 
-// Helper: Generate hourly slots
 const generateHourlySlots = (from: string, to: string): string[] => {
-  const slots: string[] = [];
-  let current = dayjs(`2000-01-01 ${from}`);
-  const end = dayjs(`2000-01-01 ${to}`);
+  const slots: string[] = []
+  let current = dayjs.utc(`2000-01-01 ${from}`)
+  const end = dayjs.utc(`2000-01-01 ${to}`)
 
   while (current.isBefore(end)) {
-    slots.push(current.format('HH:mm'));
-    current = current.add(1, 'hour');
+    slots.push(current.format('HH:mm'))
+    current = current.add(1, 'hour')
   }
 
-  return slots;
-};
+  return slots
+}
 
-export const regenerateSlotsForExpert = async (expertId: string): Promise<void> => {
-  console.log(`[Slot Regeneration] 🔄 Starting for expert: ${expertId}`);
+export const regenerateSlotsForExpert = async (
+  expertId: string,
+): Promise<void> => {
+  console.log(`[Slot Regeneration] 🔄 Starting for expert: ${expertId}`)
 
-  // Fetch expert with lean for performance
-  const expert = await User.findById(expertId)
+  const expert = (await User.findById(expertId)
     .select('availability')
-    .lean() as any;
+    .lean()) as any
 
-  if (!expert || !expert.availability?.length) {
-    console.log(`[Slot Regeneration] ⚠️ No availability found for expert: ${expertId}`);
-    return;
+  if (!expert?.availability?.length) {
+    console.log(
+      `[Slot Regeneration] ⚠️ No availability for expert: ${expertId}`,
+    )
+    await BookingSlots.deleteMany({
+      author: expertId,
+      date: { $gte: dayjs.utc().format('YYYY-MM-DD') },
+      isBooked: false,
+    })
+    return
   }
 
-  const currentMonth = dayjs().startOf('month');
-  const futureMonths = 6; // আগামী ৬ মাস
+  const availabilityMap = new Map<string, { from: string; to: string }[]>()
+  for (const entry of expert.availability) {
+    availabilityMap.set(entry.day.toLowerCase(), entry.slots || [])
+  }
+
+  // ✅ Use UTC for all date operations
+  const currentMonth = dayjs.utc().startOf('month')
+  const futureMonths = 6
 
   for (let i = 0; i < futureMonths; i++) {
-    const targetMonth = currentMonth.add(i, 'month');
-    const year = targetMonth.year();
-    const month = targetMonth.month() + 1;
-    const monthPrefix = `${year}-${month.toString().padStart(2, '0')}`;
+    const targetMonth = currentMonth.add(i, 'month')
+    const year = targetMonth.year()
+    const month = targetMonth.month() + 1
+    const monthPrefix = `${year}-${month.toString().padStart(2, '0')}`
 
-    console.log(`[Slot Regeneration] 📅 Processing month: ${monthPrefix}`);
+    console.log(`[Slot Regeneration] 📅 Processing month: ${monthPrefix}`)
 
-    // Get existing booked slots (must protect these)
     const bookedSlots = await BookingSlots.find({
       author: expertId,
       date: { $regex: `^${monthPrefix}` },
       isBooked: true,
-    }).select('date time').lean();
+    })
+      .select('date time')
+      .lean()
 
     const bookedSet = new Set(
-      bookedSlots.map((slot: any) => `${slot.date}|${slot.time}`)
-    );
+      bookedSlots.map((s: any) => `${s.date}|${s.time}`),
+    )
+    console.log(
+      `[Slot Regeneration] 🔒 Preserving ${bookedSet.size} booked slots`,
+    )
 
-    console.log(`[Slot Regeneration] 🔒 Found ${bookedSet.size} booked slots to preserve`);
-
-    // Delete ONLY unbooked slots for this month
-    const deleteResult = await BookingSlots.deleteMany({
+    const deleted = await BookingSlots.deleteMany({
       author: expertId,
       date: { $regex: `^${monthPrefix}` },
       isBooked: false,
-    });
+    })
+    console.log(
+      `[Slot Regeneration] 🗑️ Deleted ${deleted.deletedCount} unbooked slots`,
+    )
 
-    console.log(`[Slot Regeneration] 🗑️ Deleted ${deleteResult.deletedCount} unbooked slots`);
-
-    // Generate new slots
-    const daysInMonth = targetMonth.daysInMonth();
-    const slotsToInsert: any[] = [];
+    const daysInMonth = targetMonth.daysInMonth()
+    const slotsToInsert: any[] = []
 
     for (let d = 1; d <= daysInMonth; d++) {
-      const currentDate = dayjs(`${year}-${month}-${d}`);
-      const dateStr = currentDate.format('YYYY-MM-DD');
-      const weekDay = currentDate.format('ddd').toLowerCase();
+      // ✅ Build date string directly — no dayjs date object needed for weekday
+      const dateStr = `${year}-${month.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`
 
-      // Find availability for this weekday
-      const dayAvailability = expert.availability.find(
-        (a: any) => a.day === weekDay
-      );
+      // ✅ Parse in UTC to get correct weekday
+      const currentDate = dayjs.utc(dateStr)
+      const weekDay = currentDate.format('ddd').toLowerCase() // 'sun', 'mon', etc.
 
-      if (dayAvailability?.slots?.length) {
-        dayAvailability.slots.forEach((slotRange: any) => {
-          const hourlySlots = generateHourlySlots(slotRange.from, slotRange.to);
+      const daySlots = availabilityMap.get(weekDay)
+      if (!daySlots?.length) continue
 
-          hourlySlots.forEach((time: string) => {
-            const slotKey = `${dateStr}|${time}`;
+      for (const slotRange of daySlots) {
+        const hourlySlots = generateHourlySlots(slotRange.from, slotRange.to)
 
-            // Skip if already booked
-            if (bookedSet.has(slotKey)) {
-              return;
-            }
+        for (const time of hourlySlots) {
+          const slotKey = `${dateStr}|${time}`
+          if (bookedSet.has(slotKey)) continue
 
-            slotsToInsert.push({
-              author: expertId,
-              date: dateStr,
-              time,
-              isBooked: false,
-            });
-          });
-        });
+          slotsToInsert.push({
+            author: expertId,
+            date: dateStr,
+            time,
+            isBooked: false,
+          })
+        }
       }
     }
 
-    // Bulk insert new slots
-    if (slotsToInsert.length > 0) {
-      try {
-        await BookingSlots.insertMany(slotsToInsert, { ordered: false });
-        console.log(`[Slot Regeneration] ✅ Created ${slotsToInsert.length} slots for ${monthPrefix}`);
-      } catch (err: any) {
-        // Ignore duplicate key errors (E11000)
-        if (err.code !== 11000) {
-          throw err;
-        }
-        console.log(`[Slot Regeneration] ⚠️ Some duplicate slots skipped`);
-      }
-    } else {
-      console.log(`[Slot Regeneration] ℹ️ No new slots needed for ${monthPrefix}`);
+    if (!slotsToInsert.length) {
+      console.log(
+        `[Slot Regeneration] ℹ️ No new slots needed for ${monthPrefix}`,
+      )
+      continue
+    }
+
+    try {
+      await BookingSlots.insertMany(slotsToInsert, { ordered: false })
+      console.log(
+        `[Slot Regeneration] ✅ Inserted ${slotsToInsert.length} slots for ${monthPrefix}`,
+      )
+    } catch (err: any) {
+      if (err.code !== 11000) throw err
+      console.log(
+        `[Slot Regeneration] ⚠️ Duplicate slots skipped for ${monthPrefix}`,
+      )
     }
   }
 
-  console.log(`[Slot Regeneration] ✅ Completed successfully for expert: ${expertId}`);
-};
+  console.log(`[Slot Regeneration] ✅ Done for expert: ${expertId}`)
+}
 
 const changeUserNotifyFromDB = async (id: string, payload: any) => {
   // 1️⃣ Validate user
@@ -1152,7 +1141,6 @@ const updateUserInfoFromDB = async (
 
     // ✅ Step 4: Update document এবং save করো (middleware trigger হবে)
     Object.assign(user, finalPayload)
-    
     const updatedUser = await user.save({ session })
 
     await session.commitTransaction()

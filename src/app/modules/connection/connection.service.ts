@@ -106,7 +106,7 @@ const getAllFollowers = async (targetUserId: string, currentUserId: string, quer
   const userQuery = new QueryBuilder(
     User.find({
       _id: { $in: followerIds },
-    }).select('firstName lastName headline photoUrl'),
+    }).select('firstName lastName headline photoUrl role'),
     query
   )
     .search(['firstName', 'lastName'])
@@ -154,7 +154,7 @@ const getAllFollowing = async (targetUserId: string, currentUserId: string, quer
   const userQuery = new QueryBuilder(
     User.find({
       _id: { $in: followingIds },
-    }).select('firstName lastName headline photoUrl'),
+    }).select('firstName lastName headline photoUrl role'),
     query
   )
     .search(['firstName', 'lastName'])

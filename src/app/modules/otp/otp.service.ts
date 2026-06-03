@@ -288,27 +288,27 @@ const sendOtpViaTokenInPhone = async (
     expiresIn: '5m',
   })
 
-  // === মক মোড চেক করা ===
-  const isDevelopment = config.node_env !== 'production'
+  // === Mock mode test ===
+  // const isDevelopment = config.node_env !== 'production'
 
-  if (isDevelopment) {
-    console.log('🔑 [MOCK OTP] Phone:', phoneNumber)
-    console.log('🔑 [MOCK OTP] Code:', otp)
-    console.log(
-      '🔑 [MOCK OTP] Expires at:',
-      expiresAt.format('YYYY-MM-DD HH:mm:ss'),
-    )
-    console.log('⚠️  Real SMS skipped in development mode')
+  // if (isDevelopment) {
+  //   console.log('🔑 [MOCK OTP] Phone:', phoneNumber)
+  //   console.log('🔑 [MOCK OTP] Code:', otp)
+  //   console.log(
+  //     '🔑 [MOCK OTP] Expires at:',
+  //     expiresAt.format('YYYY-MM-DD HH:mm:ss'),
+  //   )
+  //   console.log('⚠️  Real SMS skipped in development mode')
 
-    // টেস্টের জন্য OTP রিটার্ন করছি (প্রোডাকশনে এটা রিমুভ করবেন)
-    return {
-      token,
-      otp,
-      mock: true,
-    }
-  }
+  //   // টেস্টের জন্য OTP রিটার্ন করছি (প্রোডাকশনে এটা রিমুভ করবেন)
+  //   return {
+  //     token,
+  //     otp,
+  //     mock: true,
+  //   }
+  // }
 
-  // === প্রোডাকশন মোড: রিয়েল Twilio SMS ===
+  // === Production mode: Twilio SMS ===
   const client = twilio(config.twilio.accountSid, config.twilio.authToken)
 
   try {
@@ -369,27 +369,27 @@ const sendOtpViaDirectPhone = async (payload: { phoneNumber: string }) => {
     expiresIn: '5m',
   })
 
-  // === মক মোড চেক করা ===
-  const isDevelopment = config.node_env !== 'production'
+  // === Mock mode test ===
+  // const isDevelopment = config.node_env !== 'production'
 
-  if (isDevelopment) {
-    console.log('🔑 [MOCK OTP] Phone:', phoneNumber)
-    console.log('🔑 [MOCK OTP] Code:', otp)
-    console.log(
-      '🔑 [MOCK OTP] Expires at:',
-      expiresAt.format('YYYY-MM-DD HH:mm:ss'),
-    )
-    console.log('⚠️  Real SMS skipped in development mode')
+  // if (isDevelopment) {
+  //   console.log('🔑 [MOCK OTP] Phone:', phoneNumber)
+  //   console.log('🔑 [MOCK OTP] Code:', otp)
+  //   console.log(
+  //     '🔑 [MOCK OTP] Expires at:',
+  //     expiresAt.format('YYYY-MM-DD HH:mm:ss'),
+  //   )
+  //   console.log('⚠️  Real SMS skipped in development mode')
 
-    // টেস্টের জন্য OTP রিটার্ন করছি (প্রোডাকশনে এটা রিমুভ করবেন)
-    return {
-      token,
-      otp,
-      mock: true,
-    }
-  }
+  //   // টেস্টের জন্য OTP রিটার্ন করছি (প্রোডাকশনে এটা রিমুভ করবেন)
+  //   return {
+  //     token,
+  //     otp,
+  //     mock: true,
+  //   }
+  // }
 
-  // === প্রোডাকশন মোড: রিয়েল Twilio SMS ===
+  // === Production mode: Twilio SMS ===
   const client = twilio(config.twilio.accountSid, config.twilio.authToken)
 
   try {

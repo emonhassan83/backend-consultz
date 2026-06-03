@@ -10,18 +10,17 @@ class QueryBuilder<T> {
   }
 
   search(searchableFields: string[]) {
-    const searchTerm = this?.query?.searchTerm
+    const searchTerm = this.query?.searchTerm as string | undefined
     if (searchTerm) {
+      const terms: string[] = searchTerm.split(' ') // এখন split কাজ করবে
       this.modelQuery = this.modelQuery.find({
-        $or: searchableFields.map(
-          (field) =>
-            ({
-              [field]: { $regex: searchTerm, $options: 'i' },
-            }) as FilterQuery<T>,
+        $or: searchableFields.flatMap((field: string) =>
+          terms.map((term: string) => ({
+            [field]: { $regex: term, $options: 'i' },
+          })),
         ),
       })
     }
-
     return this
   }
 
@@ -59,28 +58,28 @@ class QueryBuilder<T> {
   }
 
   sortReviews() {
-    const sortQuery = (this.query?.sort as string)?.toLowerCase()?.trim();
+    const sortQuery = (this.query?.sort as string)?.toLowerCase()?.trim()
 
-    let sortOption: string | Record<string, 1 | -1> = '-createdAt'; // default: latest
+    let sortOption: string | Record<string, 1 | -1> = '-createdAt' // default: latest
 
     if (sortQuery) {
       switch (sortQuery) {
         case 'latest':
-          sortOption = '-createdAt';
-          break;
+          sortOption = '-createdAt'
+          break
         case 'highest':
-          sortOption = '-rating';
-          break;
+          sortOption = '-rating'
+          break
         case 'lowest':
-          sortOption = 'rating';
-          break;
+          sortOption = 'rating'
+          break
         default:
-          sortOption = sortQuery.split(',').join(' ');
+          sortOption = sortQuery.split(',').join(' ')
       }
     }
 
-    this.modelQuery = this.modelQuery.sort(sortOption);
-    return this;
+    this.modelQuery = this.modelQuery.sort(sortOption)
+    return this
   }
 
   paginate() {

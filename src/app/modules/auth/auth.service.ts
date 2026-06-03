@@ -95,7 +95,7 @@ const loginUser = async (payload: TLoginUser) => {
       role: user.role,
       isProfileSetup: user.isProfileSetup,
       status: user.status,
-      registerWith: user.registerWith
+      registerWith: user.registerWith,
     },
   }
 }
@@ -108,18 +108,16 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
     )
   }
 
-  const user = await User.isUserExistsByEmail(payload.email as string)
+  let user = await User.isUserExistsByEmail(payload.email as string)
 
   const updateData: any = {
     firstName: payload.firstName,
     lastName: payload.lastName,
     email: payload.email,
-    role: payload.role,
     photoUrl: payload.photoUrl,
     fcmToken: payload.fcmToken,
   }
 
-  // Add coordinates if provided
   if (payload.latitude && payload.longitude) {
     updateData.location = {
       type: 'Point',
@@ -150,26 +148,26 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
       if (!updatedUser) {
         throw new AppError(
           httpStatus.INTERNAL_SERVER_ERROR,
-          'Failed to reactivate deleted user.',
+          'Failed to reactivate user',
         )
       }
 
       return generateTokens(updatedUser)
     }
 
+    // Existing user update
     await User.findByIdAndUpdate(user._id, updateData, { new: true })
     return generateTokens(user)
   }
 
   // ================== NEW USER CREATION ==================
-  const isExpert = payload.role === USER_ROLE.expert;
-
   const newUser = await User.create({
     ...updateData,
+    role: payload.role,
     registerWith: REGISTER_WITH.google,
     verification: { otp: 0, expiresAt: new Date(), status: true },
     expireAt: null,
-    status: isExpert ? USER_STATUS.pending : USER_STATUS.active,   // ← Key Change
+    status: USER_STATUS.active,
   })
 
   if (!newUser) {
@@ -196,7 +194,6 @@ const registerWithApple = async (payload: TAppleLoginPayload) => {
     firstName: payload.firstName,
     lastName: payload.lastName,
     email: payload.email,
-    role: payload.role,
     photoUrl: payload.photoUrl,
     fcmToken: payload.fcmToken,
   }
@@ -209,6 +206,7 @@ const registerWithApple = async (payload: TAppleLoginPayload) => {
   }
 
   if (user) {
+    // Existing user — Role update
     if (user.registerWith !== REGISTER_WITH.apple) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
@@ -238,19 +236,19 @@ const registerWithApple = async (payload: TAppleLoginPayload) => {
       return generateTokens(updatedUser)
     }
 
+    // Existing user-এর role
     await User.findByIdAndUpdate(user._id, updateData, { new: true })
     return generateTokens(user)
   }
 
   // ================== NEW USER CREATION ==================
-  const isExpert = payload.role === USER_ROLE.expert;
-
   const newUser = await User.create({
     ...updateData,
+    role: payload.role,
     registerWith: REGISTER_WITH.apple,
     verification: { otp: 0, expiresAt: new Date(), status: true },
     expireAt: null,
-    status: isExpert ? USER_STATUS.pending : USER_STATUS.active,   // ← Key Change
+    status: USER_STATUS.active,
   })
 
   if (!newUser) {
