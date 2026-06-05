@@ -2,3 +2,11 @@ node_modules
 dist
 .env
 logs
+
+certs/
+*.p8
+*.p12
+*.pfx
+*.key
+*.cert
+*.pem

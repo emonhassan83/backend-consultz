@@ -1,4 +1,4 @@
-// src/app/utils/voip.service.ts
+// src/app/utils/voipService.ts
 import apn from 'apn';
 import fs from 'fs';
 import path from 'path';
@@ -6,7 +6,7 @@ import config from '../config';
 
 const apnProvider = new apn.Provider({
   token: {
-    key: fs.readFileSync(path.join(__dirname, '../../certs/APNsAuthKey.p8')),
+    key: fs.readFileSync(path.join(__dirname, '../../../certs/AuthKey_35H8HX2Y7P.p8')),
     keyId: config.apns.keyId as string,
     teamId: config.apns.teamId as string,
   },

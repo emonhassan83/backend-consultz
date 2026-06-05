@@ -14,7 +14,6 @@ import {
   generateAgoraToken,
 } from '../../../modules/calling/calling.utils'
 import { CALLING_STATUS } from '../../../modules/calling/calling.constant'
-import onlineUsers from '../../utils/onlineUsers'
 import { sendDataMessageToToken } from '../../../utils/sentNotification'
 import { sendVoIPPush } from '../../../utils/voipService'
 
