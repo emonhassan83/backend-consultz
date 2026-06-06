@@ -1,25 +1,33 @@
-import { Stripe as StripeType } from 'stripe'
+import Stripe from 'stripe';
 import config from '../../config'
 import { User } from '../../modules/user/user.model'
 
 class StripeService<T> {
-  private stripe() {
-    return new StripeType(config.stripe?.stripe_api_secret as string, {
-      apiVersion: '2025-02-24.acacia',
+   // Stripe class instance type
+  private stripeInstance: InstanceType<typeof Stripe>;
+
+  constructor() {
+    this.stripeInstance = new Stripe(config.stripe?.stripe_api_secret as string, {
+      apiVersion: '2026-05-27.dahlia',
       typescript: true,
-    })
+    });
   }
+
+  private stripe(): InstanceType<typeof Stripe> {
+    return this.stripeInstance;
+  }
+
   private handleError(error: unknown, message: string): never {
-    if (error instanceof StripeType.errors.StripeError) {
-      console.error('Stripe Error:', error.message)
-      throw new Error(`Stripe Error: ${message} - ${error.message}`)
+    // StripeError type check and logging
+    if (error instanceof Error && 'type' in error && error.constructor.name === 'StripeError') {
+      console.error('Stripe Error:', error.message);
+      throw new Error(`Stripe Error: ${message} - ${error.message}`);
     } else if (error instanceof Error) {
-      console.error('Error:', error.message)
-      throw new Error(`${message} - ${error.message}`)
+      console.error('Error:', error.message);
+      throw new Error(`${message} - ${error.message}`);
     } else {
-      // Unknown error types
-      console.error('Unknown Error:', error)
-      throw new Error(`${message} - An unknown error occurred.`)
+      console.error('Unknown Error:', error);
+      throw new Error(`${message} - An unknown error occurred.`);
     }
   }
 

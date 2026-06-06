@@ -31,7 +31,7 @@ const getAllReplyByComment = catchAsync(
 
 const updateReply = catchAsync(async (req: Request, res: Response) => {
   const result = await ReplyService.updateReply(
-    req.params.id,
+    req.params.id as string,
     req.body,
     req?.user?._id,
   )
@@ -46,7 +46,7 @@ const updateReply = catchAsync(async (req: Request, res: Response) => {
 
 const deleteReply = catchAsync(async (req: Request, res: Response) => {
   const result = await ReplyService.deleteReply(
-    req.params.id,
+    req.params.id as string,
     req?.user?._id,
   )
 

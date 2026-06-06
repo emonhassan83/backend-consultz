@@ -17,7 +17,7 @@ import {
   getTotalBookingsBatch,
   sendUserStatusNotifYToAdmin,
 } from './user.utils'
-import mongoose, { FilterQuery, Types } from 'mongoose'
+import mongoose, { QueryFilter, Types } from 'mongoose'
 import { Booking } from '../booking/booking.models'
 import { BOOKING_STATUS } from '../booking/booking.constants'
 import { sendNotification } from '../../utils/sentNotification'
@@ -118,14 +118,14 @@ const getAllUsersFromDB = async (
   currentUserId: string,
 ) => {
   // Base filter — সবসময় apply হবে
-  const mustMatch: FilterQuery<TUser> = {
+  const mustMatch: QueryFilter<TUser> = {
     isDeleted: false,
     role: { $ne: USER_ROLE.admin },
     status: USER_STATUS.active,
   }
 
   // Optional conditions — যেকোনো একটা match করলেই চলবে
-  const orConditions: FilterQuery<TUser>[] = []
+  const orConditions: QueryFilter<TUser>[] = []
 
   if (query.priceRange) {
     const [minStr, maxStr] = (query.priceRange as string).split('-')
@@ -163,7 +163,7 @@ const getAllUsersFromDB = async (
     const days = (query.availability as string)
       .split(',')
       .map((d) => d.trim().toLowerCase())
-      .filter(Boolean)
+      .filter(Boolean)as ('sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat')[]
     if (days.length > 0) {
       orConditions.push({ 'availability.day': { $in: days } })
     }
@@ -197,7 +197,7 @@ const getAllUsersFromDB = async (
   }
 
   // ✅ orConditions থাকলে $or যোগ করো, না থাকলে শুধু mustMatch
-  const baseQuery: FilterQuery<TUser> =
+  const baseQuery: QueryFilter<TUser> =
     orConditions.length > 0 ? { ...mustMatch, $or: orConditions } : mustMatch
 
   const usersQuery = new QueryBuilder(

@@ -5,7 +5,7 @@ import sendResponse from '../../utils/sendResponse'
 import httpStatus from 'http-status'
 
 const followUser = catchAsync(async (req: Request, res: Response) => {
-  const result = await FollowService.followUser(req.user._id, req.params.id)
+  const result = await FollowService.followUser(req.user._id, req.params.id as string)
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -16,7 +16,7 @@ const followUser = catchAsync(async (req: Request, res: Response) => {
 })
 
 const unfollowUser = catchAsync(async (req: Request, res: Response) => {
-  const result = await FollowService.unfollowUser(req.user._id, req.params.id)
+  const result = await FollowService.unfollowUser(req.user._id, req.params.id as string)
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -44,7 +44,7 @@ const getMyFollowers = catchAsync(async (req: Request, res: Response) => {
 
 const getUserFollowers = catchAsync(async (req: Request, res: Response) => {
   const result = await FollowService.getAllFollowers(
-    req.params.userId, // target user
+    req.params.userId as string, // target user
     req.user._id, // logged-in user (to check isFollowing)
     req.query,
   )
@@ -76,7 +76,7 @@ const getMyFollowing = catchAsync(async (req: Request, res: Response) => {
 
 const getUserFollowing = catchAsync(async (req: Request, res: Response) => {
   const result = await FollowService.getAllFollowing(
-    req.params.userId, // target user
+    req.params.userId as string, // target user
     req.user._id, // logged-in user (to check isFollowing)
     req.query,
   )
@@ -92,8 +92,8 @@ const getUserFollowing = catchAsync(async (req: Request, res: Response) => {
 
 const checkedFollowUser = catchAsync(async (req: Request, res: Response) => {
   const result = await FollowService.checkedFollowUser(
-    req.user.userId,
-    req.params.id,
+    req.user.userId as string,
+    req.params.id as string,
   )
 
   sendResponse(res, {

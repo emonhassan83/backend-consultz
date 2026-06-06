@@ -25,7 +25,7 @@ const getAllCategory = catchAsync(async (req, res) => {
 })
 
 const getACategory = catchAsync(async (req, res) => {
-  const result = await CategoryService.getAFromDB(req.params.id)
+  const result = await CategoryService.getAFromDB(req.params.id as string)
 
   sendResponse(res, {
     success: true,
@@ -36,7 +36,7 @@ const getACategory = catchAsync(async (req, res) => {
 })
 
 const updateACategory = catchAsync(async (req, res) => {
-  const result = await CategoryService.updateAIntoFromDB(req.params.id, req.body)
+  const result = await CategoryService.updateAIntoFromDB(req.params.id as string, req.body)
 
   sendResponse(res, {
     success: true,
@@ -47,7 +47,7 @@ const updateACategory = catchAsync(async (req, res) => {
 })
 
 const deleteACategory = catchAsync(async (req, res) => {
-  const result = await CategoryService.deleteFromDB(req.params.id)
+  const result = await CategoryService.deleteFromDB(req.params.id as string)
 
   sendResponse(res, {
     success: true,

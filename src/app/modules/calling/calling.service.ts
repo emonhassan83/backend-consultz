@@ -75,7 +75,7 @@ const startCalling = async (userId: string, payload: ICalling) => {
           tokenExpireAt: tokenData.expireAt,
           status: CALLING_STATUS.pending,
         },
-      ],
+      ] as any[],
       { session },
     )
 
@@ -192,7 +192,7 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
 
     /* payment */
     const payment = await Payment.findOne({
-      booking: booking._id,
+      booking: booking._id.toString(),
       isDeleted: false,
     }).session(session)
     if (!payment) throw new AppError(httpStatus.NOT_FOUND, 'Payment not found')
@@ -207,7 +207,7 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
       [
         {
           user: booking.consult,
-          booking: booking._id,
+          booking: booking._id.toString(),
           amount: payment.consultAmount,
           status: WITHDRAW_STATUS.proceed,
           proceedAt,

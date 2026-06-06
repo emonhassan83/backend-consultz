@@ -26,7 +26,7 @@ const getMyChatList = catchAsync(async (req: Request, res: Response) => {
 })
 
 const getChatBookingById = catchAsync(async (req: Request, res: Response) => {
-  const result = await chatService.getChatBookingById(req.params.bookingId, req.user._id)
+  const result = await chatService.getChatBookingById(req.params.bookingId as string, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,
@@ -37,7 +37,7 @@ const getChatBookingById = catchAsync(async (req: Request, res: Response) => {
 })
 
 const getChatByUserId = catchAsync(async (req: Request, res: Response) => {
-  const result = await chatService.getChatByUserId(req?.user._id, req.params.userId)
+  const result = await chatService.getChatByUserId(req?.user._id, req.params.userId as string)
 
   sendResponse(res, {
     statusCode: 200,
@@ -48,7 +48,7 @@ const getChatByUserId = catchAsync(async (req: Request, res: Response) => {
 })
 
 const updateChat = catchAsync(async (req: Request, res: Response) => {
-  const result = await chatService.updateChatList(req.params.id, req.body)
+  const result = await chatService.updateChatList(req.params.id as string, req.body)
 
   sendResponse(res, {
     statusCode: 200,
@@ -59,7 +59,7 @@ const updateChat = catchAsync(async (req: Request, res: Response) => {
 })
 
 const deleteChat = catchAsync(async (req: Request, res: Response) => {
-  const result = await chatService.deleteChatList(req.params.id)
+  const result = await chatService.deleteChatList(req.params.id as string)
 
   sendResponse(res, {
     statusCode: 200,

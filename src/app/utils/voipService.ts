@@ -1,16 +1,20 @@
 // src/app/utils/voipService.ts
-import apn from 'apn';
+import apn from '@parse/node-apn';
 import fs from 'fs';
 import path from 'path';
 import config from '../config';
 
 const apnProvider = new apn.Provider({
   token: {
-    key: fs.readFileSync(path.join(__dirname, '../../../certs/AuthKey_35H8HX2Y7P.p8')),
+    key: fs.readFileSync(
+      path.join(__dirname, '../../../certs/AuthKey_' + config.apns.keyId + '.p8')
+    ),
     keyId: config.apns.keyId as string,
     teamId: config.apns.teamId as string,
   },
   production: process.env.NODE_ENV === 'production',
+  // Optional: আরও ভালো error handling
+  rejectUnauthorized: true,
 });
 
 export const sendVoIPPush = async (
@@ -24,14 +28,15 @@ export const sendVoIPPush = async (
     agora_uid: number;
     is_video: boolean;
   }
-) => {
+): Promise<boolean> => {
   const notification = new apn.Notification();
 
-  notification.topic = `${config.apns.bundleId}.voip`; // ex: com.consultzuser.app.voip
+  notification.topic = `${config.apns.bundleId}.voip`;   // খুব গুরুত্বপূর্ণ
   notification.expiry = Math.floor(Date.now() / 1000) + 3600; // 1 hour
   notification.priority = 10;
-  (notification as any).pushType = 'alert';
+  notification.pushType = 'alert';
 
+  // VoIP Payload
   notification.payload = {
     aps: {
       'content-available': 1,
@@ -48,10 +53,16 @@ export const sendVoIPPush = async (
 
   try {
     const response = await apnProvider.send(notification, voipToken);
-    console.log('[VoIP Push] Sent to iOS:', response.sent.length);
-    return true;
+
+    if (response.sent.length > 0) {
+      console.log(`[VoIP Push] ✅ Successfully sent to iOS device`);
+      return true;
+    } else {
+      console.error('[VoIP Push] ❌ Failed:', response.failed);
+      return false;
+    }
   } catch (error: any) {
-    console.error('[VoIP Push] Failed:', error);
+    console.error('[VoIP Push] Error:', error.message);
     return false;
   }
 };

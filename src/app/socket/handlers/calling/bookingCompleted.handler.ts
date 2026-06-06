@@ -41,7 +41,7 @@ export const bookingComplete = eventHandler<TBookingCompletePayload>(
  
       // 2. Find Payment
       const payment = await Payment.findOne({
-        booking: booking._id,
+        booking: (booking._id).toString(),
         isDeleted: false,
       }).session(session)
  
@@ -55,7 +55,7 @@ export const bookingComplete = eventHandler<TBookingCompletePayload>(
       const [withdraw] = await Withdraw.create(
         [{
           user:      booking.consult,
-          booking:   booking._id,
+          booking:   (booking._id).toString(),
           amount:    payment.consultAmount,
           status:    WITHDRAW_STATUS.proceed,
           proceedAt,

@@ -32,7 +32,7 @@ import config from '../config'
 import { modeType } from '../modules/notification/notification.interface'
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
-  apiVersion: '2025-02-24.acacia',
+  apiVersion: '2026-05-27.dahlia',
   typescript: true,
 })
 
@@ -577,7 +577,7 @@ export const initializeCronJobs = () => {
             let refundAmount = 0
 
             const payment = await Payment.findOne({
-              booking: booking._id,
+              booking: booking._id as any,
               isPaid: true,
               isDeleted: false,
             }).session(session)

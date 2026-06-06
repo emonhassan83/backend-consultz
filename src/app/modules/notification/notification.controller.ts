@@ -53,7 +53,7 @@ const getAllNotifications = catchAsync(async (req, res) => {
 })
 
 const getANotification = catchAsync(async (req, res) => {
-  const result = await NotificationService.getANotificationFromDB(req.params.id)
+  const result = await NotificationService.getANotificationFromDB(req.params.id as string)
 
   sendResponse(res, {
     success: true,
@@ -75,7 +75,7 @@ const markAsDoneNotification = catchAsync(async (req, res) => {
 
 const deleteANotification = catchAsync(async (req, res) => {
   const result = await NotificationService.deleteANotificationFromDB(
-    req.params.id,
+    req.params.id as string,
   )
 
   sendResponse(res, {

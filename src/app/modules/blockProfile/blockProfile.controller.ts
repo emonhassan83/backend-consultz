@@ -7,7 +7,7 @@ import httpStatus from 'http-status';
 const blockUserProfile = catchAsync(async (req: Request, res: Response) => {
   const result = await BlockProfileService.blockUserProfile(
     req.user._id,
-    req.params.blockedId,
+    req.params.blockedId as string,
   );
 
   sendResponse(res, {
@@ -21,7 +21,7 @@ const blockUserProfile = catchAsync(async (req: Request, res: Response) => {
 const unblockProfile = catchAsync(async (req: Request, res: Response) => {
   const result = await BlockProfileService.unblockProfile(
     req.user._id,
-    req.params.blockedId,
+    req.params.blockedId as string,
   );
 
   sendResponse(res, {
@@ -46,7 +46,7 @@ const getMyBlockProfile = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getBlockProfileById = catchAsync(async (req: Request, res: Response) => {
-  const result = await BlockProfileService.getBlockProfileById(req.params.id);
+  const result = await BlockProfileService.getBlockProfileById(req.params.id as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

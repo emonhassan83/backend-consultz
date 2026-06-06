@@ -249,7 +249,7 @@ userSchema.index({ referralCode: 1 })
 
 // ====================== AVAILABILITY CHANGE DETECTION ======================
 
-userSchema.pre('save', async function (next) {
+userSchema.pre('save', async function () {
   if (this.isModified('password')) {
     this.password = await bcrypt.hash(
       this.password,
@@ -266,8 +266,6 @@ userSchema.pre('save', async function (next) {
 
     ;(this as any)._oldAvailability = JSON.stringify(oldDoc?.availability || [])
   }
-
-  next()
 })
 
 userSchema.post('save', async function (doc: any) {

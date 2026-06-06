@@ -9,14 +9,14 @@ const createValidationSchema = z.object({
   body: z.object({
     receiver: objectIdSchema,
     message: z.string({
-      required_error: 'Message is required',
+      message: 'Message is required',
     }),
     description: z.string({
-      invalid_type_error: 'Description must be a string',
+      message: 'Description must be a string',
     }),
     reference: objectIdSchema.optional(),
     modelType: z.string({
-      required_error: 'Model type is required',
+      message: 'Model type is required',
     }),
   }),
 })

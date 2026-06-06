@@ -5,7 +5,7 @@ const loginValidationSchema = z.object({
     email: z.string(),
     password: z
       .string({
-        invalid_type_error: 'Password must be a string',
+        message: 'Password must be a string',
       })
       .min(6, { message: 'Password must be at least 6 characters' })
       .max(20, { message: 'Password cannot be more than 20 characters' }),
@@ -17,12 +17,12 @@ const changePasswordValidationSchema = z.object({
   body: z.object({
     oldPassword: z
       .string({
-        required_error: 'Old password is required',
+        message: 'Old password is required',
       })
       .min(6, { message: 'Password must be at least 6 characters' })
       .max(20, { message: 'Password cannot be more than 20 characters' }),
     newPassword: z
-      .string({ required_error: 'Password is required' })
+      .string({ message: 'Password is required' })
       .min(6, { message: 'Password must be at least 6 characters' })
       .max(20, { message: 'Password cannot be more than 20 characters' }),
   }),
@@ -31,7 +31,7 @@ const changePasswordValidationSchema = z.object({
 const googleZodValidationSchema = z.object({
   body: z.object({
     token: z.string({
-      required_error: 'token is required!',
+      message: 'token is required!',
     }),
   }),
 })
@@ -39,7 +39,7 @@ const googleZodValidationSchema = z.object({
 const appleZodValidationSchema = z.object({
   body: z.object({
     token: z.string({
-      required_error: 'token is required!',
+      message: 'token is required!',
     }),
   }),
 })
@@ -47,7 +47,7 @@ const appleZodValidationSchema = z.object({
 const refreshTokenValidationSchema = z.object({
   cookies: z.object({
     refreshToken: z.string({
-      required_error: 'Refresh token is required!',
+      message: 'Refresh token is required!',
     }),
   }),
 })
@@ -55,7 +55,7 @@ const refreshTokenValidationSchema = z.object({
 const forgetPasswordValidationSchema = z.object({
   body: z.object({
     email: z.string({
-      required_error: 'User email is required!',
+      message: 'User email is required!',
     }),
   }),
 })
@@ -63,17 +63,17 @@ const forgetPasswordValidationSchema = z.object({
 const resetPasswordValidationSchema = z.object({
   body: z.object({
     email: z.string({
-      required_error: 'User email is required!',
+      message: 'User email is required!',
     }),
     newPassword: z
       .string({
-        required_error: 'User new password is required!',
+        message: 'User new password is required!',
       })
       .min(6, { message: 'Password must be at least 6 characters' })
       .max(20, { message: 'Password cannot be more than 20 characters' }),
     confirmPassword: z
       .string({
-        required_error: 'User confirm password is required!',
+        message: 'User confirm password is required!',
       })
       .min(6, { message: 'Password must be at least 6 characters' })
       .max(20, { message: 'Password cannot be more than 20 characters' }),

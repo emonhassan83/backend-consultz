@@ -49,7 +49,7 @@ const handleStripeOAuth = catchAsync(async (req: Request, res: Response) => {
 })
 
 const refresh = catchAsync(async (req: Request, res: Response) => {
-  const result = await stripeService.refresh(req.params?.id, req.query)
+  const result = await stripeService.refresh(req.params?.id as string, req.query)
 
   // Remove sendResponse after res.redirect to avoid setting headers twice
   res.redirect(result)

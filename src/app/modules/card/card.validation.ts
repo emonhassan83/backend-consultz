@@ -7,20 +7,20 @@ import { z } from 'zod'
 const createValidationSchema = z.object({
   body: z.object({
     holderName: z.string({
-      required_error: 'Card holder name is required',
-    }).min(1, 'Card holder name cannot be empty'),
+      message: 'Card holder name is required',
+    }).min(1, { message: 'Card holder name cannot be empty' }),
 
     cardNumber: z.string({
-      required_error: 'Card number is required',
-    }).min(12, 'Card number must be valid'),
+      message: 'Card number is required',
+    }).min(12, { message: 'Card number must be valid' }),
 
     expiryDate: z.string({
-      required_error: 'Expiry date is required',
-    }).min(1, 'Expiry date cannot be empty'),
+      message: 'Expiry date is required',
+    }).min(1, { message: 'Expiry date cannot be empty' }),
 
     cvc: z.string({
-      required_error: 'CVC is required',
-    }).min(3, 'CVC must be valid')
+      message: 'CVC is required',
+    }).min(3, { message: 'CVC must be valid' })
   }),
 })
 

@@ -11,14 +11,14 @@ const createValidation = z.object({
     booking: objectIdSchema,
     participants: z
       .array(z.string())
-      .length(2, 'must be add in the array user and receiver id'),
+      .length(2, { message: 'must be add in the array user and receiver id' }),
   }),
 })
 
 const updateValidation = z.object({
   body: z.object({
     name: z.string({
-      required_error: 'Chat name is required!',
+      message: 'Chat name is required!',
     }),
     status: z.enum(['accepted', 'blocked']).optional(),
   }),

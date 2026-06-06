@@ -139,7 +139,7 @@ const changeStatusReport = async (
   // 5. If approved → restrict feed
   if (status === REPORT_STATUS.approved) {
     const feed = await Feed.findOne({
-      _id: report.feed,
+      _id: (report.feed).toString(),
       isDeleted: false,
     })
 

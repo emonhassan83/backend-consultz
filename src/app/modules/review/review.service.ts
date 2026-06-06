@@ -31,7 +31,7 @@ const createReviews = async (
 
     // 2. Validate booking & get expert (who is receiving the review)
     const booking = await Booking.findOne(
-      { _id: payload.booking, isDeleted: false },
+      { _id: (payload.booking).toString(), isDeleted: false },
       { consult: 1 }
     )
       .session(session)

@@ -68,9 +68,9 @@ const callStart = eventHandler<TCallStartPayload>(
       const receiverTokenData = generateAgoraToken({ channelName, uid: receiverUid });
 
       const [calling] = await Calling.create([{
-        caller: caller._id,
-        receiver: receiver._id,
-        booking: booking._id,
+        caller: (caller._id).toString(),
+        receiver: (receiver._id).toString(),
+        booking: (booking._id).toString(),
         channelName,
         callId: callerUid,
         isVideo,
@@ -78,10 +78,10 @@ const callStart = eventHandler<TCallStartPayload>(
         tokenExpireAt: callerTokenData.expireAt,
         status: CALLING_STATUS.pending,
         participants: [
-          { user: caller._id, role: 'caller', status: CALLING_STATUS.pending, agoraUid: callerUid, joinedAt: new Date() },
-          { user: receiver._id, role: 'receiver', status: CALLING_STATUS.pending, agoraUid: receiverUid, joinedAt: null },
+          { user: (caller._id).toString(), role: 'caller', status: CALLING_STATUS.pending, agoraUid: callerUid, joinedAt: new Date() },
+          { user: (receiver._id).toString(), role: 'receiver', status: CALLING_STATUS.pending, agoraUid: receiverUid, joinedAt: null },
         ],
-      }], { session });
+      }] as any, { session });
 
       await session.commitTransaction();
 

@@ -9,7 +9,7 @@ const createValidationSchema = z.object({
       message: 'Invalid feed ID',
     }),
     reason: z.string({
-      required_error: 'Report reason is required !',
+      message: 'Report reason is required !',
     }),
   }),
 })
@@ -18,7 +18,7 @@ const updateValidationSchema = z.object({
   body: z.object({
     reason: z
       .string({
-        required_error: 'Report reason is required !',
+        message: 'Report reason is required !',
       })
       .optional(),
   }),
@@ -27,7 +27,7 @@ const updateValidationSchema = z.object({
 const changeStatusValidationSchema = z.object({
   body: z.object({
     status: z.enum(Object.values(REPORT_STATUS) as [string, ...string[]], {
-      required_error: 'Report status is required!',
+      message: 'Report status is required!',
     }),
   }),
 })

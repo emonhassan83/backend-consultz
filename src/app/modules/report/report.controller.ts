@@ -54,7 +54,7 @@ const getReportsByFeed = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getReportById = catchAsync(async (req: Request, res: Response) => {
-  const result = await ReportService.getReportById(req.params.id);
+  const result = await ReportService.getReportById(req.params.id as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -65,7 +65,7 @@ const getReportById = catchAsync(async (req: Request, res: Response) => {
 });
 
 const updateReport = catchAsync(async (req: Request, res: Response) => {
-  const result = await ReportService.updateReport(req.params.id, req.body);
+  const result = await ReportService.updateReport(req.params.id as string, req.body);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -77,7 +77,7 @@ const updateReport = catchAsync(async (req: Request, res: Response) => {
 
 const changeStatusReport = catchAsync(async (req: Request, res: Response) => {
   const result = await ReportService.changeStatusReport(
-    req.params.id,
+    req.params.id as string,
     req.body,
   );
 
@@ -90,7 +90,7 @@ const changeStatusReport = catchAsync(async (req: Request, res: Response) => {
 });
 
 const deleteReport = catchAsync(async (req: Request, res: Response) => {
-  const result = await ReportService.deleteReport(req.params.id);
+  const result = await ReportService.deleteReport(req.params.id as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

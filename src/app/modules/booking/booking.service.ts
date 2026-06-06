@@ -25,14 +25,14 @@ import isoWeek from 'dayjs/plugin/isoWeek'
 import { modeType } from '../notification/notification.interface'
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 
-dayjs.extend(isSameOrBefore);   // ← একবারই ফাইলের উপরে রাখবে
+dayjs.extend(isSameOrBefore);
 dayjs.extend(isoWeek)
 dayjs.extend(customParseFormat)
 dayjs.extend(utc)
 dayjs.extend(timezone)
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
-  apiVersion: '2025-02-24.acacia',
+  apiVersion: '2026-05-27.dahlia',
   typescript: true,
 })
 
@@ -57,7 +57,7 @@ const createBookings = async (payload: TBookings, userId: string) => {
 
     // 3. Slot validation
     const slotTime = await BookingSlots.findOne({
-      _id: slotId,
+      _id: slotId.toString(),
       author: consultId,
     }).session(session)
     if (!slotTime) {
@@ -222,7 +222,7 @@ const getBookingCalender = async (
     status: { $nin: [BOOKING_STATUS.declined, BOOKING_STATUS.cancelled, BOOKING_STATUS.not_responded] },
   }).select('slot').lean();
 
-  const slotIds = bookings.map(b => b.slot);
+  const slotIds = bookings.map(b => b.slot.toString());
 
   // 2. এই মাসের স্লটগুলো নেওয়া
   const slots = await BookingSlots.find({
@@ -510,7 +510,7 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
     let refundAmount = 0
     if (booking.paymentStatus == PAYMENT_STATUS.paid) {
       const payment = await Payment.findOne({
-        booking: booking._id,
+        booking: booking._id.toString(),
         isPaid: true,
         isDeleted: false,
       }).session(session)
@@ -818,7 +818,7 @@ const declineBooking = async (
     let refundAmount = 0
 
     const payment = await Payment.findOne({
-      booking: booking._id,
+      booking: booking._id.toString(),
       isPaid: true,
       isDeleted: false,
     }).session(session)

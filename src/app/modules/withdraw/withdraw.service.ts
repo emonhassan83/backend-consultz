@@ -42,7 +42,7 @@ const addWithdraw = async (payload: { booking: string }, userId: string) => {
 
     // Booking of payment found
     const payment = await Payment.findOne({
-      booking: booking._id,
+      booking: (booking._id).toString(),
       isPaid: true,
       isDeleted: false,
     }).session(session)
@@ -64,7 +64,7 @@ const addWithdraw = async (payload: { booking: string }, userId: string) => {
 
     // check (duplicate prevent)
     const existingWithdraw = await Withdraw.findOne({
-      booking: booking._id,
+      booking: (booking._id).toString(),
       user: userId,
       isDeleted: false,
     }).session(session)
@@ -81,7 +81,7 @@ const addWithdraw = async (payload: { booking: string }, userId: string) => {
       [
         {
           user: userId,
-          booking: booking._id,
+          booking: (booking._id).toString(),
           amount: consultAmount,
           status: WITHDRAW_STATUS.proceed,
         },

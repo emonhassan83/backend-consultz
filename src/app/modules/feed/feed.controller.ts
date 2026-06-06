@@ -81,7 +81,7 @@ const getAllMyFeed = catchAsync(async (req, res) => {
 })
 
 const getAFeed = catchAsync(async (req, res) => {
-  const result = await FeedService.getAFeedFromDB(req.params.id, req.user._id)
+  const result = await FeedService.getAFeedFromDB(req.params.id as string, req.user._id)
 
   sendResponse(res, {
     success: true,
@@ -98,7 +98,7 @@ const updateFeed = catchAsync(async (req, res) => {
       : []
 
   const result = await FeedService.updateFeedFromDB(
-    req.params.id,
+    req.params.id as string,
     req.body,
     files,
   )
@@ -112,7 +112,7 @@ const updateFeed = catchAsync(async (req, res) => {
 })
 
 const changeFeedStatus = catchAsync(async (req, res) => {
-  const result = await FeedService.changeFeedStatus(req.params.id, req.body)
+  const result = await FeedService.changeFeedStatus(req.params.id as string, req.body)
 
   sendResponse(res, {
     success: true,
@@ -123,7 +123,7 @@ const changeFeedStatus = catchAsync(async (req, res) => {
 })
 
 const deleteAFeed = catchAsync(async (req, res) => {
-  const result = await FeedService.deleteAFeedFromDB(req.params.id)
+  const result = await FeedService.deleteAFeedFromDB(req.params.id as string)
 
   sendResponse(res, {
     success: true,

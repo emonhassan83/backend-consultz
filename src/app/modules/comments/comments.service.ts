@@ -34,7 +34,12 @@ const createComments = async (payload: TComments, userId: string) => {
     if (!isReply) {
       // Create new main comment
       const commentDoc = await Comments.create(
-        [{ user: userId, content, comment }],
+        [
+          {
+            user: new Types.ObjectId(userId),
+            content: new Types.ObjectId(content as any),
+          },
+        ],
         { session },
       )
 
@@ -47,8 +52,20 @@ const createComments = async (payload: TComments, userId: string) => {
         { new: true, session },
       )
     } else {
-      // Validate parent comment
-      const parentComment = await Comments.findById(replyRef)
+      if (!replyRef) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Parent comment reference is required for a reply',
+        )
+      }
+
+      const replyRefId = replyRef instanceof Types.ObjectId
+        ? replyRef
+        : typeof replyRef === 'object' && '_id' in replyRef
+        ? (replyRef as any)._id
+        : replyRef
+
+      const parentComment = await Comments.findById(replyRefId)
       if (!parentComment) {
         throw new AppError(httpStatus.NOT_FOUND, 'Parent comment not found!')
       }
@@ -57,8 +74,8 @@ const createComments = async (payload: TComments, userId: string) => {
       const replyDoc = await Reply.create(
         [
           {
-            user: userId,
-            replyRef,
+            user: new Types.ObjectId(userId),
+            replyRef: new Types.ObjectId(replyRefId),
             comment,
           },
         ],
@@ -69,7 +86,7 @@ const createComments = async (payload: TComments, userId: string) => {
 
       // Push reply to comment's reply array
       await Comments.findByIdAndUpdate(
-        replyRef,
+        replyRefId,
         {
           $addToSet: { reply: createdReply._id },
         },

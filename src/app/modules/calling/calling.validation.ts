@@ -10,7 +10,7 @@ const startCallingValidation = z.object({
   body: z.object({
     bookingId: objectIdSchema,
     isVideo: z.boolean({
-      required_error: 'Call type (video/audio) is required',
+      message: 'Call type (video/audio) is required',
     }),
   }),
 })

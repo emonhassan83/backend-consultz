@@ -42,7 +42,7 @@ const getAllCommentsByContent = catchAsync(
 )
 
 const getCommentsById = catchAsync(async (req: Request, res: Response) => {
-  const result = await commentsService.getCommentsById(req.user._id, req.params.id)
+  const result = await commentsService.getCommentsById(req.user._id, req.params.id as string)
 
   sendResponse(res, {
     statusCode: 200,
@@ -54,7 +54,7 @@ const getCommentsById = catchAsync(async (req: Request, res: Response) => {
 
 const updateComments = catchAsync(async (req: Request, res: Response) => {
   const result = await commentsService.updateComments(
-    req.params.id,
+    req.params.id as string,
     req.body,
     req?.user?._id,
   )
@@ -69,7 +69,7 @@ const updateComments = catchAsync(async (req: Request, res: Response) => {
 
 const deleteComments = catchAsync(async (req: Request, res: Response) => {
   const result = await commentsService.deleteComments(
-    req.params.id,
+    req.params.id as string,
     req?.user?._id,
   )
 

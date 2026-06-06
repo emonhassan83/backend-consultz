@@ -10,14 +10,14 @@ const adminUser = {
   firstName: 'vincent',
   lastName: 'wong',
   email: 'vincentnetworkpropertybuyers@gmail.com',
-  password: config.admin_pass,
+  password: config.admin_pass as string,
   role: USER_ROLE.admin,
   contractNumber: '+876543345678',
   verification: {
     otp: '0',
     status: true,
   },
-  expireAt: null,
+  expireAt: null as any,
 }
 
 // Function to seed admin

@@ -40,7 +40,7 @@ const getDefaultCard = catchAsync(async (req: Request, res: Response) => {
 });
 
 const setAsDefault = catchAsync(async (req: Request, res: Response) => {
-  const result = await CardService.setAsDefault(req.params.id, req.user._id);
+  const result = await CardService.setAsDefault(req.params.id as string, req.user._id);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -51,7 +51,7 @@ const setAsDefault = catchAsync(async (req: Request, res: Response) => {
 });
 
 const deleteCard = catchAsync(async (req: Request, res: Response) => {
-  const result = await CardService.deleteCard(req.params.id);
+  const result = await CardService.deleteCard(req.params.id as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

@@ -39,7 +39,7 @@ const getAllWithdraw = catchAsync(async (req, res) => {
 })
 
 const getAWithdraw = catchAsync(async (req, res) => {
-  const result = await WithdrawService.getAWithdrawFromDB(req.params.id)
+  const result = await WithdrawService.getAWithdrawFromDB(req.params.id as string)
 
   sendResponse(res, {
     success: true,
@@ -51,7 +51,7 @@ const getAWithdraw = catchAsync(async (req, res) => {
 
 const updateWithdraw = catchAsync(async (req, res) => {
   const result = await WithdrawService.updateWithdrawFromDB(
-    req.params.id,
+    req.params.id as string,
     req.body
   )
 

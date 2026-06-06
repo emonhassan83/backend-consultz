@@ -80,7 +80,7 @@ const getConsultBookingsByDate = catchAsync(async (req: Request, res: Response) 
 })
 
 const getBookingsById = catchAsync(async (req: Request, res: Response) => {
-  const result = await bookingsService.getBookingsById(req.params.id)
+  const result = await bookingsService.getBookingsById(req.params.id as string)
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -91,7 +91,7 @@ const getBookingsById = catchAsync(async (req: Request, res: Response) => {
 
 const confirmedBooking = catchAsync(async (req: Request, res: Response) => {
   const result = await bookingsService.confirmedBooking(
-    req.params.id,
+    req.params.id as string,
     req.user._id,
   )
 
@@ -105,7 +105,7 @@ const confirmedBooking = catchAsync(async (req: Request, res: Response) => {
 
 const declineBooking = catchAsync(async (req: Request, res: Response) => {
   const result = await bookingsService.declineBooking(
-    req.params.id,
+    req.params.id as string,
     req.user._id,
     req.body
   )
@@ -120,7 +120,7 @@ const declineBooking = catchAsync(async (req: Request, res: Response) => {
 
 const completedBooking = catchAsync(async (req: Request, res: Response) => {
   const result = await bookingsService.completedBooking(
-    req.params.id,
+    req.params.id as string,
     req.user._id,
     req.body
   )
@@ -135,7 +135,7 @@ const completedBooking = catchAsync(async (req: Request, res: Response) => {
 
 const cancelBooking = catchAsync(async (req: Request, res: Response) => {
   const result = await bookingsService.cancelBooking(
-    req.params.id,
+    req.params.id as string,
     req.user._id,
   )
 
@@ -149,7 +149,7 @@ const cancelBooking = catchAsync(async (req: Request, res: Response) => {
 
 const rescheduleBooking = catchAsync(async (req: Request, res: Response) => {
   const result = await bookingsService.rescheduleBooking(
-    req.params.id,
+    req.params.id as string,
     req.body,
     req.user._id,
   )
@@ -162,7 +162,7 @@ const rescheduleBooking = catchAsync(async (req: Request, res: Response) => {
 })
 
 const deleteBookings = catchAsync(async (req: Request, res: Response) => {
-  const result = await bookingsService.deleteBookings(req.params.id)
+  const result = await bookingsService.deleteBookings(req.params.id as string)
   sendResponse(res, {
     statusCode: 200,
     success: true,

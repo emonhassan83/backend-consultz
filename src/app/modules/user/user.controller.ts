@@ -149,7 +149,7 @@ const getAllExperts = catchAsync(async (req, res) => {
 })
 
 const getUserById = catchAsync(async (req: Request, res: Response) => {
-  const result = await UserService.geUserByIdFromDB(req.user._id, req.params.id)
+  const result = await UserService.geUserByIdFromDB(req.user._id, req.params.id as string)
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,

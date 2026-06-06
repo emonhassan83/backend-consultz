@@ -48,8 +48,7 @@ const AvailabilitySlotSchema = z
 
 export const AvailabilitySchema = z.object({
   day: z.enum(Object.values(DAY_MAP) as [string, ...string[]], {
-    required_error: 'Day is required!',
-    invalid_type_error: 'Invalid day',
+    message: 'Day is required!'
   }),
   slots: z
     .array(AvailabilitySlotSchema)
@@ -60,16 +59,14 @@ export const AvailabilitySchema = z.object({
 const SocialProfileSchema = z.object({
   type: z
     .string({
-      required_error: 'Social profile type is required!',
-      invalid_type_error: 'Social profile type must be a string',
+      message: 'Social profile type is required!',
     })
-    .min(1, 'Social profile type cannot be empty')
-    .max(50, 'Social profile type is too long (max 50 characters)'),
+    .min(1, { message: 'Social profile type cannot be empty' })
+    .max(50, { message: 'Social profile type is too long (max 50 characters)' }),
 
   url: z
     .string({
-      required_error: 'Social profile URL is required!',
-      invalid_type_error: 'Social profile URL must be a string',
+      message: 'Social profile URL is required!',
     })
     .url({
       message:
@@ -88,32 +85,29 @@ const SessionDurationSchema = z
         SESSION_TYPES.DEEP_DIVE,
       ],
       {
-        required_error: 'Session type is required!',
-        invalid_type_error: 'Invalid session type',
+        message: 'Session type is required!'
       },
     ),
 
     duration: z.number({
-      required_error: 'Duration is required!',
-      invalid_type_error: 'Duration must be a number',
+      message: 'Duration is required!'
     }),
 
     isOffered: z.boolean({
-      required_error: 'isOffered must be true or false',
-      invalid_type_error: 'isOffered must be a boolean',
+      message: 'isOffered must be true or false'
     }),
   })
-  .refine(
-    (data) => {
-      const expectedDuration =
-        SESSION_DURATIONS[data.type as keyof typeof SESSION_DURATIONS]
-      return data.duration === expectedDuration
-    },
-    (data) => ({
-      message: `Duration must be exactly ${SESSION_DURATIONS[data.type as keyof typeof SESSION_DURATIONS]} minutes for type "${data.type}"`,
-      path: ['duration'],
-    }),
-  )
+  .superRefine((data, ctx) => {
+    const expectedDuration =
+      SESSION_DURATIONS[data.type as keyof typeof SESSION_DURATIONS]
+    if (data.duration !== expectedDuration) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duration must be exactly ${expectedDuration} minutes for type "${data.type}"`,
+        path: ['duration'],
+      })
+    }
+  })
 
 const BankAccountSchema = z.object({
   bankName: z.string().optional(),
@@ -124,22 +118,22 @@ const BankAccountSchema = z.object({
 // ✅ Create User Validation
 const createValidationSchema = z.object({
   body: z.object({
-    firstName: z.string({ required_error: 'First name is required!' }),
-    lastName: z.string({ required_error: 'Last name is required!' }),
+    firstName: z.string({ message: 'First name is required!' }),
+    lastName: z.string({ message: 'Last name is required!' }),
     email: z
-      .string({ required_error: 'Email is required!' })
+      .string({ message: 'Email is required!' })
       .email('Invalid email address'),
     password: z
-      .string({ invalid_type_error: 'Password must be a string' })
+      .string({ message: 'Password must be a string' })
       .min(8, { message: 'Password must be at least 8 characters' })
        .max(20, { message: 'Password cannot be more than 20 characters' }),
     confirmPass: z
-      .string({ required_error: 'Confirm password is required' })
+      .string({ message: 'Confirm password is required' })
       .min(8, { message: 'Confirm password must be at least 8 characters' })
        .max(20, { message: 'Password cannot be more than 20 characters' }),
-    dob: z.string({ required_error: 'Date of birth is required!' }),
+    dob: z.string({ message: 'Date of birth is required!' }),
     phoneNumber: z
-      .string({ required_error: 'Phone number is required!' })
+      .string({ message: 'Phone number is required!' })
       .min(6, { message: 'Contact number must be at least 6 digits long' })
       .max(15, { message: 'Contact number must be at most 15 digits long' }),
   }),
@@ -193,56 +187,46 @@ const updateValidationSchema = z.object({
 // Push Notification Settings Schema
 const pushNotifySchema = z.object({
   bookingAndSchedule: z.boolean({
-    required_error: 'bookingAndSchedule notification preference is required',
-    invalid_type_error: 'bookingAndSchedule must be a boolean (true/false)',
+    message: 'bookingAndSchedule notification preference is required'
   }),
 
   scheduleRemainder: z.boolean({
-    required_error: 'scheduleRemainder notification preference is required',
-    invalid_type_error: 'scheduleRemainder must be a boolean (true/false)',
+    message: 'scheduleRemainder notification preference is required'
   }),
 
   payment: z.boolean({
-    required_error: 'payment notification preference is required',
-    invalid_type_error: 'payment must be a boolean (true/false)',
+    message: 'payment notification preference is required'
   }),
 
   points: z.boolean({
-    required_error: 'points notification preference is required',
-    invalid_type_error: 'points must be a boolean (true/false)',
+    message: 'points notification preference is required'
   }),
 
   followers: z.boolean({
-    required_error: 'followers notification preference is required',
-    invalid_type_error: 'followers must be a boolean (true/false)',
+    message: 'followers notification preference is required'
   }),
 
   post: z.boolean({
-    required_error: 'post notification preference is required',
-    invalid_type_error: 'post must be a boolean (true/false)',
+    message: 'post notification preference is required'
   }),
 
   reviews: z.boolean({
-    required_error: 'reviews notification preference is required',
-    invalid_type_error: 'reviews must be a boolean (true/false)',
+    message: 'reviews notification preference is required'
   }),
 })
 
 // Email Notification Settings Schema
 const emailNotifySchema = z.object({
   booking: z.boolean({
-    required_error: 'booking email notification preference is required',
-    invalid_type_error: 'booking must be a boolean (true/false)',
+    message: 'booking email notification preference is required'
   }),
 
   schedule: z.boolean({
-    required_error: 'schedule email notification preference is required',
-    invalid_type_error: 'schedule must be a boolean (true/false)',
+    message: 'schedule email notification preference is required'
   }),
 
   payment: z.boolean({
-    required_error: 'payment email notification preference is required',
-    invalid_type_error: 'payment must be a boolean (true/false)',
+    message: 'payment email notification preference is required'
   }),
 })
 
@@ -258,9 +242,9 @@ const updateNotifySettingsValidation = z.object({
 // ✅ Change Status Validation
 const changeStatusValidationSchema = z.object({
   body: z.object({
-    userId: z.string({ required_error: 'User ID is required!' }),
+    userId: z.string({ message: 'User ID is required!' }),
     status: z.enum(Object.values(USER_STATUS) as [string, ...string[]], {
-      required_error: 'User status is required!',
+      message: 'User status is required!',
     }),
   }),
 })

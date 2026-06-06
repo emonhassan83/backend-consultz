@@ -14,7 +14,7 @@ const insertIntoDB = catchAsync(async (req, res) => {
 })
 
 const getAllSubCategory = catchAsync(async (req, res) => {
-  const result = await SubCategoryService.getAllFromDB(req.params.categoryId)
+  const result = await SubCategoryService.getAllFromDB(req.params.categoryId as string)
 
   sendResponse(res, {
     success: true,
@@ -25,7 +25,7 @@ const getAllSubCategory = catchAsync(async (req, res) => {
 })
 
 const getACategory = catchAsync(async (req, res) => {
-  const result = await SubCategoryService.getAFromDB(req.params.id)
+  const result = await SubCategoryService.getAFromDB(req.params.id as string)
 
   sendResponse(res, {
     success: true,
@@ -36,7 +36,7 @@ const getACategory = catchAsync(async (req, res) => {
 })
 
 const updateACategory = catchAsync(async (req, res) => {
-  const result = await SubCategoryService.updateIntoDB(req.params.id, req.body)
+  const result = await SubCategoryService.updateIntoDB(req.params.id as string, req.body)
 
   sendResponse(res, {
     success: true,
@@ -47,7 +47,7 @@ const updateACategory = catchAsync(async (req, res) => {
 })
 
 const deleteAFromDB = catchAsync(async (req, res) => {
-  const result = await SubCategoryService.deleteFromDB(req.params.id)
+  const result = await SubCategoryService.deleteFromDB(req.params.id as string)
 
   sendResponse(res, {
     success: true,

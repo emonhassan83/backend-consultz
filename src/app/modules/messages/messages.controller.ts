@@ -22,7 +22,7 @@ const createMessages = catchAsync(async (req: Request, res: Response) => {
 
 // Get messages by chat ID
 const getMessagesByBookingId = catchAsync(async (req: Request, res: Response) => {
-  const result = await messagesService.getMessagesByBookingId(req.params.bookingId, req.query)
+  const result = await messagesService.getMessagesByBookingId(req.params.bookingId as string, req.query)
 
   sendResponse(res, {
     statusCode: 200,
@@ -35,7 +35,7 @@ const getMessagesByBookingId = catchAsync(async (req: Request, res: Response) =>
 
 // Get message by ID
 const getMessagesById = catchAsync(async (req: Request, res: Response) => {
-  const result = await messagesService.getMessagesById(req.params.id)
+  const result = await messagesService.getMessagesById(req.params.id as string)
 
   sendResponse(res, {
     statusCode: 200,
@@ -47,7 +47,7 @@ const getMessagesById = catchAsync(async (req: Request, res: Response) => {
 
 // Update message
 const updateMessages = catchAsync(async (req: Request, res: Response) => {
-  const result = await messagesService.updateMessages(req.params.id, req.body)
+  const result = await messagesService.updateMessages(req.params.id as string, req.body)
 
   sendResponse(res, {
     statusCode: 200,
@@ -66,7 +66,7 @@ const seenMessage = catchAsync(async (req: Request, res: Response) => {
 
   const result = await messagesService.seenMessage(
     req.user._id,
-    req.params.chatId,
+    req.params.chatId as string,
   )
 
   const user1 = chatList.participants[0]
@@ -93,7 +93,7 @@ const seenMessage = catchAsync(async (req: Request, res: Response) => {
 
 // Delete message
 const deleteMessages = catchAsync(async (req: Request, res: Response) => {
-  const result = await messagesService.deleteMessages(req.params.id)
+  const result = await messagesService.deleteMessages(req.params.id as string)
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -104,7 +104,7 @@ const deleteMessages = catchAsync(async (req: Request, res: Response) => {
 
 // delete messages by chat ID
 const deleteMessagesByChatId = catchAsync(async (req: Request, res: Response) => {
-  const result = await messagesService.deleteMessagesByChatId(req.params.chatId)
+  const result = await messagesService.deleteMessagesByChatId(req.params.chatId as string)
 
   sendResponse(res, {
     statusCode: 200,

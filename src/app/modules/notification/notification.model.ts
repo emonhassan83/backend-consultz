@@ -42,19 +42,16 @@ const notificationSchema = new Schema<TNotification>(
 )
 
 // filter out deleted documents
-notificationSchema.pre('find', function (next) {
+notificationSchema.pre('find', function () {
   this.find({ isDeleted: { $ne: true } })
-  next()
 })
 
-notificationSchema.pre('findOne', function (next) {
+notificationSchema.pre('findOne', function () {
   this.find({ isDeleted: { $ne: true } })
-  next()
 })
 
-notificationSchema.pre('aggregate', function (next) {
+notificationSchema.pre('aggregate', function () {
   this.pipeline().unshift({ $match: { isDeleted: { $ne: true } } })
-  next()
 })
 
 export const Notification = model<TNotification>(

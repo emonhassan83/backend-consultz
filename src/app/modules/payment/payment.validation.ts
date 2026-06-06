@@ -17,7 +17,7 @@ const confirmPaymentSchema = z.object({
     user: objectIdSchema,
     booking: objectIdSchema,
     paymentIntentId: z.string({
-      required_error: 'Payment IntentId is required!',
+      message: 'Payment IntentId is required!',
     }),
   }),
 })

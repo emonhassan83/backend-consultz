@@ -16,7 +16,7 @@ const createContentMeta = catchAsync(async (req, res) => {
 
 const getAContentMeta = catchAsync(async (req, res) => {
   const result = await ContentMetaService.getAContentMetaFromDB(
-    req.params.contentId,
+    req.params.contentId as string,
   )
 
   sendResponse(res, {
@@ -28,7 +28,7 @@ const getAContentMeta = catchAsync(async (req, res) => {
 })
 
 const updateContentMeta = catchAsync(async (req, res) => {
-  const result = await ContentMetaService.updateAContentMetaFromDB(req.params?.id, req.body)
+  const result = await ContentMetaService.updateAContentMetaFromDB(req.params?.id as string, req.body)
 
   sendResponse(res, {
     statusCode: 200,
@@ -40,7 +40,7 @@ const updateContentMeta = catchAsync(async (req, res) => {
 
 const likeContent = catchAsync(async (req, res) => {
   const result = await ContentMetaService.likeContentFromDB(
-    req.params.contentId,
+    req.params.contentId as string,
     req.user,
   )
 
@@ -54,7 +54,7 @@ const likeContent = catchAsync(async (req, res) => {
 
 const unlikeContent = catchAsync(async (req, res) => {
   const result = await ContentMetaService.unlikeContentFromDB(
-    req.params.contentId,
+    req.params.contentId as string,
     req.user,
   )
 

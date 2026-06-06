@@ -29,7 +29,7 @@ const getReviewsByExpert = catchAsync(
 )
 
 const getReviewsById = catchAsync(async (req: Request, res: Response) => {
-  const result = await reviewsService.getReviewsById(req.params.id)
+  const result = await reviewsService.getReviewsById(req.params.id as string)
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -39,7 +39,7 @@ const getReviewsById = catchAsync(async (req: Request, res: Response) => {
 })
 
 const updateReviews = catchAsync(async (req: Request, res: Response) => {
-  const result = await reviewsService.updateReviews(req.params.id, req.body)
+  const result = await reviewsService.updateReviews(req.params.id as string, req.body)
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -49,7 +49,7 @@ const updateReviews = catchAsync(async (req: Request, res: Response) => {
 })
 
 const deleteReviews = catchAsync(async (req: Request, res: Response) => {
-  const result = await reviewsService.deleteReviews(req.params.id)
+  const result = await reviewsService.deleteReviews(req.params.id as string)
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,

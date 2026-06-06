@@ -15,7 +15,7 @@ const createSupport = catchAsync(async (req, res) => {
 })
 
 const sentSupportMessage = catchAsync(async (req, res) => {
-  const result = await SupportService.sentSupportMessageIntoDB(req.params.id, req.body)
+  const result = await SupportService.sentSupportMessageIntoDB(req.params.id as string, req.body)
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
@@ -38,7 +38,7 @@ const getAllSupports = catchAsync(async (req, res) => {
 })
 
 const getASupport = catchAsync(async (req, res) => {
-  const result = await SupportService.getASupportFromDB(req.params.id)
+  const result = await SupportService.getASupportFromDB(req.params.id as string)
 
   sendResponse(res, {
     success: true,
@@ -49,7 +49,7 @@ const getASupport = catchAsync(async (req, res) => {
 })
 
 const deleteASupport = catchAsync(async (req, res) => {
-  const result = await SupportService.deleteASupportFromDB(req.params.id)
+  const result = await SupportService.deleteASupportFromDB(req.params.id as string)
 
   sendResponse(res, {
     success: true,
