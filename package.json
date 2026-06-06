@@ -67,5 +67,10 @@
     "ts-node-dev": "^2.0.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.24.1"
+  },
+  "overrides": {
+    "uuid": "^11.1.1",
+    "glob": "^11.0.0",
+    "rimraf": "^5.0.0"
   }
 }
