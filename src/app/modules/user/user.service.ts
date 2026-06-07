@@ -771,6 +771,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       followerGrowthRate,
       followers: totalFollowersCount, // ── people following this user
       following: totalFollowingCount, // ── people this user follows
+      isConnectedStripe: !!user.stripeAccountId,
     }
   } catch (error) {
     await session.abortTransaction()
