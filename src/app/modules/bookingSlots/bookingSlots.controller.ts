@@ -14,8 +14,7 @@ const createBookingSlot = catchAsync(async (req, res) => {
 })
 
 const getAllBookingSlots = catchAsync(async (req, res) => {
-  req.query['author'] = req.params.userId
-  const result = await BookingSlotsService.getAllIntoFromDB(req.query)
+  const result = await BookingSlotsService.getAllIntoFromDB(req.query, req.params.userId as string)
 
   sendResponse(res, {
     success: true,

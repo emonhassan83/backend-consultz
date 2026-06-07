@@ -93,11 +93,10 @@ const insertIntoDB = async (
   }
 }
 
-const getAllIntoFromDB = async (query: Record<string, unknown>) => {
-  const { year, month, author, date } = query as {
+const getAllIntoFromDB = async (query: Record<string, unknown>, author: string) => {
+  const { year, month, date } = query as {
     year?: string
     month?: string
-    author?: string
     date?: string
   }
 
