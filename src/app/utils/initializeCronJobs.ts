@@ -31,6 +31,8 @@ import Stripe from 'stripe'
 import config from '../config'
 import { modeType } from '../modules/notification/notification.interface'
 
+const TIMEZONE = 'Asia/Dhaka'
+
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2026-05-27.dahlia',
   typescript: true,
@@ -143,7 +145,7 @@ export const initializeCronJobs = () => {
         session.endSession()
       }
     },
-    { timezone: 'Europe/London' },
+    { timezone: TIMEZONE },
   )
 
   // 2. Daily review reminder job (midnight UK time)
@@ -197,7 +199,7 @@ export const initializeCronJobs = () => {
 
       console.log('Daily Review Reminder Job Completed')
     },
-    { timezone: 'Europe/London' },
+    { timezone: TIMEZONE },
   )
 
   // 3. expertReliabilityReward.job.ts (daily at midnight)
@@ -242,7 +244,7 @@ export const initializeCronJobs = () => {
         }
       }
     },
-    { timezone: 'Europe/London' },
+    { timezone: TIMEZONE },
   )
 
   // 4. expertResponseTimeReward.job.ts (weekly, e.g., every Sunday midnight)
@@ -305,7 +307,7 @@ export const initializeCronJobs = () => {
         }
       }
     },
-    { timezone: 'Europe/London' },
+    { timezone: TIMEZONE },
   )
 
   // 5. Time-sensitive booking notifications (every 5 minutes)
@@ -316,7 +318,7 @@ export const initializeCronJobs = () => {
         'Time-Sensitive Booking Notifications Job Started (every 5 min)',
       )
 
-      const now = dayjs().tz('Europe/London')
+      const now = dayjs().tz(TIMEZONE)
       const nowDate = now.format('YYYY-MM-DD')
 
       // Today's slots (distinct IDs only - very fast)
@@ -517,7 +519,7 @@ export const initializeCronJobs = () => {
         `Time-sensitive notifications processed for ${notificationsToSend.length} recipients`,
       )
     },
-    { timezone: 'Europe/London' },
+    { timezone: TIMEZONE },
   )
 
   // 6. Auto-mark old confirmed bookings as "not_responded" + free slot + refund
@@ -530,7 +532,7 @@ export const initializeCronJobs = () => {
       session.startTransaction()
 
       try {
-        const now = dayjs().tz('Europe/London')
+        const now = dayjs().tz(TIMEZONE)
         const thresholdTime = now.subtract(24, 'hour') // 24 hours after slot time
 
         // Find confirmed bookings that are overdue and not yet completed
@@ -667,7 +669,7 @@ export const initializeCronJobs = () => {
         session.endSession()
       }
     },
-    { timezone: 'Europe/London' },
+    { timezone: TIMEZONE },
   )
 
   console.log('All cron jobs initialized successfully')

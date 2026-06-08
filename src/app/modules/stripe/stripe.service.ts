@@ -15,16 +15,29 @@ const stripLinkAccount = async (userId: string) => {
   }
 
   try {
-      const account = await StripeService.getStripe().accounts.create({
+    const account = await StripeService.getStripe().accounts.create({
       type: 'express',
       country: 'US',
-      email: user.email, // Important: Add email
+      email: user.email,
+
       business_type: 'individual',
+
+      individual: {
+        email: user.email,
+        first_name: user.firstName,
+        last_name: user.lastName,
+      },
+
+      business_profile: {
+        url: `https://consultz-e39b8.web.app/expert/${user._id}`,
+        product_description: 'Expert services on platform',
+      },
+
       capabilities: {
         card_payments: { requested: true },
         transfers: { requested: true },
       },
-    });
+    })
 
     const accountId = account.id
 
@@ -53,34 +66,43 @@ const stripLinkAccount = async (userId: string) => {
 }
 
 // ================== Connect Existing Stripe Account ==================
-const connectExistingStripeAccount = async (userId: string, payload: { stripeAccountId: string }) => {
-  const { stripeAccountId } = payload;
+const connectExistingStripeAccount = async (
+  userId: string,
+  payload: { stripeAccountId: string },
+) => {
+  const { stripeAccountId } = payload
 
   if (!stripeAccountId || !stripeAccountId.startsWith('acct_')) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid Stripe Account ID. It must start with "acct_"');
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Invalid Stripe Account ID. It must start with "acct_"',
+    )
   }
 
   // Verify that the Stripe Account really exists
   try {
-    await StripeService.getStripe().accounts.retrieve(stripeAccountId);
+    await StripeService.getStripe().accounts.retrieve(stripeAccountId)
   } catch (err: any) {
-    console.error('Stripe Account Verification Failed:', err.message);
-    throw new AppError(httpStatus.BAD_REQUEST, 'This Stripe account does not exist or is not accessible.');
+    console.error('Stripe Account Verification Failed:', err.message)
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'This Stripe account does not exist or is not accessible.',
+    )
   }
 
   // Save to database
   const updatedUser = await User.findByIdAndUpdate(
     userId,
     { stripeAccountId },
-    { new: true }
-  );
+    { new: true },
+  )
 
   if (!updatedUser) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found')
   }
 
   // Generate onboarding / refresh link using your existing refresh logic
-  const accountLinkUrl = await refresh(stripeAccountId, { userId });
+  const accountLinkUrl = await refresh(stripeAccountId, { userId })
 
   return {
     success: true,
@@ -88,8 +110,8 @@ const connectExistingStripeAccount = async (userId: string, payload: { stripeAcc
     accountId: stripeAccountId,
     url: accountLinkUrl,
     message: 'Your existing Stripe account has been successfully connected!',
-  };
-};
+  }
+}
 
 // Check if user has connected Stripe account
 const checkStripeConnected = async (userId: string) => {
