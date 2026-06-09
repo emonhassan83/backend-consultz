@@ -3,6 +3,7 @@ import apn from '@parse/node-apn';
 import fs from 'fs';
 import path from 'path';
 import config from '../config';
+import { ObjectId } from 'mongoose';
 
 const apnProvider = new apn.Provider({
   token: {
@@ -27,6 +28,9 @@ export const sendVoIPPush = async (
     agora_token: string;
     agora_uid: number;
     is_video: boolean;
+    bookingId: string | ObjectId,
+    expertId: string | ObjectId,
+    userId: string | ObjectId
   }
 ): Promise<boolean> => {
   const notification = new apn.Notification();
@@ -49,6 +53,10 @@ export const sendVoIPPush = async (
     agora_token: callData.agora_token,
     agora_uid: callData.agora_uid,
     is_video: callData.is_video,
+    // extra info
+    bookingId: callData.bookingId,
+    expertId: callData.expertId,
+    userId: callData.userId
   };
 
   try {

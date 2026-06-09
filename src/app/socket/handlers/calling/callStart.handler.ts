@@ -24,21 +24,24 @@ type TCallStartPayload = {
 
 const callStart = eventHandler<TCallStartPayload>(
   async (socket: TSocket, payload, callback) => {
-    const callerId = socket.auth._id.toString();
+    const callerId = socket.auth._id.toString()
 
-    const { bookingId, isVideo = false } = payload ?? {};
+    const { bookingId, isVideo = false } = payload ?? {}
 
     if (!bookingId) {
-      return callbackFn(callback, { success: false, message: 'bookingId is required' });
+      return callbackFn(callback, {
+        success: false,
+        message: 'bookingId is required',
+      })
     }
 
-    const session = await mongoose.startSession();
-    session.startTransaction();
+    const session = await mongoose.startSession()
+    session.startTransaction()
 
     try {
-      const caller = await User.findById(callerId);
+      const caller = await User.findById(callerId)
       if (!caller || caller.isDeleted) {
-        throw new AppError(httpStatus.NOT_FOUND, 'Caller not found');
+        throw new AppError(httpStatus.NOT_FOUND, 'Caller not found')
       }
 
       const booking = await Booking.findOne({
@@ -46,44 +49,71 @@ const callStart = eventHandler<TCallStartPayload>(
         status: { $in: [BOOKING_STATUS.confirmed, BOOKING_STATUS.completed] },
         isDeleted: false,
         $or: [{ user: callerId }, { consult: callerId }],
-      }).session(session);
+      }).session(session)
 
       if (!booking) {
-        throw new AppError(httpStatus.BAD_REQUEST, 'Valid confirmed booking not found');
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Valid confirmed booking not found',
+        )
       }
 
-      const receiverId = booking.user.toString() === callerId ? booking.consult : booking.user;
+      const receiverId =
+        booking.user.toString() === callerId ? booking.consult : booking.user
 
-      const receiver = await User.findById(receiverId).session(session);
+      const receiver = await User.findById(receiverId).session(session)
       if (!receiver || receiver.isDeleted) {
-        throw new AppError(httpStatus.NOT_FOUND, 'Receiver not found');
+        throw new AppError(httpStatus.NOT_FOUND, 'Receiver not found')
       }
 
-      const channelName = `booking_${booking._id}_${Date.now()}`;
+      const channelName = `booking_${booking._id}_${Date.now()}`
 
-      const callerUid = generate32BitUid();
-      const receiverUid = generate32BitUid();
+      const callerUid = generate32BitUid()
+      const receiverUid = generate32BitUid()
 
-      const callerTokenData = generateAgoraToken({ channelName, uid: callerUid });
-      const receiverTokenData = generateAgoraToken({ channelName, uid: receiverUid });
-
-      const [calling] = await Calling.create([{
-        caller: (caller._id).toString(),
-        receiver: (receiver._id).toString(),
-        booking: (booking._id).toString(),
+      const callerTokenData = generateAgoraToken({
         channelName,
-        callId: callerUid,
-        isVideo,
-        token: callerTokenData.token,
-        tokenExpireAt: callerTokenData.expireAt,
-        status: CALLING_STATUS.pending,
-        participants: [
-          { user: (caller._id).toString(), role: 'caller', status: CALLING_STATUS.pending, agoraUid: callerUid, joinedAt: new Date() },
-          { user: (receiver._id).toString(), role: 'receiver', status: CALLING_STATUS.pending, agoraUid: receiverUid, joinedAt: null },
-        ],
-      }] as any, { session });
+        uid: callerUid,
+      })
+      const receiverTokenData = generateAgoraToken({
+        channelName,
+        uid: receiverUid,
+      })
 
-      await session.commitTransaction();
+      const [calling] = await Calling.create(
+        [
+          {
+            caller: caller._id.toString(),
+            receiver: receiver._id.toString(),
+            booking: booking._id.toString(),
+            channelName,
+            callId: callerUid,
+            isVideo,
+            token: callerTokenData.token,
+            tokenExpireAt: callerTokenData.expireAt,
+            status: CALLING_STATUS.pending,
+            participants: [
+              {
+                user: caller._id.toString(),
+                role: 'caller',
+                status: CALLING_STATUS.pending,
+                agoraUid: callerUid,
+                joinedAt: new Date(),
+              },
+              {
+                user: receiver._id.toString(),
+                role: 'receiver',
+                status: CALLING_STATUS.pending,
+                agoraUid: receiverUid,
+                joinedAt: null,
+              },
+            ],
+          },
+        ] as any,
+        { session },
+      )
+
+      await session.commitTransaction()
 
       callbackFn(callback, {
         success: true,
@@ -96,7 +126,7 @@ const callStart = eventHandler<TCallStartPayload>(
           expireAt: callerTokenData.expireAt,
           isVideo,
         },
-      });
+      })
 
       // ================== PUSH NOTIFICATION LOGIC ==================
       const callIncomingPayload = {
@@ -109,7 +139,12 @@ const callStart = eventHandler<TCallStartPayload>(
         token: receiverTokenData.token,
         uid: receiverUid,
         expireAt: receiverTokenData.expireAt,
-      };
+
+        // for rating: bookingId, expertID, userID
+        bookingId: booking._id.toString(),
+        expertId: booking.consult.toString(),
+        userId: booking.user.toString(),
+      }
 
       if (receiver.deviceType === 'ios' && receiver.voipToken) {
         // iOS → VoIP Push
@@ -121,23 +156,27 @@ const callStart = eventHandler<TCallStartPayload>(
           agora_token: receiverTokenData.token,
           agora_uid: receiverUid,
           is_video: isVideo,
-        });
+
+          // for rating: bookingId, expertID, userID
+          bookingId: booking._id.toString(),
+          expertId: booking.consult.toString(),
+          userId: booking.user.toString(),
+        })
       } else if (receiver.fcmToken) {
         // Android or fallback → FCM
         await sendDataMessageToToken(receiver.fcmToken, {
           type: 'incoming_call',
           ...callIncomingPayload,
-        });
+        })
       }
-
     } catch (error: any) {
-      await session.abortTransaction();
-      console.error('callStart error:', error.message);
-      callbackFn(callback, { success: false, message: error.message });
+      await session.abortTransaction()
+      console.error('callStart error:', error.message)
+      callbackFn(callback, { success: false, message: error.message })
     } finally {
-      session.endSession();
+      session.endSession()
     }
-  }
-);
+  },
+)
 
-export default callStart;
+export default callStart
