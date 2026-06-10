@@ -46,7 +46,7 @@ const callStart = eventHandler<TCallStartPayload>(
 
       const booking = await Booking.findOne({
         _id: bookingId,
-        status: { $in: [BOOKING_STATUS.confirmed] },
+        status: { $in: [BOOKING_STATUS.confirmed, BOOKING_STATUS.completed] },
         isDeleted: false,
         $or: [{ user: callerId }, { consult: callerId }],
       }).session(session)
