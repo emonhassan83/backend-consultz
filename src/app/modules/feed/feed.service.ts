@@ -300,7 +300,7 @@ const changeFeedStatus = async (
   const updatedFeed = await Feed.findOneAndUpdate(
     { _id: id, isDeleted: false },
     { $set: { status } },
-    { new: true, runValidators: true },
+    { returnDocument: 'after', runValidators: true },
   )
 
   if (!updatedFeed) {

@@ -653,7 +653,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       await ProfileView.findOneAndUpdate(
         { viewer: viewerId, viewedUser: viewedUserId },
         { $setOnInsert: { viewedAt: new Date() } },
-        { upsert: true, new: true, session },
+        { upsert: true, returnDocument: 'after', session },
       )
     }
 

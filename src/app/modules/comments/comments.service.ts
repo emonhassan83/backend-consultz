@@ -49,7 +49,7 @@ const createComments = async (payload: TComments, userId: string) => {
       await ContentMeta.findOneAndUpdate(
         { content },
         { $inc: { comment: 1 } },
-        { new: true, session },
+        { returnDocument: 'after', session },
       )
     } else {
       if (!replyRef) {
@@ -280,7 +280,7 @@ const deleteComments = async (id: string, userId: string) => {
     const contentMeta = await ContentMeta.findOneAndUpdate(
       { content: comment.content },
       { $inc: { comment: -totalToDecrement } },
-      { new: true, session },
+      { returnDocument: 'after', session },
     )
 
     if (!contentMeta) {

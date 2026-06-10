@@ -50,7 +50,7 @@ const likeContentFromDB = async (contentId: string, user: any) => {
       $inc: { like: 1 }, // Increase like count by 1
       $addToSet: { likeBy: user._id }, // Add user to likeBy array (prevents duplicates)
     },
-    { new: true, runValidators: true },
+    { returnDocument: 'after', runValidators: true },
   )
 
   if (!updateContentMeta) {
@@ -77,7 +77,7 @@ const unlikeContentFromDB = async (contentId: string, user: any) => {
       $inc: { like: -1 }, // Decrease like count by 1
       $pull: { likeBy: user._id }, // Remove user from likeBy array
     },
-    { new: true, runValidators: true },
+    { returnDocument: 'after', runValidators: true },
   )
 
   if (!updateContentMeta) {

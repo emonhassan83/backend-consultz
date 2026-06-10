@@ -8,7 +8,7 @@ import { canSendPushNotification } from '../notification/notification.utils';
 import { User } from '../user/user.model';
 import { Follow } from '../connection/connection.models';
 import { Feed } from './feed.model';
-import admin from 'firebase-admin';
+import { getMessaging } from 'firebase-admin/messaging'
 import { Notification } from '../notification/notification.model';
 import { Report } from '../report/report.models';
 
@@ -166,7 +166,7 @@ export const notifyFollowersOnNewPost = async (feedId: string) => {
       };
 
       try {
-        const response = await admin.messaging().sendEachForMulticast(multicastPayload);
+        const response = await getMessaging().sendEachForMulticast(multicastPayload);
         console.log(`Batch sent to ${response.successCount} devices, failed: ${response.failureCount}`);
       } catch (err) {
         console.error('FCM batch failed:', err);

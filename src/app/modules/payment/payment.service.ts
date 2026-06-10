@@ -105,7 +105,7 @@ const createPaymentIntent = async (payload: {
       paymentIntentId: paymentIntent.id,
       status: PAYMENT_STATUS.unpaid,
     },
-    { upsert: true, new: true },
+    { upsert: true, returnDocument: 'after' },
   )
 
   return {
@@ -147,7 +147,7 @@ const confirmPayment = async (payload: {
         isPaid: true,
         status: PAYMENT_STATUS.paid,
       },
-      { new: true, session },
+      { returnDocument: 'after', session },
     )
 
     if (!payment) {
@@ -279,7 +279,7 @@ const refundPayment = async (payload: any) => {
     const payment = await Payment.findOneAndUpdate(
       { paymentIntentId: payload.intendId },
       { status: PAYMENT_STATUS.refunded, isPaid: false },
-      { new: true, session },
+      { returnDocument: 'after', session },
     )
     if (!payment || payment?.isDeleted) {
       throw new AppError(httpStatus.NOT_FOUND, 'Payment record not found')

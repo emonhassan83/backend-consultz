@@ -1,4 +1,5 @@
-import admin from 'firebase-admin';
+import { initializeApp, cert, ServiceAccount } from 'firebase-admin/app'
+import { getMessaging } from 'firebase-admin/messaging'
 import AppError from '../errors/AppError';
 import httpStatus from 'http-status'
 import { TNotification } from '../modules/notification/notification.interface';
@@ -19,9 +20,9 @@ const firebaseConfig = {
   client_x509_cert_url: config.firebase.client_x509_cert_url,
 };
 
-admin.initializeApp({
-  credential: admin.credential.cert(firebaseConfig as admin.ServiceAccount),
-});
+initializeApp({
+  credential: cert(firebaseConfig as ServiceAccount),
+})
 
 const normalizeDataPayload = (data?: Record<string, any>) => {
   if (!data) return undefined;
@@ -43,6 +44,11 @@ export const sendNotification = async (
       throw new AppError(httpStatus.BAD_REQUEST, 'Receiver ID is required')
     }
 
+    if (!fcmToken || fcmToken.length === 0) {
+      console.log('⚠️ No FCM tokens provided');
+      return null;
+    }
+
     // ✅ Step 1: Check if user allows notifications
     const user = await User.findById(payload.receiver).select('isNotify fcmToken')
     if (!user) {
@@ -55,7 +61,7 @@ export const sendNotification = async (
     //   return { successCount: 0, skipped: true }
     // }
 
-    const response = await admin.messaging().sendEachForMulticast({
+    const response = await getMessaging().sendEachForMulticast({
       tokens: fcmToken,
       notification: {
         title: payload.message,
@@ -76,20 +82,8 @@ export const sendNotification = async (
  
     console.log(response?.responses, "from send notification");
  
-    if (response.successCount) {
-      fcmToken?.map(async (token) => {
-        try {
-          if (token) {
- 
-            await Notification.create(payload);
- 
-          } else {
-            console.log("Token not found");
-          }
-        } catch (error) {
-          console.log(error);
-        }
-      });
+    if (response.successCount > 0) {
+      await Notification.create(payload);
     }
  
     console.log("Response:", response.responses);
@@ -115,7 +109,7 @@ export const sendDataMessageToToken = async (
 ) => {
   if (!fcmToken) return null;
   const payload = normalizeDataPayload(data);
-  return admin.messaging().send({
+  return getMessaging().send({
     token: fcmToken,
     data: payload,
     android: {
