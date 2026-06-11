@@ -35,18 +35,18 @@ export const bookingComplete = eventHandler<TBookingCompletePayload>(
       const booking = await Booking.findById(bookingId).session(session)
       if (!booking) throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
 
-      // 🔥 যদি আগেই Completed হয়ে থাকে তাহলে পুরোপুরি স্কিপ
+      // 🔥 Strong Idempotency Check
       if (booking.status === BOOKING_STATUS.completed) {
-        console.log(`⚠️ Booking ${bookingId} already completed. Skipping duplicate processing.`)
+        console.log(`⏭️ Booking ${bookingId} already completed. Skipping duplicate processing.`)
         await session.commitTransaction()
         return
       }
 
-      // Mark as completed
+      // Mark booking as completed
       booking.status = BOOKING_STATUS.completed
       await booking.save({ session })
 
-      // Check if Withdraw already exists
+      // Check if Withdraw already exists for this booking
       let withdraw = await Withdraw.findOne({
         booking: booking._id.toString(),
         isDeleted: false,
@@ -54,7 +54,7 @@ export const bookingComplete = eventHandler<TBookingCompletePayload>(
 
       const isNewWithdraw = !withdraw
 
-      // Create Withdraw only if it doesn't exist
+      // Create Withdraw only if it doesn't exist yet
       if (isNewWithdraw) {
         const payment = await Payment.findOne({
           booking: booking._id.toString(),
@@ -92,7 +92,7 @@ export const bookingComplete = eventHandler<TBookingCompletePayload>(
         User.findById(booking.consult),
       ])
 
-      // General completion notification (every time is okay)
+      // General completion notification (every time ok)
       const tokens: string[] = []
       if (caller?.fcmToken) tokens.push(caller.fcmToken)
       if (receiver?.fcmToken) tokens.push(receiver.fcmToken)
@@ -107,12 +107,12 @@ export const bookingComplete = eventHandler<TBookingCompletePayload>(
         })
       }
 
-      // 🔥 Withdraw Notification — শুধুমাত্র নতুন Withdraw তৈরি হলে পাঠাবে
+      // Withdraw Notification — শুধুমাত্র নতুন Withdraw তৈরি হলে যাবে
       if (isNewWithdraw && receiver && withdraw) {
-        console.log(`📤 Sending Withdraw Notification for new withdraw: ${withdraw._id}`)
+        console.log(`📤 Sending Withdraw Notification for booking: ${bookingId}`)
         await sendWithdrawNotify(WITHDRAW_STATUS.proceed, withdraw, receiver)
       } else if (!isNewWithdraw) {
-        console.log(`⏭️ Skipping withdraw notification (already sent previously)`)
+        console.log(`⏭️ Skipping withdraw notification (already sent before)`)
       }
 
       // Emit to clients
@@ -123,7 +123,7 @@ export const bookingComplete = eventHandler<TBookingCompletePayload>(
         status: BOOKING_STATUS.completed,
       })
 
-      console.log(`✅ Booking completed processing finished | BookingId: ${bookingId}`)
+      console.log(`✅ BookingComplete processing finished | BookingId: ${bookingId}`)
     } catch (error: any) {
       await session.abortTransaction()
       console.error('❌ bookingComplete error:', error.message)

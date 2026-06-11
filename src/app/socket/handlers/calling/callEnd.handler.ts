@@ -10,6 +10,7 @@ import { CALLING_STATUS } from '../../../modules/calling/calling.constant';
 import { sendNotification } from '../../../utils/sentNotification';
 import { modeType } from '../../../modules/notification/notification.interface';
 import { callbackFn } from '../../../utils/CallbackFn';
+import { bookingComplete } from './bookingCompleted.handler';
 
 type TCallEndPayload = {
   callId: string;
@@ -32,7 +33,6 @@ const callEnd = eventHandler<TCallEndPayload>(
     session.startTransaction();
 
     try {
-      // 1. Find call with authorization
       const call = await Calling.findOne({
         _id: callId,
         $or: [{ caller: userId }, { receiver: userId }],
@@ -43,53 +43,39 @@ const callEnd = eventHandler<TCallEndPayload>(
         throw new AppError(httpStatus.NOT_FOUND, 'Call session not found or unauthorized');
       }
 
-      // if (call.status === CALLING_STATUS.completed) {
-      //   throw new AppError(httpStatus.BAD_REQUEST, 'Call already ended');
-      // }
+      // 🔥 If call already ended → skip everything
+      if (call.status === CALLING_STATUS.ended || call.status === CALLING_STATUS.completed) {
+        console.log(`⚠️ Call ${callId} already ended. Skipping duplicate.`);
+        await session.commitTransaction();
+        return callbackFn(callback, {
+          success: true,
+          message: 'Call already ended',
+        });
+      }
 
-      // 2. Calculate duration
+      // Calculate duration
       const now = new Date();
       const startTime = call.startedAt || call.createdAt;
       const finalDuration = clientDuration ?? 
         Math.floor((now.getTime() - startTime.getTime()) / 1000);
 
-      // 3. Update call
+      // Update call status
       call.status = CALLING_STATUS.ended;
       call.endedAt = now;
       call.duration = finalDuration;
       await call.save({ session });
 
-      // // 4. Complete booking
-      // const booking = await Booking.findById(call.booking).session(session);
-      // if (!booking) throw new AppError(httpStatus.NOT_FOUND, 'Booking not found');
+      await session.commitTransaction();
 
-      // booking.status = BOOKING_STATUS.completed;
-      // await booking.save({ session });
+      // ================== Trigger Booking Completion (Only Once) ==================
+      // bookingComplete handler-এ idempotency আছে, তাই নিরাপদে কল করা যায়
+      await bookingComplete.call(socket, {
+        bookingId: call.booking.toString(),
+        callId: call._id.toString(),
+        duration: finalDuration,
+      });
 
-      // // 5. Payment & Withdraw
-      // const payment = await Payment.findOne({
-      //   booking: booking._id,
-      //   isDeleted: false,
-      // }).session(session);
-
-      // if (!payment) throw new AppError(httpStatus.NOT_FOUND, 'Payment not found');
-
-      // const contents = await Contents.findOne().lean();
-      // const holdDays = contents?.paymentHoldDays || 7;
-      // const proceedAt = dayjs(now).add(holdDays, 'day').toDate();
-
-      // const [withdraw] = await Withdraw.create(
-      //   [{
-      //     user: booking.consult,
-      //     booking: booking._id,
-      //     amount: payment.consultAmount,
-      //     status: WITHDRAW_STATUS.proceed,
-      //     proceedAt,
-      //   }],
-      //   { session }
-      // );
-
-      // 6. Notification to both users
+      // Notify both users (call ended)
       const [caller, receiver] = await Promise.all([
         User.findById(call.caller),
         User.findById(call.receiver),
@@ -101,7 +87,7 @@ const callEnd = eventHandler<TCallEndPayload>(
 
       if (tokens.length > 0) {
         await sendNotification(tokens, {
-          receiver: caller?._id,
+          receiver: caller?._id || receiver?._id,
           message: 'Call Ended',
           description: `Your ${call.isVideo ? 'video' : 'voice'} call has ended. Duration: ${Math.floor(finalDuration / 60)} min`,
           reference: call._id,
@@ -109,51 +95,30 @@ const callEnd = eventHandler<TCallEndPayload>(
         });
       }
 
-      // // 7. Withdraw notification to consultant
-      // if (caller?._id.toString() === booking.consult.toString()) {
-      //   await sendWithdrawNotify(WITHDRAW_STATUS.proceed, withdraw, caller);
-      // }
-
-      await session.commitTransaction();
-
-      // 8. Emit to all participants
+      // Emit to clients
       const participants = [call.caller.toString(), call.receiver.toString()];
-
       socket.to(participants).emit('callEnded', {
         callId: call._id,
         duration: finalDuration,
         endedAt: now,
-        status: CALLING_STATUS.completed,
       });
 
-      // Caller নিজেও পায়
       socket.emit('callEnded', {
         callId: call._id,
         duration: finalDuration,
         endedAt: now,
-        status: CALLING_STATUS.completed,
       });
 
-      // ✅ callbackFn দিয়ে response দাও (chat এর মতো)
       callbackFn(callback, {
-        statusCode: httpStatus.OK,
         success: true,
         message: 'Call ended successfully',
-        data: {
-          callId: call._id,
-          duration: finalDuration,
-          endedAt: now,
-        }
+        data: { callId: call._id, duration: finalDuration },
       });
 
     } catch (error: any) {
       await session.abortTransaction();
       console.error('❌ Call end error:', error.message);
-
-      callbackFn(callback, {
-        success: false,
-        message: error.message || 'Failed to end call',
-      });
+      callbackFn(callback, { success: false, message: error.message });
     } finally {
       session.endSession();
     }
