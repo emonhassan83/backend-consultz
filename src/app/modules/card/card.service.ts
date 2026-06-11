@@ -178,7 +178,7 @@ const setAsDefault = async (cardId: string, userId: string) => {
     const updatedCard = await Card.findByIdAndUpdate(
       cardId,
       { setAsDefault: true },
-      { new: true, session },
+      { returnDocument: 'after', session },
     )
 
     if (!updatedCard) {
@@ -212,7 +212,7 @@ const deleteCard = async (id: string) => {
   const result = await Card.findByIdAndUpdate(
     id,
     { isDeleted: true },
-    { new: true },
+    { returnDocument: 'after' },
   )
   if (!result) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Card history deleted failed !')

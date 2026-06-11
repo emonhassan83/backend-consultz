@@ -98,7 +98,7 @@ const updateReport = async (id: string, payload: Partial<IReport>) => {
   }
 
   const updatedReport = await Report.findByIdAndUpdate(id, payload, {
-    new: true,
+    returnDocument: 'after',
   })
   if (!updatedReport) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Report updated failed !')

@@ -802,7 +802,7 @@ const changeUserStatusFromDB = async (payload: {
   const updatedUser = await User.findByIdAndUpdate(
     userId,
     { status },
-    { new: true },
+    { returnDocument: 'after' },
   ).select(
     '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline status createdAt',
   )
@@ -987,7 +987,7 @@ const changeUserNotifyFromDB = async (id: string, payload: any) => {
 
   // 4️⃣ Update user
   const result = await User.findByIdAndUpdate(id, payload, {
-    new: true,
+    returnDocument: 'after',
   }).select(
     '_id id firstName lastName email photoUrl headline status createdAt pushNotify emailNotify',
   )
@@ -1192,7 +1192,7 @@ const updateLocationFromDB = async (
       location: { type: 'Point', coordinates: [longitude, latitude] },
       address: address,
     },
-    { new: true },
+    { returnDocument: 'after' },
   ).select(
     '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto status createdAt',
   )
@@ -1211,7 +1211,7 @@ const deleteAUserFromDB = async (userId: string) => {
   const result = await User.findByIdAndUpdate(
     userId,
     { isDeleted: true },
-    { new: true },
+    { returnDocument: 'after' },
   ).select(
     '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto status createdAt',
   )

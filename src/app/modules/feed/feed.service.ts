@@ -276,7 +276,7 @@ const updateFeedFromDB = async (
   }
 
   const updateFeed = await Feed.findByIdAndUpdate(id, payload, {
-    new: true,
+    returnDocument: 'after',
   })
   if (!updateFeed) {
     throw new AppError(httpStatus.NOT_FOUND, 'Feed posts not updated')
@@ -332,7 +332,7 @@ const deleteAFeedFromDB = async (id: string) => {
     {
       isDeleted: true,
     },
-    { new: true },
+    { returnDocument: 'after' },
   )
 
   if (!result) {

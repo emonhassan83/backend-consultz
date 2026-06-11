@@ -141,7 +141,7 @@ const createReviews = async (
     const updatedReviewer = await User.findByIdAndUpdate(
       reviewer._id,
       { $inc: { points: totalPointsAwarded } },
-      { new: true, session }
+      { returnDocument: 'after', session }
     );
 
     // 8. Send push notification to reviewer (if enabled)
@@ -244,7 +244,7 @@ const getReviewsById = async (id: string) => {
 }
 
 const updateReviews = async (id: string, payload: Partial<TReviews>) => {
-  const result = await Reviews.findByIdAndUpdate(id, payload, { new: true })
+  const result = await Reviews.findByIdAndUpdate(id, payload, { returnDocument: 'after' })
   if (!result) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Failed to update Reviews')
   }

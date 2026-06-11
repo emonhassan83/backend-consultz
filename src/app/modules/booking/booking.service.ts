@@ -496,7 +496,7 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
     const cancelledBooking = await Booking.findByIdAndUpdate(
       bookingId,
       { status: BOOKING_STATUS.cancelled },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).populate('user consult slot')
     if (!cancelledBooking) {
       throw new AppError(
@@ -644,7 +644,7 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
     const updatedBooking = await Booking.findByIdAndUpdate(
       bookingId,
       { status: BOOKING_STATUS.confirmed, respondedAt: new Date() },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).populate('user consult slot')
 
     if (!updatedBooking) {
@@ -806,7 +806,7 @@ const declineBooking = async (
     const updatedBooking = await Booking.findByIdAndUpdate(
       bookingId,
       { status: BOOKING_STATUS.declined },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).populate('user consult slot')
 
     if (!updatedBooking) {
@@ -957,7 +957,7 @@ const completedBooking = async (
           recordFile,
         },
       },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).populate('user consult slot')
 
     if (!updatedBooking) {
@@ -1195,7 +1195,7 @@ const deleteBookings = async (id: string) => {
   const result = await Booking.findByIdAndUpdate(
     id,
     { isDeleted: true },
-    { new: true },
+    { returnDocument: 'after' },
   )
 
   if (!result) {

@@ -65,7 +65,7 @@ const createPaymentIntent = async (payload: {
 
   const ephemeralKey = await stripe.ephemeralKeys.create(
     { customer: stripeCustomerId },
-    { apiVersion: '2025-02-24.acacia' },
+    { apiVersion: '2026-05-27.dahlia' },
   )
 
   /* ========= 4. Calculate Amount ========= */
@@ -161,7 +161,7 @@ const confirmPayment = async (payload: {
         paymentStatus: PAYMENT_STATUS.paid,
         status: BOOKING_STATUS.pending,
       },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).populate('slot')
 
     if (!booking) {
@@ -301,7 +301,7 @@ const refundPayment = async (payload: any) => {
     await Booking.findByIdAndUpdate(
       payment.booking,
       { paymentStatus: PAYMENT_STATUS.refunded },
-      { new: true, session },
+      { returnDocument: 'after', session },
     )
 
     // Process refund via Stripe

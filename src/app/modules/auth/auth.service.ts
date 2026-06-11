@@ -81,7 +81,7 @@ const loginUser = async (payload: TLoginUser) => {
 
   //* 6. Update user document if needed
   if (Object.keys(updateData).length > 0) {
-    await User.findByIdAndUpdate(user._id, updateData, { new: true })
+    await User.findByIdAndUpdate(user._id, updateData, { returnDocument: 'after' })
   }
 
   return {
@@ -145,7 +145,7 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
           verification: { otp: 0, expiresAt: new Date(), status: true },
           expireAt: null,
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
 
       if (!updatedUser) {
@@ -159,7 +159,7 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
     }
 
     // Existing user update
-    await User.findByIdAndUpdate(user._id, updateData, { new: true })
+    await User.findByIdAndUpdate(user._id, updateData, { returnDocument: 'after' })
     return generateTokens(user)
   }
 
@@ -228,7 +228,7 @@ const registerWithApple = async (payload: TAppleLoginPayload) => {
           verification: { otp: 0, expiresAt: new Date(), status: true },
           expireAt: null,
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
 
       if (!updatedUser) {
@@ -242,7 +242,7 @@ const registerWithApple = async (payload: TAppleLoginPayload) => {
     }
 
     // Existing user-এর role
-    await User.findByIdAndUpdate(user._id, updateData, { new: true })
+    await User.findByIdAndUpdate(user._id, updateData, { returnDocument: 'after' })
     return generateTokens(user)
   }
 

@@ -227,7 +227,7 @@ const updateComments = async (
     )
   }
   const result = await Comments.findByIdAndUpdate(id, payload, {
-    new: true,
+    returnDocument: 'after',
   }).populate([
     { path: 'user', select: 'firstName lastName photoUrl' },
     {

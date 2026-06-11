@@ -37,20 +37,25 @@ export const sendVoIPPush = async (
   notification.topic = `${config.apns.bundleId}.voip`;
   notification.expiry = Math.floor(Date.now() / 1000) + 7200; // 2 hours
   notification.priority = 10;
-  notification.pushType = 'alert';
+  notification.pushType = 'voip';
 
   // VoIP Payload
  notification.payload = {
     aps: {
       'content-available': 1,
-      alert: {
-        title: callData.caller_name,
-        body: `Incoming ${callData.is_video ? 'Video' : 'Audio'} Call`,
-      },
     },
     type: 'incoming_call',
-    ...callData, // all data
-  }
+    call_id: callData.call_id,
+    caller_name: callData.caller_name,
+    caller_photo: callData.caller_photo || '',
+    channel_name: callData.channel_name,
+    agora_token: callData.agora_token,
+    agora_uid: callData.agora_uid,
+    is_video: callData.is_video,
+    bookingId: callData.bookingId,
+    expertId: callData.expertId,
+    userId: callData.userId,
+  };
 
   try {
     const response = await apnProvider.send(notification, voipToken);

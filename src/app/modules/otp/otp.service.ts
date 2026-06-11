@@ -60,7 +60,7 @@ const verifyWithEmail = async (token: string, otp: string | number) => {
         expireAt: null, // set null to prevent verify user deletion data
       },
     },
-    { new: true },
+    { returnDocument: 'after' },
   ).select('email _id name role')
 
   const jwtPayload = {
@@ -132,7 +132,7 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
         isPhoneOtpVerified: true,
       },
     },
-    { new: true }
+    { returnDocument: 'after' }
   );
 
   // Push notification for points
@@ -198,7 +198,7 @@ const sendOtpInEmail = async (email: string) => {
         },
       },
     },
-    { new: true },
+    { returnDocument: 'after' },
   )
 
   if (!updateOtp) {
@@ -270,7 +270,7 @@ const sendOtpViaTokenInPhone = async (
         },
       },
     },
-    { new: true },
+    { returnDocument: 'after' },
   )
 
   if (!updateOtp) {
@@ -351,7 +351,7 @@ const sendOtpViaDirectPhone = async (payload: { phoneNumber: string }) => {
         },
       },
     },
-    { new: true },
+    { returnDocument: 'after' },
   )
 
   if (!updateOtp) {
