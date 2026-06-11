@@ -13,7 +13,7 @@ import { callbackFn } from '../../../utils/CallbackFn';
 
 type TCallEndPayload = {
   callId: string;
-  duration?: number;        // client থেকে optional duration পাঠাতে পারে
+  duration?: number;
 };
 
 const callEnd = eventHandler<TCallEndPayload>(
