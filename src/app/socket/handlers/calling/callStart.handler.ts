@@ -61,7 +61,9 @@ const callStart = eventHandler<TCallStartPayload>(
       const receiverId =
         booking.user.toString() === callerId ? booking.consult : booking.user
 
-      const receiver = await User.findById(receiverId).session(session)
+      const receiver = await User.findById(receiverId).select(
+        'deviceType voipToken fcmToken firstName lastName photoUrl'
+      ).session(session)
       if (!receiver || receiver.isDeleted) {
         throw new AppError(httpStatus.NOT_FOUND, 'Receiver not found')
       }
@@ -152,9 +154,11 @@ const callStart = eventHandler<TCallStartPayload>(
         userId: booking.user.toString(),
       }
 
+      console.log(`[Call Start] Receiver Device: ${receiver.deviceType}, VoIP: ${!!receiver.voipToken}, FCM: ${!!receiver.fcmToken}`)
+
       if (receiver.deviceType === 'ios' && receiver.voipToken) {
         // iOS → VoIP Push
-        await sendVoIPPush(receiver.voipToken, {
+        const voipSuccess = await sendVoIPPush(receiver.voipToken, {
           call_id: calling._id.toString(),
           caller_name: callIncomingPayload.callerName,
           caller_photo: callIncomingPayload.callerPhoto,
@@ -168,11 +172,16 @@ const callStart = eventHandler<TCallStartPayload>(
           expertId: booking.consult.toString(),
           userId: booking.user.toString(),
         })
+
+        if (!voipSuccess && receiver.fcmToken) {
+          console.warn('[VoIP Failed] Falling back to FCM')
+          await sendDataMessageToToken(receiver.fcmToken, callIncomingPayload)
+        }
       } else if (receiver.fcmToken) {
         // Android or fallback → FCM
-        await sendDataMessageToToken(receiver.fcmToken, {
-          ...callIncomingPayload,
-        })
+        await sendDataMessageToToken(receiver.fcmToken, callIncomingPayload)
+      } else {
+        console.warn(`[Push] No valid token found for receiver ${receiverId}`)
       }
     } catch (error: any) {
       await session.abortTransaction()
