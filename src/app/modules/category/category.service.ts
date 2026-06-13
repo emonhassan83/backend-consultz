@@ -79,7 +79,7 @@ const updateAIntoFromDB = async (
   }
 
   const updated = await Category.findByIdAndUpdate(id, payload, {
-    new: true,
+    returnDocument: 'after',
     runValidators: true,
   }).lean();
 

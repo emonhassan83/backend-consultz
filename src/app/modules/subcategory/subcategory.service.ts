@@ -97,7 +97,7 @@ const updateIntoDB = async (
   }
 
   const updated = await SubCategory.findByIdAndUpdate(id, payload, {
-    new: true,
+    returnDocument: 'after',
     runValidators: true,
   }).lean()
 
@@ -115,7 +115,7 @@ const deleteFromDB = async (id: string): Promise<TSubCategory> => {
   const result = await SubCategory.findByIdAndUpdate(
     id,
     { isDeleted: true },
-    { new: true },
+    { returnDocument: 'after' },
   ).lean()
 
   if (!result) {

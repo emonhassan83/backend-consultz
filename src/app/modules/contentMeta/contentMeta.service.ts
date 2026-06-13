@@ -25,7 +25,7 @@ const updateAContentMetaFromDB = async (
   id: string,
   payload: Partial<TContentMeta>,
 ) => {
-  const result = await ContentMeta.findByIdAndUpdate(id, payload, { new: true })
+  const result = await ContentMeta.findByIdAndUpdate(id, payload, { returnDocument: 'after' })
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'Content Meta not found')
   }

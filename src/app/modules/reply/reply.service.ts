@@ -53,7 +53,7 @@ const updateReply = async (
     )
   }
   const result = await Reply.findByIdAndUpdate(id, payload, {
-    new: true,
+    returnDocument: 'after',
   }).populate([
     { path: 'user', select: 'name email photoUrl' },
   ])

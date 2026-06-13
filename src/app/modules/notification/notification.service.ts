@@ -185,7 +185,7 @@ const deleteANotificationFromDB = async (id: string) => {
   const deleteNotification = await Notification.findByIdAndUpdate(
     id,
     { isDeleted: true },
-    { new: true },
+    { returnDocument: 'after' },
   )
 
   if (!deleteNotification) {
