@@ -33,17 +33,14 @@ const seedAdmin = async () => {
 
 // Function to seed Contents
 const seedContents = async () => {
-  const admin = await findAdmin()
   const existingContents = await Contents.countDocuments()
 
   if (existingContents === 0) {
     await Contents.create({
-      aboutUs: '',
       termsAndConditions: '',
-      privacyPolicy: '',
-      paymentHoldDays: 30,
+      paymentHoldDays: 7,
       consultationFee: 12,
-      createdBy: admin?._id,
+      supportEmail: ''
     })
 
     console.log('\n✅Default Contents seeded successfully!')

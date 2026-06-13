@@ -3,13 +3,7 @@ import { TContents, TContentsModel } from './contents.interface'
 
 const contentsSchema = new Schema<TContents>(
   {
-    aboutUs: {
-      type: String,
-    },
     termsAndConditions: {
-      type: String,
-    },
-    privacyPolicy: {
       type: String,
     },
     paymentHoldDays: {
@@ -22,13 +16,12 @@ const contentsSchema = new Schema<TContents>(
       min: 0,
       max: 40
     },
+    supportEmail: {
+      type: String,
+    },
     isDeleted: {
       type: Boolean,
       default: false,
-    },
-    createdBy: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
     },
   },
   {

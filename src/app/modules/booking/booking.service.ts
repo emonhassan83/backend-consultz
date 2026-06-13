@@ -257,32 +257,53 @@ const getBookingCalender = async (
 };
 
 const getAllBookings = async (query: Record<string, any>) => {
+  const queryCopy = { ...query };
+
+  const { consult, user, ...restQuery } = queryCopy;
+
+  console.log('🔍 Final Query Received:', { consult, user, restQuery });
+
+  let baseFilter: any = {
+    isDeleted: false,
+    paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
+  };
+
+  // Expert এর bookings
+  if (consult) {
+    baseFilter.consult = new mongoose.Types.ObjectId(consult);
+    console.log(`✅ Filtering by consult: ${consult}`);
+  }
+
+  // Customer এর bookings
+  if (user) {
+    baseFilter.user = new mongoose.Types.ObjectId(user);
+    console.log(`✅ Filtering by user: ${user}`);
+  }
+
   const bookingModel = new QueryBuilder(
-    // @ts-ignore
-    Booking.find({
-      isDeleted: false,
-      paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
-    })
+    Booking.find(baseFilter)
       .populate([
         { path: 'user', select: 'firstName lastName photoUrl' },
         { path: 'consult', select: 'firstName lastName photoUrl' },
         { path: 'slot', select: 'date time' },
       ])
       .select(
-        'user consult slot sessionType sessionDuration price timezone status createdAt',
-      ),
-    query,
+        'user consult slot sessionType sessionDuration price timezone status createdAt mainQuestion',
+      ) as any,
+    restQuery,
   )
-    .search([''])
+    .search(['mainQuestion'])
     .filter()
     .paginate()
-    .sort()
+    .sort();
 
-  const data: any = await bookingModel?.modelQuery
-  const meta = await bookingModel?.countTotal()
+  const data = await bookingModel.modelQuery;
+  const meta = await bookingModel.countTotal();
 
-  return { data, meta }
-}
+  console.log(`📊 Bookings found: ${data.length} | Total: ${meta.total}`);
+
+  return { data, meta };
+};
 
 const getAllBookingsByDate = async (
   query: Record<string, any>,

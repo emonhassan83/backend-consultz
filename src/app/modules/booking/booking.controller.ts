@@ -25,8 +25,12 @@ const getBookingCalender = catchAsync(async (req: Request, res: Response) => {
 })
 
 const getConsultBookings = catchAsync(async (req: Request, res: Response) => {
-  req.query['consult'] = req.user._id
-  const result = await bookingsService.getAllBookings(req.query)
+  const query = {
+    ...req.query,
+    consult: req.user._id.toString(),
+  };
+  
+  const result = await bookingsService.getAllBookings(query)
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -37,8 +41,12 @@ const getConsultBookings = catchAsync(async (req: Request, res: Response) => {
 })
 
 const getMyBookings = catchAsync(async (req: Request, res: Response) => {
-  req.query['user'] = req.user._id
-  const result = await bookingsService.getAllBookings(req.query)
+  const query = {
+    ...req.query,
+    user: req.user._id.toString(),
+  };
+
+  const result = await bookingsService.getAllBookings(query)
   sendResponse(res, {
     statusCode: 200,
     success: true,

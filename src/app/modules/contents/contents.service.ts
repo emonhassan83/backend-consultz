@@ -3,14 +3,9 @@ import { TContents } from './contents.interface'
 import QueryBuilder from '../../builder/QueryBuilder'
 import { Contents } from './contents.models'
 import AppError from '../../errors/AppError'
-import { findAdmin } from '../../utils/findAdmin'
 
 // Create a new content
 const createContents = async (payload: TContents) => {
-  // auto assign created by admin
-  const admin = await findAdmin()
-  if (admin) admin._id = payload.createdBy
-
   const result = await Contents.create(payload)
   if (!result) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Content creation failed')
