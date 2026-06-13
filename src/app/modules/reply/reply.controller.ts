@@ -12,22 +12,23 @@ const createReply = catchAsync(async (req: Request, res: Response) => {
     message: 'Reply created successfully',
     data: result,
   })
-}) 
+})
 
-const getAllReplyByComment = catchAsync(
-  async (req: Request, res: Response) => {
-    req.query['content'] = req.params.contentId
-    const result = await ReplyService.getAllReply(req.query)
+const getAllReplyByComment = catchAsync(async (req: Request, res: Response) => {
+  const query = {
+    ...req.query,
+    content: req.params.contentId,
+  }
+  const result = await ReplyService.getAllReply(query)
 
-    sendResponse(res, {
-      statusCode: 200,
-      success: true,
-      message: 'All Reply by content fetched successfully',
-      meta: result?.meta,
-      data: result?.data,
-    })
-  },
-)
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'All Reply by content fetched successfully',
+    meta: result?.meta,
+    data: result?.data,
+  })
+})
 
 const updateReply = catchAsync(async (req: Request, res: Response) => {
   const result = await ReplyService.updateReply(

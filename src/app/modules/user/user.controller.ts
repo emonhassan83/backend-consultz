@@ -10,9 +10,12 @@ import { USER_ROLE, USER_STATUS } from './user.constant'
 
 const registerUser = catchAsync(async (req, res) => {
   const result = await UserService.registerUserIntoDB(req?.body)
-  const sendOtp = await otpServices.sendOtpViaTokenInPhone(result._id.toString(), {
-    phoneNumber: result.phoneNumber as string,
-  })
+  const sendOtp = await otpServices.sendOtpViaTokenInPhone(
+    result._id.toString(),
+    {
+      phoneNumber: result.phoneNumber as string,
+    },
+  )
   const { _id, id, firstName, lastName, email, phoneNumber, status } = result
 
   sendResponse(res, {
@@ -72,7 +75,7 @@ const getPropertyExperts = catchAsync(async (req, res) => {
 
 // Public Interest Experts (No Auth)
 const getPublicInterestExperts = catchAsync(async (req, res) => {
-  const result = await UserService.getPublicInterestExpertsFromDB(req.query);
+  const result = await UserService.getPublicInterestExpertsFromDB(req.query)
 
   sendResponse(res, {
     success: true,
@@ -80,12 +83,12 @@ const getPublicInterestExperts = catchAsync(async (req, res) => {
     message: 'Interest experts retrieved successfully!',
     meta: result.meta,
     data: result.result,
-  });
-});
+  })
+})
 
 // Public Property Experts
 const getPublicPropertyExperts = catchAsync(async (req, res) => {
-  const result = await UserService.getPublicPropertyExpertsFromDB(req.query);
+  const result = await UserService.getPublicPropertyExpertsFromDB(req.query)
 
   sendResponse(res, {
     success: true,
@@ -93,12 +96,12 @@ const getPublicPropertyExperts = catchAsync(async (req, res) => {
     message: 'Property experts retrieved successfully!',
     meta: result.meta,
     data: result.result,
-  });
-});
+  })
+})
 
 // Public Top Experts
 const getPublicTopExperts = catchAsync(async (req, res) => {
-  const result = await UserService.getPublicTopExpertsFromDB(req.query);
+  const result = await UserService.getPublicTopExpertsFromDB(req.query)
 
   sendResponse(res, {
     success: true,
@@ -106,12 +109,15 @@ const getPublicTopExperts = catchAsync(async (req, res) => {
     message: 'Top experts retrieved successfully!',
     meta: result.meta,
     data: result.result,
-  });
-});
+  })
+})
 
 const getInvestmentExperts = catchAsync(async (req, res) => {
-  req.query['role'] = USER_ROLE.expert
-  const result = await UserService.getInvestmentExperts(req.user._id, req.query)
+  const query = {
+    ...req.query,
+    role: USER_ROLE.expert,
+  }
+  const result = await UserService.getInvestmentExperts(req.user._id, query)
 
   sendResponse(res, {
     success: true,
@@ -135,9 +141,13 @@ const getAllUsers = catchAsync(async (req, res) => {
 })
 
 const getAllExperts = catchAsync(async (req, res) => {
-  req.query['role'] = USER_ROLE.expert
-  req.query['status'] = USER_STATUS.active
-  const result = await UserService.getAllUsersFromDB(req.query, req.user._id)
+  const query = {
+    ...req.query,
+    role: USER_ROLE.expert,
+    status: USER_STATUS.active,
+  }
+
+  const result = await UserService.getAllUsersFromDB(query, req.user._id)
 
   sendResponse(res, {
     success: true,
@@ -149,7 +159,10 @@ const getAllExperts = catchAsync(async (req, res) => {
 })
 
 const getUserById = catchAsync(async (req: Request, res: Response) => {
-  const result = await UserService.geUserByIdFromDB(req.user._id, req.params.id as string)
+  const result = await UserService.geUserByIdFromDB(
+    req.user._id,
+    req.params.id as string,
+  )
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,

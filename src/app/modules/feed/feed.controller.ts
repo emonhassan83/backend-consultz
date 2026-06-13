@@ -37,8 +37,11 @@ const getAllFeeds = catchAsync(async (req, res) => {
 })
 
 const getActiveFeeds = catchAsync(async (req, res) => {
-  req.query['status'] = FEED_STATUS.active
-  const result = await FeedService.getAllFeedsFromDB(req.query, req.user._id)
+  const query = {
+    ...req.query,
+    status: FEED_STATUS.active,
+  }
+  const result = await FeedService.getAllFeedsFromDB(query, req.user._id)
 
   sendResponse(res, {
     success: true,
@@ -50,9 +53,12 @@ const getActiveFeeds = catchAsync(async (req, res) => {
 })
 
 const getAllFeedsByUserId = catchAsync(async (req, res) => {
-  req.query['author'] = req?.params?.userId
-  req.query['status'] = FEED_STATUS.active
-  const result = await FeedService.getAllFeedsFromDB(req.query, req.user._id)
+  const query = {
+    ...req.query,
+    author: req?.params?.userId,
+    status: FEED_STATUS.active,
+  }
+  const result = await FeedService.getAllFeedsFromDB(query, req.user._id)
 
   sendResponse(res, {
     success: true,
@@ -64,10 +70,14 @@ const getAllFeedsByUserId = catchAsync(async (req, res) => {
 })
 
 const getAllMyFeed = catchAsync(async (req, res) => {
-  req.query.author = req.user._id
-  req.query['status'] = FEED_STATUS.active
+  const query = {
+    ...req.query,
+    author: req.user._id,
+    status: FEED_STATUS.active,
+  }
+  
   const result = await FeedService.getAllFeedsFromDB(
-    req.query,
+    query,
     req.user._id.toString(),
   )
 
@@ -81,7 +91,10 @@ const getAllMyFeed = catchAsync(async (req, res) => {
 })
 
 const getAFeed = catchAsync(async (req, res) => {
-  const result = await FeedService.getAFeedFromDB(req.params.id as string, req.user._id)
+  const result = await FeedService.getAFeedFromDB(
+    req.params.id as string,
+    req.user._id,
+  )
 
   sendResponse(res, {
     success: true,
@@ -112,7 +125,10 @@ const updateFeed = catchAsync(async (req, res) => {
 })
 
 const changeFeedStatus = catchAsync(async (req, res) => {
-  const result = await FeedService.changeFeedStatus(req.params.id as string, req.body)
+  const result = await FeedService.changeFeedStatus(
+    req.params.id as string,
+    req.body,
+  )
 
   sendResponse(res, {
     success: true,

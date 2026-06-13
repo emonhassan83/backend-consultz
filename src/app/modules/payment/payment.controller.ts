@@ -51,8 +51,11 @@ const getAPayment = catchAsync(async (req, res) => {
 })
 
 const getAPaymentByBookingId = catchAsync(async (req, res) => {
-  req.query.booking = req.params.bookingId
-  const result = await PaymentService.getAllPaymentsFromDB(req.query)
+  const query = {
+    ...req.query,
+    booking: req.params.bookingId
+  }
+  const result = await PaymentService.getAllPaymentsFromDB(query)
 
   sendResponse(res, {
     success: true,

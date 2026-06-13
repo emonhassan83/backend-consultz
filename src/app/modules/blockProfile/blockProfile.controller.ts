@@ -33,8 +33,11 @@ const unblockProfile = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getMyBlockProfile = catchAsync(async (req: Request, res: Response) => {
-  req.query['blocker'] = req.user._id;
-  const result = await BlockProfileService.getAllBlockProfile(req.query);
+  const query = {
+    ...req.query,
+    blocker: req.user._id.toString(),
+  };
+  const result = await BlockProfileService.getAllBlockProfile(query);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

@@ -14,19 +14,21 @@ const createReviews = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-const getReviewsByExpert = catchAsync(
-  async (req: Request, res: Response) => {
-    req.query['expert'] = req.params.expertId
-    const result = await reviewsService.getAllReviews(req.query)
-    sendResponse(res, {
-      statusCode: 200,
-      success: true,
-      message: 'All bookings with expert fetched successfully',
-      meta: result.meta,
-      data: result.data,
-    })
-  },
-)
+const getReviewsByExpert = catchAsync(async (req: Request, res: Response) => {
+  const query = {
+    ...req.query,
+    expert: req.params.expertId,
+  }
+  const result = await reviewsService.getAllReviews(query)
+  
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'All bookings with expert fetched successfully',
+    meta: result.meta,
+    data: result.data,
+  })
+})
 
 const getReviewsById = catchAsync(async (req: Request, res: Response) => {
   const result = await reviewsService.getReviewsById(req.params.id as string)
@@ -39,7 +41,10 @@ const getReviewsById = catchAsync(async (req: Request, res: Response) => {
 })
 
 const updateReviews = catchAsync(async (req: Request, res: Response) => {
-  const result = await reviewsService.updateReviews(req.params.id as string, req.body)
+  const result = await reviewsService.updateReviews(
+    req.params.id as string,
+    req.body,
+  )
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,

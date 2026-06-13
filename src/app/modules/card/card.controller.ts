@@ -16,8 +16,11 @@ const createCard = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAllCard = catchAsync(async (req: Request, res: Response) => {
-  req.query['author'] = req.user._id;
-  const result = await CardService.getAllCard(req.query);
+  const query = {
+    ...req.query,
+    author: req.user._id
+  }
+  const result = await CardService.getAllCard(query);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

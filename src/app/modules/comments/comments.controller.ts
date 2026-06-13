@@ -28,8 +28,11 @@ const getAllComments = catchAsync(async (req: Request, res: Response) => {
 
 const getAllCommentsByContent = catchAsync(
   async (req: Request, res: Response) => {
-    req.query['content'] = req.params.contentId
-    const result = await commentsService.getAllComments(req.user._id, req.query)
+    const query = {
+      ...req.query,
+      content: req.params.contentId,
+    }
+    const result = await commentsService.getAllComments(req.user._id, query)
 
     sendResponse(res, {
       statusCode: 200,
@@ -42,7 +45,10 @@ const getAllCommentsByContent = catchAsync(
 )
 
 const getCommentsById = catchAsync(async (req: Request, res: Response) => {
-  const result = await commentsService.getCommentsById(req.user._id, req.params.id as string)
+  const result = await commentsService.getCommentsById(
+    req.user._id,
+    req.params.id as string,
+  )
 
   sendResponse(res, {
     statusCode: 200,

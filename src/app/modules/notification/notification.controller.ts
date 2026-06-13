@@ -40,8 +40,11 @@ const sentGeneralNotification = catchAsync(async (req, res) => {
 })
 
 const getAllNotifications = catchAsync(async (req, res) => {
-  req.query['receiver'] = req.user._id 
-  const result = await NotificationService.getAllNotificationFromDB(req.query, req.user._id)
+  const query = {
+    ...req.query,
+    receiver: req.user._id 
+  }
+  const result = await NotificationService.getAllNotificationFromDB(query, req.user._id)
 
   sendResponse(res, {
     success: true,

@@ -28,8 +28,11 @@ const getAllReport = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getMyReport = catchAsync(async (req: Request, res: Response) => {
-  req.query['author'] = req.user.userId;
-  const result = await ReportService.getAllReport(req.query);
+  const query = {
+    ...req.query,
+    author: req.user.userId
+  }
+  const result = await ReportService.getAllReport(query);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -41,8 +44,11 @@ const getMyReport = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getReportsByFeed = catchAsync(async (req: Request, res: Response) => {
-  req.query['feed'] = req.params.feedId;
-  const result = await ReportService.getAllReport(req.query);
+  const query = {
+    ...req.query,
+    feed: req.params.feedId,
+  }
+  const result = await ReportService.getAllReport(query);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
