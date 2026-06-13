@@ -8,10 +8,10 @@ import { TWithdrawStatus } from '../modules/withdraw/withdraw.constant'
 // 1. Send confirmation email for consult
 export const sendNewBookingToConsultant = async (
   consult: TUser,
-  booking: any,
-  slot: any,
+  booking: TBookings,
+  user: TUser,
 ) => {
-  const sessionInfo = `${slot.date} • ${slot.time} (${booking.timezone})`
+  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
 
   await emailSender(
     consult.email,
@@ -22,7 +22,7 @@ export const sendNewBookingToConsultant = async (
         <p style="color: #555;">Dear ${consult.firstName},</p>
         <p style="color: #555;">You have a new confirmed booking:</p>
         <ul style="color: #555; line-height: 1.6;">
-          <li><strong>User:</strong> ${booking.user.firstName} ${booking.user.lastName}</li>
+          <li><strong>User:</strong> ${user.firstName} ${user.lastName}</li>
           <li><strong>Session Type:</strong> ${booking.sessionType}</li>
           <li><strong>Date & Time:</strong> ${sessionInfo}</li>
           <li><strong>Amount:</strong> $${booking.price}</li>
@@ -42,12 +42,11 @@ export const sendCancellationEmail = async (
   user: TUser,
   consult: TUser,
   booking: TBookings,
-  slot: TBookingSlots,
   reason: string,
   cancelledBy: 'user' | 'consult',
 ): Promise<void> => {
   // Format session info once
-  const sessionInfo = `${slot.date} • ${slot.time} (${booking.timezone})`
+  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
   const cancelledByName =
     cancelledBy === 'user'
       ? `${user.firstName} ${user.lastName}`
@@ -132,11 +131,11 @@ export const sendCancellationEmail = async (
 // 3. booking complete email for consult
 export const sendSessionCompletedToConsultant = async (
   consult: TUser,
-  booking: any,
-  slot: any,
+  booking: TBookings,
+  user: TUser,
+  consultAmount: number,
 ) => {
-  const sessionInfo = `${slot.date} • ${slot.time} (${booking.timezone})`
-
+  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
   await emailSender(
     consult.email,
     'Session Completed – Payment Processing',
@@ -144,8 +143,8 @@ export const sendSessionCompletedToConsultant = async (
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
         <h2 style="color: #5cb85c;">Session Completed</h2>
         <p style="color: #555;">Dear ${consult.firstName},</p>
-        <p style="color: #555;">Your session with ${booking.user.firstName} ${booking.user.lastName} on ${sessionInfo} is now complete.</p>
-        <p style="color: #555;">Payment of $${booking.price} is being processed and will be transferred to your account soon.</p>
+        <p style="color: #555;">Your session with ${user.firstName} ${user.lastName} on ${sessionInfo} is now complete.</p>
+        <p style="color: #555;">Payment of $${consultAmount} is being processed and will be transferred to your account soon.</p>
         <p style="color: #555;">Thank you for your service!</p>
         <p style="color: #555;">Best regards,<br/><strong>Consultz Team</strong></p>
         <div style="text-align: center; margin-top: 20px; font-size: 12px; color: #999;">
@@ -161,10 +160,9 @@ export const sendRescheduleEmail = async (
   user: TUser,
   consult: TUser,
   booking: TBookings,
-  slot: TBookingSlots,
 ): Promise<void> => {
   // Format session info consistently
-  const sessionInfo = `${slot.date} • ${slot.time} (${booking.timezone})`
+  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
 
   // Common email styling (reused for both)
   const baseEmailTemplate = (
@@ -294,15 +292,14 @@ const baseEmailTemplate = (
 export const sendWithdrawCompletedEmail = async (
   consultant: TUser,
   withdraw: TWithdraw,
-  booking?: any,
-  slot?: any,
+  booking: TBookings,
+  user: TUser,
 ) => {
   if (!consultant?.email || !consultant.emailNotify?.payment) return
 
-  const sessionInfo =
-    slot && booking
-      ? `${slot.date} • ${slot.time} (${booking.timezone})`
-      : 'N/A'
+  const sessionInfo = booking
+    ? `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+    : 'N/A'
 
   const content = `
     <p style="color: #555;">Great news! Your withdrawal request has been successfully processed.</p>
@@ -311,7 +308,7 @@ export const sendWithdrawCompletedEmail = async (
       ${
         booking
           ? `
-        <li><strong>From Booking:</strong> ${booking.sessionType} with ${booking.user.firstName} ${booking.user.lastName}</li>
+        <li><strong>From Booking:</strong> ${booking.sessionType} with ${user.firstName} ${user.lastName}</li>
         <li><strong>Session Date:</strong> ${sessionInfo}</li>
       `
           : ''
@@ -370,18 +367,18 @@ export const sendWithdrawStatusChangeEmail = async (
 // 8. When payment is confirmed → email to user (success + waiting for approval)
 export const sendPaymentSuccessToUser = async (
   user: TUser,
-  booking: any,
-  slot: TBookingSlots,
+  booking: TBookings,
+  expert: TUser,
 ) => {
   if (!user?.email || !user.emailNotify?.payment) return
 
-  const sessionInfo = `${slot.date} • ${slot.time} (${booking.timezone})`
+  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
 
   const content = `
     <p style="color: #555;">Your payment of $${booking.price} has been successfully processed!</p>
     <ul style="color: #555; line-height: 1.6;">
       <li><strong>Session:</strong> ${booking.sessionType}</li>
-      <li><strong>With:</strong> ${booking.consult.firstName} ${booking.consult.lastName}</li>
+      <li><strong>With:</strong> ${expert.firstName} ${expert.lastName}</li>
       <li><strong>Date & Time:</strong> ${sessionInfo}</li>
     </ul>
     <p style="color: #555;">Your booking is now awaiting approval from the consultant. You will be notified once it's confirmed.</p>
@@ -404,10 +401,9 @@ export const sendNotRespondedEmail = async (
   user: TUser, // the booker (customer)
   consult: TUser, // the expert/consultant
   booking: TBookings,
-  slot: TBookingSlots,
   refundProcessed: boolean = false,
 ): Promise<void> => {
-  const sessionInfo = `${slot.date} • ${slot.time} (${booking.timezone})`
+  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
 
   // Email for the booker (user)
   const userEmailContent = `

@@ -69,6 +69,15 @@ const bookingsSchema = new Schema<TBookings>(
       type: Date,
       default: null,
     },
+
+    // For local time calculation
+    localDate: {
+      type: String,
+    },
+    localTime: {
+      type: String,
+    },
+    
     status: {
       type: String,
       enum: Object.values(BOOKING_STATUS),

@@ -11,7 +11,6 @@ import { PAYMENT_STATUS } from './payment.constant'
 import { BOOKING_STATUS } from '../booking/booking.constants'
 import { User } from '../user/user.model'
 import { BookingSlots } from '../bookingSlots/bookingSlots.model'
-import { IConfirmPayment, IPaymentIntent } from './payment.interface'
 import { sendBookingsNotification } from '../booking/booking.utils'
 import {
   sendNewBookingToConsultant,
@@ -20,6 +19,7 @@ import {
 import { Contents } from '../contents/contents.models'
 import { Chat } from '../chat/chat.models'
 import { CHAT_STATUS } from '../chat/chat.constants'
+import { TUser } from '../user/user.interface'
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2026-05-27.dahlia',
@@ -205,11 +205,11 @@ const confirmPayment = async (payload: {
     }
 
     if (consult?.emailNotify?.booking) {
-      await sendNewBookingToConsultant(consult, booking, booking.slot)
+      await sendNewBookingToConsultant(consult, booking, user as TUser)
     }
 
     if (user?.emailNotify?.payment) {
-      await sendPaymentSuccessToUser(user, booking, booking.slot as any)
+      await sendPaymentSuccessToUser(user, booking, consult as TUser)
     }
 
     return {

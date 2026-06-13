@@ -30,6 +30,7 @@ import { Payment } from '../modules/payment/payment.model'
 import Stripe from 'stripe'
 import config from '../config'
 import { modeType } from '../modules/notification/notification.interface'
+import { TBookings } from '../modules/booking/booking.interface'
 
 const TIMEZONE = 'Asia/Dhaka'
 
@@ -48,24 +49,24 @@ export const initializeCronJobs = () => {
     '0 0 * * *',
     async () => {
       console.log('Daily Withdraw Transfer Job Started at 12:00 AM UK time')
-
       const session = await mongoose.startSession()
       session.startTransaction()
 
       try {
-        // Find all pending withdrawals (status: proceed)
         const pendingWithdraws = await Withdraw.find({
           status: WITHDRAW_STATUS.proceed,
           isDeleted: false,
-          proceedAt: { $exists: true }, // Ensure proceedAt is set
+          proceedAt: { $exists: true },
         }).session(session)
 
         console.log(
           `Found ${pendingWithdraws.length} pending withdrawals to process`,
         )
 
+        // ✅ Session commit এর পরে email/notify পাঠানোর জন্য queue
+        const postCommitTasks: (() => Promise<void>)[] = []
+
         for (const withdraw of pendingWithdraws) {
-          // Skip if proceedAt is in the future
           if (!dayjs().isAfter(withdraw.proceedAt)) {
             console.log(
               `Withdraw ${withdraw._id} not yet eligible (proceedAt: ${withdraw.proceedAt})`,
@@ -73,9 +74,11 @@ export const initializeCronJobs = () => {
             continue
           }
 
-          const booking = await Booking.findById(withdraw.booking).session(
-            session,
-          )
+          // ✅ একবারই fetch করো, slot ও populate করো
+          const booking = await Booking.findById(withdraw.booking)
+            .populate('slot user')
+            .session(session)
+
           if (!booking) {
             console.warn(`Booking not found for withdraw ${withdraw._id}`)
             continue
@@ -90,54 +93,55 @@ export const initializeCronJobs = () => {
           }
 
           try {
-            // Perform Stripe transfer
             const transfer = await StripeService.transfer(
-              withdraw.amount * 100, // amount in cents
+              withdraw.amount * 100,
               consultant.stripeAccountId,
               'usd',
             )
 
-            // Update withdrawal to completed
             withdraw.status = WITHDRAW_STATUS.completed
             withdraw.stripeTransferId = transfer.id
             await withdraw.save({ session })
 
-            // Send completion notification (push/in-app)
-            await sendWithdrawNotify(
-              WITHDRAW_STATUS.completed,
-              withdraw,
-              consultant,
-            )
-
-            // Send completion email to consultant
-            const consult = consultant // already fetched
-            const populatedBooking = await Booking.findById(withdraw.booking)
-              .populate('slot')
-              .session(session)
-
-            if (consult && populatedBooking && consult.emailNotify?.payment) {
-              await sendWithdrawCompletedEmail(
-                consult,
-                withdraw,
-                populatedBooking,
-                populatedBooking.slot,
-              )
-            }
-
             console.log(
               `Transferred $${withdraw.amount} to ${consultant.stripeAccountId} for withdraw ${withdraw._id}`,
             )
+
+            // ✅ Email/notify গুলো session commit এর পরে পাঠাবো
+            const booker = booking.user as any
+            const slot = booking.slot as any
+
+            postCommitTasks.push(async () => {
+              await sendWithdrawNotify(
+                WITHDRAW_STATUS.completed,
+                withdraw,
+                consultant,
+              )
+            })
+
+            if (consultant.emailNotify?.payment) {
+              postCommitTasks.push(async () => {
+                await sendWithdrawCompletedEmail(
+                  consultant,
+                  withdraw,
+                  booking,
+                  booker,
+                )
+              })
+            }
           } catch (transferError: any) {
             console.error(
               `Transfer failed for withdraw ${withdraw._id}:`,
               transferError.message,
             )
-            // Optionally mark as failed or retry later — for now just log
           }
         }
 
         await session.commitTransaction()
         console.log('Daily Withdraw Transfer Job Completed')
+
+        // ✅ Session commit এর পরে email/notify পাঠাও
+        await Promise.allSettled(postCommitTasks.map((task) => task()))
       } catch (error) {
         await session.abortTransaction()
         console.error('Daily Withdraw Transfer Job Failed:', error)
@@ -237,8 +241,8 @@ export const initializeCronJobs = () => {
               message: 'Reliability Bonus Awarded!',
               description:
                 'Congratulations! You had zero no-shows in the last 30 days and earned 300 points. Keep it up! 🎉',
-                reference: expert._id,
-                modelType: modeType.Achievement,
+              reference: expert._id,
+              modelType: modeType.Achievement,
             })
           }
         }
@@ -321,25 +325,38 @@ export const initializeCronJobs = () => {
       const now = dayjs().tz(TIMEZONE)
       const nowDate = now.format('YYYY-MM-DD')
 
-      // Today's slots (distinct IDs only - very fast)
       const todaySlots = await BookingSlots.find({ date: nowDate }).distinct(
         '_id',
       )
 
-      // Today's confirmed bookings (lean + minimal populate)
+      // ✅ slot মাত্র populate করো, user/consult বাদ
       const todayBookings = (await Booking.find({
         slot: { $in: todaySlots },
         status: 'confirmed',
         isDeleted: false,
       })
-        .populate('user consult slot')
+        .populate('slot')
         .lean()) as any[]
+
+      // ✅ Unique user & consult IDs collect করো
+      const userIds = [...new Set(todayBookings.map((b) => b.user.toString()))]
+      const consultIds = [
+        ...new Set(todayBookings.map((b) => b.consult.toString())),
+      ]
+      const allIds = [...new Set([...userIds, ...consultIds])]
+
+      // ✅ User model fetch
+      const usersRaw = await User.find({ _id: { $in: allIds } })
+        .select('_id firstName lastName email fcmToken pushNotify emailNotify')
+        .lean()
+
+      const userMap = new Map(usersRaw.map((u) => [u._id.toString(), u]))
 
       const notificationsToSend: {
         userId: string
         fcmToken: string
         action: string
-        booking: any
+        booking: TBookings
         slot: any
       }[] = []
 
@@ -347,40 +364,44 @@ export const initializeCronJobs = () => {
 
       for (const booking of todayBookings) {
         const slot = booking.slot
+
+        // ✅ Map থেকে user & consult নাও
+        const user = userMap.get(booking.user.toString())
+        const consult = userMap.get(booking.consult.toString())
+
+        if (!user || !consult) continue
+
         const bookingStart = dayjs(
-          `${booking.slot.date} ${booking.slot.time}`,
+          `${slot.date} ${slot.time}`,
           'YYYY-MM-DD HH:mm',
         ).tz(booking.timezone)
 
         const timeToStartMinutes = bookingStart.diff(now, 'minute')
 
-        const user = booking.user
-        const consult = booking.consult
+        const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
 
         // 1. 10 minutes to go
         if (timeToStartMinutes >= 9 && timeToStartMinutes <= 10) {
-          // Push notifications
-          if (user?.fcmToken && user.pushNotify?.scheduleRemainder) {
+          if (user.fcmToken && user.pushNotify?.scheduleRemainder) {
             notificationsToSend.push({
               userId: user._id.toString(),
               fcmToken: user.fcmToken,
               action: '10min_reminder',
               booking,
-              slot: booking.slot,
+              slot,
             })
           }
-          if (consult?.fcmToken && consult.pushNotify?.scheduleRemainder) {
+          if (consult.fcmToken && consult.pushNotify?.scheduleRemainder) {
             notificationsToSend.push({
               userId: consult._id.toString(),
               fcmToken: consult.fcmToken,
               action: '10min_reminder',
               booking,
-              slot: booking.slot,
+              slot,
             })
           }
 
-          // Email to both
-          if (user?.email && user.emailNotify?.schedule) {
+          if (user.email && user.emailNotify?.schedule) {
             emailPromises.push(
               emailSender(
                 user.email,
@@ -388,7 +409,7 @@ export const initializeCronJobs = () => {
                 createReminderEmailContent(
                   user.firstName,
                   `${consult.firstName} ${consult.lastName}`,
-                  `${slot.date} • ${slot.time} (${booking.timezone})`,
+                  sessionInfo,
                   false,
                 ),
               ).catch((err) =>
@@ -397,7 +418,7 @@ export const initializeCronJobs = () => {
             )
           }
 
-          if (consult?.email && consult.emailNotify?.schedule) {
+          if (consult.email && consult.emailNotify?.schedule) {
             emailPromises.push(
               emailSender(
                 consult.email,
@@ -405,7 +426,7 @@ export const initializeCronJobs = () => {
                 createReminderEmailContent(
                   consult.firstName,
                   `${user.firstName} ${user.lastName}`,
-                  `${slot.date} • ${slot.time} (${booking.timezone})`,
+                  sessionInfo,
                   false,
                 ),
               ).catch((err) =>
@@ -417,36 +438,35 @@ export const initializeCronJobs = () => {
 
         // 2. Join the call (0–1 minute before)
         if (timeToStartMinutes >= 0 && timeToStartMinutes <= 1) {
-          if (user?.fcmToken && user.pushNotify?.scheduleRemainder) {
+          if (user.fcmToken && user.pushNotify?.scheduleRemainder) {
             notificationsToSend.push({
               userId: user._id.toString(),
               fcmToken: user.fcmToken,
               action: 'join_call',
               booking,
-              slot: booking.slot,
+              slot,
             })
           }
-          if (consult?.fcmToken && consult.pushNotify?.scheduleRemainder) {
+          if (consult.fcmToken && consult.pushNotify?.scheduleRemainder) {
             notificationsToSend.push({
               userId: consult._id.toString(),
               fcmToken: consult.fcmToken,
               action: 'join_call',
               booking,
-              slot: booking.slot,
+              slot,
             })
           }
 
-          // Email to both
-          if (user?.email && user.emailNotify?.schedule) {
+          if (user.email && user.emailNotify?.schedule) {
             emailPromises.push(
               emailSender(
                 user.email,
-                'Session Starting in 10 Minutes',
+                'Join Your Session Now',
                 createReminderEmailContent(
                   user.firstName,
                   `${consult.firstName} ${consult.lastName}`,
-                  `${slot.date} • ${slot.time} (${booking.timezone})`,
-                  false,
+                  sessionInfo,
+                  true,
                 ),
               ).catch((err) =>
                 console.error(`Email failed (user ${user._id}):`, err),
@@ -454,16 +474,16 @@ export const initializeCronJobs = () => {
             )
           }
 
-          if (consult?.email && consult.emailNotify?.schedule) {
+          if (consult.email && consult.emailNotify?.schedule) {
             emailPromises.push(
               emailSender(
                 consult.email,
-                'Session Starting in 10 Minutes',
+                'Join Your Session Now',
                 createReminderEmailContent(
                   consult.firstName,
                   `${user.firstName} ${user.lastName}`,
-                  `${slot.date} • ${slot.time} (${booking.timezone})`,
-                  false,
+                  sessionInfo,
+                  true,
                 ),
               ).catch((err) =>
                 console.error(`Email failed (consult ${consult._id}):`, err),
@@ -479,40 +499,44 @@ export const initializeCronJobs = () => {
         const timeToDMCloseMinutes = dmCloseTime.diff(now, 'minute')
 
         if (timeToDMCloseMinutes >= 59 && timeToDMCloseMinutes <= 61) {
-          if (user?.fcmToken && user.pushNotify?.scheduleRemainder) {
+          if (user.fcmToken && user.pushNotify?.scheduleRemainder) {
             notificationsToSend.push({
               userId: user._id.toString(),
               fcmToken: user.fcmToken,
               action: 'dms_closing',
               booking,
-              slot: booking.slot,
+              slot,
             })
           }
-          if (consult?.fcmToken && consult.pushNotify?.scheduleRemainder) {
+          if (consult.fcmToken && consult.pushNotify?.scheduleRemainder) {
             notificationsToSend.push({
               userId: consult._id.toString(),
               fcmToken: consult.fcmToken,
               action: 'dms_closing',
               booking,
-              slot: booking.slot,
+              slot,
             })
           }
         }
       }
 
-      // 4. Batch send notifications (chunked for performance)
+      // 4. Emails batch send
+      await Promise.allSettled(emailPromises)
+
+      // 5. Notifications batch send (chunked)
       const chunkSize = 500
       for (let i = 0; i < notificationsToSend.length; i += chunkSize) {
         const chunk = notificationsToSend.slice(i, i + chunkSize)
-
-        for (const n of chunk) {
-          await sendBookingsNotification(
-            n.action as TBookingNotifyAction,
-            n.booking,
-            await User.findById(n.userId).select('fcmToken pushNotify').lean(),
-            n.slot,
-          )
-        }
+        await Promise.allSettled(
+          chunk.map((n) =>
+            sendBookingsNotification(
+              n.action as TBookingNotifyAction,
+              n.booking,
+              userMap.get(n.userId),
+              n.slot,
+            ),
+          ),
+        )
       }
 
       console.log(
@@ -646,7 +670,6 @@ export const initializeCronJobs = () => {
                 booker,
                 expert,
                 booking,
-                slotInfo,
                 refundProcessed,
               )
             }

@@ -40,7 +40,7 @@ const SessionDurationSchema = new Schema(
     duration: { type: Number, required: true },
     offeredPrice: {
       type: Number,
-      required: false, // remove required
+      required: false,
       default: 0,
     },
     isOffered: { type: Boolean, default: false },
@@ -57,6 +57,9 @@ const BankAccountSchema = new Schema(
   },
   { _id: false },
 )
+
+// ✅ Module-level Map to survive between pre and post hooks
+const availabilityChangeMap = new Map<string, string>()
 
 // ===== User Schema =====
 const userSchema = new Schema<TUser, UserModel>(
@@ -75,13 +78,10 @@ const userSchema = new Schema<TUser, UserModel>(
     headline: { type: String, default: '' },
     bio: { type: String, default: '' },
     fcmToken: { type: String, default: null },
-    voipToken: {
-      type: String,
-      default: null,
-    },
+    voipToken: { type: String, default: null },
     deviceType: {
       type: String,
-      enum: Object.values(DEVICE_TYPE)
+      enum: Object.values(DEVICE_TYPE),
     },
     photoUrl: { type: String, default: null },
     coverPhoto: { type: String, default: null },
@@ -98,7 +98,6 @@ const userSchema = new Schema<TUser, UserModel>(
 
     education: { type: EducationSchema, default: {} },
 
-    // availability field
     availability: {
       type: [
         {
@@ -114,9 +113,9 @@ const userSchema = new Schema<TUser, UserModel>(
                 to: { type: String, required: true },
               },
             ],
-            _id: false, // ← disables _id for every slot
+            _id: false,
           },
-          _id: false, // ← disables _id for every day object
+          _id: false,
         },
       ],
       default: [],
@@ -172,69 +171,24 @@ const userSchema = new Schema<TUser, UserModel>(
       },
     },
     pushNotify: {
-      bookingAndSchedule: {
-        type: Boolean,
-        default: true,
-      },
-      scheduleRemainder: {
-        type: Boolean,
-        default: true,
-      },
-      payment: {
-        type: Boolean,
-        default: true,
-      },
-      points: {
-        type: Boolean,
-        default: true,
-      },
-      followers: {
-        type: Boolean,
-        default: true,
-      },
-      post: {
-        type: Boolean,
-        default: true,
-      },
-      reviews: {
-        type: Boolean,
-        default: true,
-      },
+      bookingAndSchedule: { type: Boolean, default: true },
+      scheduleRemainder: { type: Boolean, default: true },
+      payment: { type: Boolean, default: true },
+      points: { type: Boolean, default: true },
+      followers: { type: Boolean, default: true },
+      post: { type: Boolean, default: true },
+      reviews: { type: Boolean, default: true },
     },
     emailNotify: {
-      booking: {
-        type: Boolean,
-        default: true,
-      },
-      schedule: {
-        type: Boolean,
-        default: true,
-      },
-      payment: {
-        type: Boolean,
-        default: true,
-      },
+      booking: { type: Boolean, default: true },
+      schedule: { type: Boolean, default: true },
+      payment: { type: Boolean, default: true },
     },
-    stripeCustomerId: {
-      type: String,
-      default: null,
-    },
-    isTopExpert: {
-      type: Boolean,
-      default: false,
-    },
-    isProfileSetup: {
-      type: Boolean,
-      default: false,
-    },
-    profileCompletionBonusClaimed: {
-      type: Boolean,
-      default: false,
-    },
-    socialProofBonusClaimed: {
-      type: Boolean,
-      default: false,
-    },
+    stripeCustomerId: { type: String, default: null },
+    isTopExpert: { type: Boolean, default: false },
+    isProfileSetup: { type: Boolean, default: false },
+    profileCompletionBonusClaimed: { type: Boolean, default: false },
+    socialProofBonusClaimed: { type: Boolean, default: false },
     isPhoneOtpVerified: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },
   },
@@ -243,13 +197,14 @@ const userSchema = new Schema<TUser, UserModel>(
   },
 )
 
-// TTL index for expireAt
+// TTL index
 userSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 })
 userSchema.index({ referralCode: 1 })
 
 // ====================== AVAILABILITY CHANGE DETECTION ======================
 
 userSchema.pre('save', async function () {
+  // Hash password if modified
   if (this.isModified('password')) {
     this.password = await bcrypt.hash(
       this.password,
@@ -257,30 +212,32 @@ userSchema.pre('save', async function () {
     )
   }
 
-  // Store old availability BEFORE save for comparison in post hook
+  // ✅ Store old availability in module-level Map before save
   if (this.isModified('availability') && !this.isNew) {
     const oldDoc = (await this.model('User')
       .findById(this._id)
       .select('availability')
       .lean()) as TUser | null
 
-    ;(this as any)._oldAvailability = JSON.stringify(oldDoc?.availability || [])
+    availabilityChangeMap.set(
+      this._id.toString(),
+      JSON.stringify(oldDoc?.availability || []),
+    )
   }
 })
 
 userSchema.post('save', async function (doc: any) {
-  const oldAvailability = (doc as any)._oldAvailability
+  const userId = doc._id.toString()
+  const oldAvailability = availabilityChangeMap.get(userId)
 
-  // Only proceed if pre-hook stored old availability (meaning it was modified)
+  // Not in map means availability was not modified
   if (oldAvailability === undefined) return
 
+  // ✅ Cleanup immediately
+  availabilityChangeMap.delete(userId)
+
   const newAvailability = JSON.stringify(doc.availability || [])
-  const hasChanged = oldAvailability !== newAvailability
-
-  // Cleanup temp props immediately
-  delete (doc as any)._oldAvailability
-
-  if (!hasChanged) {
+  if (oldAvailability === newAvailability) {
     console.log('[Availability Hook] Content unchanged — skipping regeneration')
     return
   }
@@ -291,11 +248,11 @@ userSchema.post('save', async function (doc: any) {
 
   setImmediate(async () => {
     try {
-      await regenerateSlotsForExpert(doc._id.toString())
-      console.log(`[Slot Regeneration] ✅ Completed for expert: ${doc._id}`)
+      await regenerateSlotsForExpert(userId)
+      console.log(`[Slot Regeneration] ✅ Completed for expert: ${userId}`)
     } catch (err: any) {
       console.error(
-        `[Slot Regeneration] ❌ Failed for expert ${doc._id}:`,
+        `[Slot Regeneration] ❌ Failed for expert ${userId}:`,
         err.message,
       )
     }

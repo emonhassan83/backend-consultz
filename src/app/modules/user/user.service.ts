@@ -1016,7 +1016,7 @@ const updateUserInfoFromDB = async (
 
     let finalPayload = { ...payload }
 
-    // Step 1: Handle session durations logic
+    // Step 1: Session durations logic
     if (payload.sessionDurations && payload.sessionDurations.length > 0) {
       const effectiveHourlyRate =
         payload.hourlyRate !== undefined ? payload.hourlyRate : user.hourlyRate
@@ -1113,10 +1113,7 @@ const updateUserInfoFromDB = async (
           ? (payload as any)[field]
           : (user as any)[field]
 
-      if (Array.isArray(value)) {
-        return value.length > 0
-      }
-
+      if (Array.isArray(value)) return value.length > 0
       return value !== undefined && value !== null && value !== ''
     })
 
@@ -1140,16 +1137,39 @@ const updateUserInfoFromDB = async (
       }
     }
 
-    // ✅ Step 4: Update document এবং save করো (middleware trigger হবে)
+    // ✅ Step 4: Detect availability change BEFORE save
+    const availabilityChanged =
+      isExpert &&
+      finalPayload.availability !== undefined &&
+      JSON.stringify(user.availability) !==
+        JSON.stringify(finalPayload.availability)
+
+    // Step 5: Apply payload and save
     Object.assign(user, finalPayload)
     const updatedUser = await user.save({ session })
 
     await session.commitTransaction()
 
-    // Calculate profile progress after update
+    // ✅ Step 6: Trigger slot regeneration AFTER session commit
+    // This runs independently of the model hook — handles session timing safely
+    if (availabilityChanged) {
+      setImmediate(async () => {
+        try {
+          await regenerateSlotsForExpert(updatedUser._id.toString())
+          console.log(
+            `[Slot Regeneration] ✅ Completed for expert: ${updatedUser._id}`,
+          )
+        } catch (err: any) {
+          console.error(
+            `[Slot Regeneration] ❌ Failed for expert ${updatedUser._id}:`,
+            err.message,
+          )
+        }
+      })
+    }
+
     const profileSetupProgress = calculateProfileSetupProgress(updatedUser)
 
-    // Return user data with calculated progress
     return {
       ...updatedUser.toObject(),
       profileSetupProgress,

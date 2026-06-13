@@ -24,6 +24,7 @@ import { sendNotification } from '../../utils/sentNotification'
 import isoWeek from 'dayjs/plugin/isoWeek'
 import { modeType } from '../notification/notification.interface'
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
+import { TUser } from '../user/user.interface'
 
 dayjs.extend(isSameOrBefore);
 dayjs.extend(isoWeek)
@@ -596,7 +597,6 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
         booker,
         expert,
         cancelledBooking,
-        slot,
         '',
         cancelledByEmail,
       )
@@ -891,7 +891,6 @@ const declineBooking = async (
         booker,
         expert,
         updatedBooking,
-        slot,
         reason,
         'consult',
       )
@@ -926,7 +925,6 @@ const completedBooking = async (
   session.startTransaction()
 
   try {
-    // 1. Find booking (either user or consult can complete)
     const booking = await Booking.findOne({
       _id: bookingId,
       isDeleted: false,
@@ -942,65 +940,46 @@ const completedBooking = async (
       )
     }
 
-    // 2. Strict validation
     if (booking.status === BOOKING_STATUS.completed) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'This booking has already been marked as completed.',
-      )
+      throw new AppError(httpStatus.BAD_REQUEST, 'This booking has already been marked as completed.')
     }
     if (booking.status === BOOKING_STATUS.cancelled) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'This booking has been cancelled and cannot be completed.',
-      )
+      throw new AppError(httpStatus.BAD_REQUEST, 'This booking has been cancelled and cannot be completed.')
     }
     if (booking.status !== BOOKING_STATUS.confirmed) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        `Only confirmed bookings can be marked as completed. Current status: ${booking.status}`,
-      )
+      throw new AppError(httpStatus.BAD_REQUEST, `Only confirmed bookings can be marked as completed. Current status: ${booking.status}`)
     }
     if (booking.paymentStatus !== PAYMENT_STATUS.paid) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'This booking has not been paid yet and cannot be marked as completed.',
-      )
+      throw new AppError(httpStatus.BAD_REQUEST, 'This booking has not been paid yet and cannot be marked as completed.')
     }
 
-    // 3. Mark booking as completed + save record details
     const updatedBooking = await Booking.findByIdAndUpdate(
       bookingId,
-      {
-        $set: {
-          status: BOOKING_STATUS.completed,
-          recordDuration,
-          recordFile,
-        },
-      },
+      { $set: { status: BOOKING_STATUS.completed, recordDuration, recordFile } },
       { returnDocument: 'after', session },
     ).populate('user consult slot')
 
     if (!updatedBooking) {
-      throw new AppError(
-        httpStatus.INTERNAL_SERVER_ERROR,
-        'Failed to mark booking as completed.',
-      )
+      throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to mark booking as completed.')
     }
 
-    // 4. Award 100 points to the USER (booker) for attending/completing the session (existing)
+    // ✅ Fetch consultAmount from Payment model
+    const paymentRecord = await Payment.findOne({
+      booking: bookingId,
+      isDeleted: false,
+    })
+      .select('consultAmount')
+      .session(session)
+      .lean()
+
+    const consultAmount = paymentRecord?.consultAmount ?? updatedBooking.price
+
+    // Award 100 points to the USER
     const booker = await User.findById(updatedBooking.user).session(session)
     if (booker) {
-      const pointsToAdd = 100
-      booker.points = (booker.points || 0) + pointsToAdd
+      booker.points = (booker.points || 0) + 100
+      await User.findByIdAndUpdate(booker._id, { points: booker.points }, { session })
 
-      await User.findByIdAndUpdate(
-        booker._id,
-        { points: booker.points },
-        { session },
-      )
-
-      // Send push notification to booker (if enabled)
       if (booker.fcmToken && booker.pushNotify?.points) {
         await sendNotification([booker.fcmToken], {
           receiver: booker._id,
@@ -1012,32 +991,24 @@ const completedBooking = async (
       }
     }
 
-    // 5. Award points to the CONSULTANT (expert)
-    const consultant = await User.findById(updatedBooking.consult).session(
-      session,
-    )
+    // Award points to the CONSULTANT
+    const consultant = await User.findById(updatedBooking.consult).session(session)
     if (consultant) {
-      // Reward #1: 100 points per completed session (always)
-      const basePoints = 100
-      consultant.points = (consultant.points || 0) + basePoints
+      consultant.points = (consultant.points || 0) + 100
 
-      // Reward #2: 300 bonus points if 5+ completed sessions in last 7 days
       const sevenDaysAgo = new Date()
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
       const completedInLastWeek = await Booking.countDocuments({
         consult: consultant._id,
         status: BOOKING_STATUS.completed,
-        updatedAt: { $gte: sevenDaysAgo }, // use updatedAt since completion time
+        updatedAt: { $gte: sevenDaysAgo },
         isDeleted: false,
       }).session(session)
 
-      let bonusPoints = 0
       if (completedInLastWeek >= 5) {
-        bonusPoints = 300
-        consultant.points += bonusPoints
+        consultant.points += 300
 
-        // Send bonus notification
         if (consultant.fcmToken && consultant.pushNotify?.points) {
           await sendNotification([consultant.fcmToken], {
             receiver: consultant._id,
@@ -1049,28 +1020,19 @@ const completedBooking = async (
         }
       }
 
-      await User.findByIdAndUpdate(
-        consultant._id,
-        { points: consultant.points },
-        { session },
-      )
+      await User.findByIdAndUpdate(consultant._id, { points: consultant.points }, { session })
 
-      // Send base completion notification to consultant
       if (consultant.fcmToken && consultant.pushNotify?.payment) {
-        await sendBookingsNotification(
-          'completed',
-          updatedBooking,
-          consultant,
-          updatedBooking.slot,
-        )
+        await sendBookingsNotification('completed', updatedBooking, consultant, updatedBooking.slot)
       }
 
-      // Send completed email to consultant (if enabled)
       if (consultant.emailNotify?.booking) {
+        // ✅ consultAmount pass করুন
         await sendSessionCompletedToConsultant(
           consultant,
           updatedBooking,
-          updatedBooking.slot,
+          booker as TUser,
+          consultAmount,
         )
       }
     }
@@ -1081,10 +1043,7 @@ const completedBooking = async (
     await session.abortTransaction()
     throw error instanceof AppError
       ? error
-      : new AppError(
-          httpStatus.INTERNAL_SERVER_ERROR,
-          error.message || 'Failed to complete booking',
-        )
+      : new AppError(httpStatus.INTERNAL_SERVER_ERROR, error.message || 'Failed to complete booking')
   } finally {
     session.endSession()
   }
@@ -1194,7 +1153,7 @@ const rescheduleBooking = async (
 
     // sent reschedule email
     if (user && consultant) {
-      await sendRescheduleEmail(user, consultant, booking, newSlot)
+      await sendRescheduleEmail(user, consultant, booking)
     }
 
     await session.commitTransaction()

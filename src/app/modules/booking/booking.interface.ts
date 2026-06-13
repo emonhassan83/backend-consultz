@@ -17,6 +17,11 @@ export interface TBookings {
   recordDuration: number
   recordFile: string
   dmCloseTime: Date
+
+  // For local time calculation
+  localDate: string
+  localTime: string
+  
   status: TBookingStatus
   isDeleted: boolean
   respondedAt?: Date
