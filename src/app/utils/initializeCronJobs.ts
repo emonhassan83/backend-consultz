@@ -173,7 +173,9 @@ export const initializeCronJobs = () => {
               `Transferred $${withdraw.amount} to ${consultant.stripeAccountId} for withdraw ${withdraw._id}`,
             )
 
-            const booker = booking.user as any
+            const booker = await User.findById(booking.user).session(
+            session,
+          )
 
             postCommitTasks.push(async () => {
               await sendWithdrawNotify(
@@ -183,7 +185,7 @@ export const initializeCronJobs = () => {
               )
             })
 
-            if (consultant.emailNotify?.payment) {
+            if (booker && consultant.emailNotify?.payment) {
               postCommitTasks.push(async () => {
                 await sendWithdrawCompletedEmail(
                   consultant,

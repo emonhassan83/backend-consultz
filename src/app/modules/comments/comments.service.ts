@@ -11,101 +11,91 @@ import { Reply } from '../reply/reply.models'
 import { canDeleteComment, canDeleteCommentsBatch } from './comments.utils'
 
 const createComments = async (payload: TComments, userId: string) => {
-  const user = await User.findById(userId)
+  const user = await User.findById(userId);
   if (!user || user.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'This profile is not found!')
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
   }
 
-  const session = await Comments.startSession()
-  session.startTransaction()
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
   try {
-    const { content, isReply, replyRef, comment } = payload
+    const { content, isReply, replyRef, comment } = payload;
 
-    const feed = await Feed.findById(content)
-    if (!feed || feed.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, `Feed not found!`)
+    if (!comment) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Comment text is required');
     }
-    // assign author
-    payload.user = new Types.ObjectId(userId)
 
-    let result
+    const feed = await Feed.findById(content);
+    if (!feed || feed.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Feed not found!');
+    }
+
+    let result;
 
     if (!isReply) {
-      // Create new main comment
-      const commentDoc = await Comments.create(
+      // === Main Comment ===
+      const [commentDoc] = await Comments.create(
         [
           {
             user: new Types.ObjectId(userId),
-            content: new Types.ObjectId(content as any),
+            content: new Types.ObjectId(content),
+            comment: comment,           // ← এটা আগে ছিল না
           },
         ],
-        { session },
-      )
+        { session }
+      );
 
-      result = commentDoc?.[0]
+      result = commentDoc;
 
-      // Increment comment count
+      // Increment comment count in ContentMeta
       await ContentMeta.findOneAndUpdate(
-        { content },
+        { content: new Types.ObjectId(content) },
         { $inc: { comment: 1 } },
-        { returnDocument: 'after', session },
-      )
+        { session }
+      );
     } else {
+      // === Reply ===
       if (!replyRef) {
-        throw new AppError(
-          httpStatus.BAD_REQUEST,
-          'Parent comment reference is required for a reply',
-        )
+        throw new AppError(httpStatus.BAD_REQUEST, 'Parent comment reference is required for reply');
       }
 
-      const replyRefId = replyRef instanceof Types.ObjectId
-        ? replyRef
-        : typeof replyRef === 'object' && '_id' in replyRef
-        ? (replyRef as any)._id
-        : replyRef
-
-      const parentComment = await Comments.findById(replyRefId)
+      const parentComment = await Comments.findById(replyRef).session(session);
       if (!parentComment) {
-        throw new AppError(httpStatus.NOT_FOUND, 'Parent comment not found!')
+        throw new AppError(httpStatus.NOT_FOUND, 'Parent comment not found!');
       }
 
-      // Create reply
-      const replyDoc = await Reply.create(
+      const [replyDoc] = await Reply.create(
         [
           {
             user: new Types.ObjectId(userId),
-            replyRef: new Types.ObjectId(replyRefId),
-            comment,
+            replyRef: new Types.ObjectId(replyRef),
+            comment: comment,
           },
         ],
-        { session },
-      )
+        { session }
+      );
 
-      const createdReply = replyDoc[0]
-
-      // Push reply to comment's reply array
+      // Add reply to parent comment's reply array
       await Comments.findByIdAndUpdate(
-        replyRefId,
-        {
-          $addToSet: { reply: createdReply._id },
-        },
-        { session },
-      )
+        replyRef,
+        { $addToSet: { reply: replyDoc._id } },
+        { session }
+      );
 
-      result = createdReply
+      result = replyDoc;
     }
 
-    await session.commitTransaction()
-    session.endSession()
+    await session.commitTransaction();
+    session.endSession();
 
-    return result
+    return result;
   } catch (error: any) {
-    await session.abortTransaction()
-    session.endSession()
-    throw new AppError(httpStatus.BAD_REQUEST, error.message)
+    await session.abortTransaction();
+    session.endSession();
+    throw new AppError(httpStatus.BAD_REQUEST, error.message || 'Failed to create comment');
   }
-}
+};
 
 const getAllComments = async (userId: string, query: Record<string, any>) => {
   const commentsModel = new QueryBuilder(

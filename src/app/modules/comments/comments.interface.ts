@@ -6,7 +6,7 @@ export interface TComments {
   content: Types.ObjectId
   comment: string
   isReply: boolean
-  replyRef?: Types.ObjectId | TComments
+  replyRef?: Types.ObjectId | string
   reply: Types.ObjectId[] | TComments
 }
 
