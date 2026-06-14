@@ -9,8 +9,8 @@ const createSupport = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
-    message: 'Support created successfully!',
-    data: result,
+    message: result?.message,
+    data: {},
   })
 })
 

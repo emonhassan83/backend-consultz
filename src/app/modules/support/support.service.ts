@@ -5,32 +5,74 @@ import { TSupport, TSupportMessage } from './support.interface'
 import { Support } from './support.model'
 import { User } from '../user/user.model'
 import emailSender from '../../utils/emailSender'
-import { SUPPORT_STATUS, TAudience } from './support.constant'
+import { SUPPORT_STATUS } from './support.constant'
+import { Contents } from '../contents/contents.models'
 
 const createSupportIntoDB = async (payload: TSupport, userId: string) => {
-  // find user by id
+  // 1. Find user
   const author = await User.findById(userId)
   if (!author || author?.isDeleted) {
-    throw new AppError(httpStatus.FORBIDDEN, 'This user is not found !')
+    throw new AppError(httpStatus.FORBIDDEN, 'User not found!')
   }
 
-  // assign author id to support payload
-  payload.author = author._id
-  payload.email = author.email
+  // 2. Get platform support email from Contents
+  const contents = await Contents.findOne({ isDeleted: false }).select(
+    'supportEmail',
+  )
 
-  // assign support audience based on user role
-  if (author.role === 'consult' || author.role === 'expert') {
-    payload.audience = author.role as TAudience
-  } else {
-    throw new AppError(httpStatus.FORBIDDEN, 'Invalid support role for user!')
+  // Fallback email added
+  const supportEmail = contents?.supportEmail || 'investors@wealthdragons.co.uk'
+
+  // 3. Prepare email content
+  const emailContent = `
+  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #e0e0e0; border-radius: 10px; background-color: #ffffff;">
+    <h2 style="color: #1a1a1a; margin-bottom: 20px; border-bottom: 2px solid #333333; padding-bottom: 12px;">
+      New Support Request
+    </h2>
+    
+    <p style="color: #333333; margin: 8px 0;">
+      <strong>From:</strong> ${author.firstName} ${author.lastName} (${author.email})
+    </p>
+    <p style="color: #333333; margin: 8px 0;">
+      <strong>Subject:</strong> ${payload.subject}
+    </p>
+    
+    <hr style="border: none; border-top: 1px solid #dddddd; margin: 25px 0;">
+
+    <p style="color: #1a1a1a; font-weight: bold; margin-bottom: 8px;">Message:</p>
+    <p style="background: #f5f5f5; padding: 18px; border-radius: 6px; color: #333333; line-height: 1.6;">
+      ${payload.messages}
+    </p>
+    
+    <br>
+    <p style="color: #666666; font-size: 12px; text-align: center; margin-top: 25px;">
+      This message was sent from Consultz Support System.
+    </p>
+  </div>
+`
+
+  // 4. Send email to platform support
+  try {
+    await emailSender(
+      supportEmail,
+      `Support Request: ${payload.subject}`,
+      emailContent,
+    )
+
+    console.log(`✅ Support email sent to ${supportEmail}`)
+  } catch (error: any) {
+    console.error('Failed to send support email:', error)
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to send support request',
+    )
   }
 
-  const support = await Support.create(payload)
-  if (!support) {
-    throw new AppError(httpStatus.CONFLICT, 'Support not created!')
+  return {
+    success: true,
+    message:
+      'Your support request has been sent successfully. We will get back to you soon.',
   }
-
-  return support
 }
 
 const sentSupportMessageIntoDB = async (

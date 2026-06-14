@@ -197,8 +197,10 @@ const confirmPayment = async (payload: {
     await session.commitTransaction()
 
     /* ========= 6. Notifications ========= */
-    const consult = await User.findById(booking.consult)
-    const user = await User.findById(userId)
+    const [consult, user] = await Promise.all([
+      User.findById(booking.consult).select('fcmToken emailNotify name email'),
+      User.findById(userId).select('emailNotify name email')
+    ])
 
     if (consult?.fcmToken) {
       await sendBookingsNotification('pending', booking, consult, booking.slot)

@@ -1,6 +1,5 @@
 import emailSender from './emailSender'
 import { TUser } from '../modules/user/user.interface'
-import { TBookingSlots } from '../modules/bookingSlots/bookingSlots.interface'
 import { TBookings } from '../modules/booking/booking.interface'
 import { TWithdraw } from '../modules/withdraw/withdraw.interface'
 import { TWithdrawStatus } from '../modules/withdraw/withdraw.constant'
@@ -25,7 +24,7 @@ export const sendNewBookingToConsultant = async (
           <li><strong>User:</strong> ${user.firstName} ${user.lastName}</li>
           <li><strong>Session Type:</strong> ${booking.sessionType}</li>
           <li><strong>Date & Time:</strong> ${sessionInfo}</li>
-          <li><strong>Amount:</strong> $${booking.price}</li>
+          <li><strong>Amount:</strong> £${booking.price}</li>
         </ul>
         <p style="color: #555;">Please be prepared for the session. Check your dashboard for more details.</p>
         <p style="color: #555;">Best regards,<br/><strong>Consultz Team</strong></p>
@@ -144,7 +143,7 @@ export const sendSessionCompletedToConsultant = async (
         <h2 style="color: #5cb85c;">Session Completed</h2>
         <p style="color: #555;">Dear ${consult.firstName},</p>
         <p style="color: #555;">Your session with ${user.firstName} ${user.lastName} on ${sessionInfo} is now complete.</p>
-        <p style="color: #555;">Payment of $${consultAmount} is being processed and will be transferred to your account soon.</p>
+        <p style="color: #555;">Payment of £${consultAmount} is being processed and will be transferred to your account soon.</p>
         <p style="color: #555;">Thank you for your service!</p>
         <p style="color: #555;">Best regards,<br/><strong>Consultz Team</strong></p>
         <div style="text-align: center; margin-top: 20px; font-size: 12px; color: #999;">
@@ -295,8 +294,6 @@ export const sendWithdrawCompletedEmail = async (
   booking: TBookings,
   user: TUser,
 ) => {
-  if (!consultant?.email || !consultant.emailNotify?.payment) return
-
   const sessionInfo = booking
     ? `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
     : 'N/A'
@@ -304,7 +301,7 @@ export const sendWithdrawCompletedEmail = async (
   const content = `
     <p style="color: #555;">Great news! Your withdrawal request has been successfully processed.</p>
     <ul style="color: #555; line-height: 1.6;">
-      <li><strong>Amount:</strong> $${withdraw.amount.toFixed(2)}</li>
+      <li><strong>Amount:</strong> £${withdraw.amount.toFixed(2)}</li>
       ${
         booking
           ? `
@@ -347,7 +344,7 @@ export const sendWithdrawStatusChangeEmail = async (
   const content = `
     <p style="color: #555;">Your withdrawal request status has been updated:</p>
     <ul style="color: #555; line-height: 1.6;">
-      <li><strong>Amount:</strong> $${withdraw.amount.toFixed(2)}</li>
+      <li><strong>Amount:</strong> £${withdraw.amount.toFixed(2)}</li>
       <li><strong>Current Status:</strong> ${statusText}</li>
     </ul>
     <p style="color: #555;">Please open the Consultz app and check your Withdrawals section for more details.</p>
@@ -375,7 +372,7 @@ export const sendPaymentSuccessToUser = async (
   const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
 
   const content = `
-    <p style="color: #555;">Your payment of $${booking.price} has been successfully processed!</p>
+    <p style="color: #555;">Your payment of £${booking.price} has been successfully processed!</p>
     <ul style="color: #555; line-height: 1.6;">
       <li><strong>Session:</strong> ${booking.sessionType}</li>
       <li><strong>With:</strong> ${expert.firstName} ${expert.lastName}</li>
