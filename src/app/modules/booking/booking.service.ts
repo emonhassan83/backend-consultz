@@ -9,7 +9,11 @@ import { BOOKING_STATUS, PAYMENT_STATUS } from './booking.constants'
 import AppError from '../../errors/AppError'
 import { Booking } from './booking.models'
 import { User } from '../user/user.model'
-import { sendBookingsNotification } from './booking.utils'
+import {
+  getUnreadMessageCount,
+  getUnreadMessageCountsBatch,
+  sendBookingsNotification,
+} from './booking.utils'
 import QueryBuilder from '../../builder/QueryBuilder'
 import { BookingSlots } from '../bookingSlots/bookingSlots.model'
 import { Payment } from '../payment/payment.model'
@@ -23,10 +27,10 @@ import {
 import { sendNotification } from '../../utils/sentNotification'
 import isoWeek from 'dayjs/plugin/isoWeek'
 import { modeType } from '../notification/notification.interface'
-import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore'
 import { TUser } from '../user/user.interface'
 
-dayjs.extend(isSameOrBefore);
+dayjs.extend(isSameOrBefore)
 dayjs.extend(isoWeek)
 dayjs.extend(customParseFormat)
 dayjs.extend(utc)
@@ -196,90 +200,90 @@ const createBookings = async (payload: TBookings, userId: string) => {
 
 const getBookingCalender = async (
   query: Record<string, any>,
-  userId: string
+  userId: string,
 ) => {
-  const { date } = query; // "2026-04"
+  const { date } = query // "2026-04"
 
   if (!date || !/^\d{4}-\d{2}$/.test(date)) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
-      'Invalid date format. Use YYYY-MM (e.g., 2026-04)'
-    );
+      'Invalid date format. Use YYYY-MM (e.g., 2026-04)',
+    )
   }
 
-  const [year, month] = date.split('-').map(Number);
+  const [year, month] = date.split('-').map(Number)
 
-  const startOfMonth = `${year}-${month.toString().padStart(2, '0')}-01`;
-  const endOfMonth = dayjs(`${year}-${month}-01`).endOf('month').format('YYYY-MM-DD');
+  const startOfMonth = `${year}-${month.toString().padStart(2, '0')}-01`
+  const endOfMonth = dayjs(`${year}-${month}-01`)
+    .endOf('month')
+    .format('YYYY-MM-DD')
 
   // 1. Current user-এর সব active booking খুঁজে বের করা
   const bookings = await Booking.find({
-    $or: [
-      { user: userId },
-      { consult: userId },
-    ],
+    $or: [{ user: userId }, { consult: userId }],
     isDeleted: false,
     paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
-    status: { $nin: [BOOKING_STATUS.declined, BOOKING_STATUS.cancelled, BOOKING_STATUS.not_responded] },
-  }).select('slot').lean();
+    status: {
+      $nin: [
+        BOOKING_STATUS.declined,
+        BOOKING_STATUS.cancelled,
+        BOOKING_STATUS.not_responded,
+      ],
+    },
+  })
+    .select('slot')
+    .lean()
 
-  const slotIds = bookings.map(b => b.slot.toString());
+  const slotIds = bookings.map((b) => b.slot.toString())
 
   // 2. এই মাসের স্লটগুলো নেওয়া
   const slots = await BookingSlots.find({
     _id: { $in: slotIds },
     date: { $gte: startOfMonth, $lte: endOfMonth },
-  }).select('date isBooked').lean();
+  })
+    .select('date isBooked')
+    .lean()
 
   // 3. Date wise isBooked map তৈরি
-  const bookedDates = new Set<string>();
-  slots.forEach(slot => {
+  const bookedDates = new Set<string>()
+  slots.forEach((slot) => {
     if (slot.isBooked === true) {
-      bookedDates.add(slot.date);
+      bookedDates.add(slot.date)
     }
-  });
+  })
 
   // 4. পুরো মাসের সব তারিখ generate করা + isBooked flag
-  const calendarData: { date: string; isBooked: boolean }[] = [];
+  const calendarData: { date: string; isBooked: boolean }[] = []
 
-  let currentDate = dayjs(startOfMonth);
-  const lastDate = dayjs(endOfMonth);
+  let currentDate = dayjs(startOfMonth)
+  const lastDate = dayjs(endOfMonth)
 
   while (currentDate.isSameOrBefore(lastDate)) {
-    const dateStr = currentDate.format('YYYY-MM-DD');
+    const dateStr = currentDate.format('YYYY-MM-DD')
     calendarData.push({
       date: dateStr,
       isBooked: bookedDates.has(dateStr),
-    });
-    currentDate = currentDate.add(1, 'day');
+    })
+    currentDate = currentDate.add(1, 'day')
   }
 
-  return calendarData;
-};
+  return calendarData
+}
 
-const getAllBookings = async (query: Record<string, any>) => {
-  const queryCopy = { ...query };
-
-  const { consult, user, ...restQuery } = queryCopy;
-
-  console.log('🔍 Final Query Received:', { consult, user, restQuery });
+const getAllBookings = async (
+  query: Record<string, any>,
+  currentUserId: string,
+) => {
+  const queryCopy = { ...query }
+  const { consult, user, ...restQuery } = queryCopy
 
   let baseFilter: any = {
     isDeleted: false,
     paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
-  };
-
-  // Expert এর bookings
-  if (consult) {
-    baseFilter.consult = new mongoose.Types.ObjectId(consult);
-    console.log(`✅ Filtering by consult: ${consult}`);
   }
 
-  // Customer এর bookings
-  if (user) {
-    baseFilter.user = new mongoose.Types.ObjectId(user);
-    console.log(`✅ Filtering by user: ${user}`);
-  }
+  if (consult) baseFilter.consult = new mongoose.Types.ObjectId(consult)
+  if (user) baseFilter.user = new mongoose.Types.ObjectId(user)
 
   const bookingModel = new QueryBuilder(
     Booking.find(baseFilter)
@@ -296,15 +300,22 @@ const getAllBookings = async (query: Record<string, any>) => {
     .search(['mainQuestion'])
     .filter()
     .paginate()
-    .sort();
+    .sort()
 
-  const data = await bookingModel.modelQuery;
-  const meta = await bookingModel.countTotal();
+  const data = await bookingModel.modelQuery
+  const meta = await bookingModel.countTotal()
 
-  console.log(`📊 Bookings found: ${data.length} | Total: ${meta.total}`);
+  // ✅ Batch unread counts
+  const bookingIds = data.map((b: any) => b._id.toString())
+  const unreadMap = await getUnreadMessageCountsBatch(bookingIds, currentUserId)
 
-  return { data, meta };
-};
+  const enriched = data.map((booking: any) => ({
+    ...booking.toObject(),
+    unreadMessageCount: unreadMap.get(booking._id.toString()) ?? 0,
+  }))
+
+  return { data: enriched, meta }
+}
 
 const getAllBookingsByDate = async (
   query: Record<string, any>,
@@ -315,7 +326,6 @@ const getAllBookingsByDate = async (
   let targetDates: string[] = []
   const today = dayjs()
 
-  // 🗓️ Date filtering logic
   if (date) {
     const parsed = dayjs(date, 'DD-MM-YYYY')
     if (!parsed.isValid()) {
@@ -349,14 +359,12 @@ const getAllBookingsByDate = async (
     targetDates = [today.format('YYYY-MM-DD')]
   }
 
-  // 🔍 Find matching slots
   const matchingSlots = await BookingSlots.find({
     date: { $in: targetDates },
   }).select('_id')
 
   const slotIds = matchingSlots.map((s) => s._id)
 
-  // Early return if no slots
   if (slotIds.length === 0) {
     if (targetDates.length === 1) {
       return {
@@ -374,7 +382,6 @@ const getAllBookingsByDate = async (
     }
   }
 
-  // 🔥 Build booking filter (THIS IS THE FIX!)
   const bookingFilter: Record<string, any> = {
     isDeleted: false,
     paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
@@ -382,7 +389,6 @@ const getAllBookingsByDate = async (
     $or: [{ user: userId }, { consult: userId }],
   }
 
-  // 📋 Fetch bookings with filters
   const bookings: any[] = await Booking.find(bookingFilter)
     .populate([
       { path: 'user', select: 'firstName lastName photoUrl' },
@@ -394,17 +400,24 @@ const getAllBookingsByDate = async (
     )
     .sort({ createdAt: -1 })
 
-  // 📊 Single date response
+  // ✅ Batch unread counts for all fetched bookings
+  const bookingIds = bookings.map((b) => b._id.toString())
+  const unreadMap = await getUnreadMessageCountsBatch(bookingIds, userId)
+
+  const enrichBooking = (booking: any) => ({
+    ...booking.toObject(),
+    unreadMessageCount: unreadMap.get(booking._id.toString()) ?? 0,
+  })
+
   if (targetDates.length === 1) {
     return {
       data: {
         date: dayjs(targetDates[0]).format('DD-MM-YYYY'),
-        bookingList: bookings,
+        bookingList: bookings.map(enrichBooking),
       },
     }
   }
 
-  // 📊 Multiple dates response (grouped)
   const groupedByDate: Record<string, any[]> = {}
   for (const d of targetDates) {
     groupedByDate[d] = []
@@ -413,7 +426,7 @@ const getAllBookingsByDate = async (
   for (const booking of bookings) {
     const slotDate = booking?.slot?.date
     if (slotDate && groupedByDate[slotDate] !== undefined) {
-      groupedByDate[slotDate].push(booking)
+      groupedByDate[slotDate].push(enrichBooking(booking))
     }
   }
 
@@ -427,7 +440,7 @@ const getAllBookingsByDate = async (
   return { data: formattedData }
 }
 
-const getBookingsById = async (id: string) => {
+const getBookingsById = async (id: string, currentUserId: string) => {
   const result = await Booking.findOne({
     _id: id,
     paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
@@ -441,7 +454,16 @@ const getBookingsById = async (id: string) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Bookings not found!')
   }
 
-  return result
+  // Single booking unread count
+  const unreadMessageCount = await getUnreadMessageCount(
+    result._id.toString(),
+    currentUserId,
+  )
+
+  return {
+    ...result.toObject(),
+    unreadMessageCount,
+  }
 }
 
 const cancelBooking = async (bookingId: string, currentUserId: string) => {
@@ -941,26 +963,43 @@ const completedBooking = async (
     }
 
     if (booking.status === BOOKING_STATUS.completed) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'This booking has already been marked as completed.')
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'This booking has already been marked as completed.',
+      )
     }
     if (booking.status === BOOKING_STATUS.cancelled) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'This booking has been cancelled and cannot be completed.')
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'This booking has been cancelled and cannot be completed.',
+      )
     }
     if (booking.status !== BOOKING_STATUS.confirmed) {
-      throw new AppError(httpStatus.BAD_REQUEST, `Only confirmed bookings can be marked as completed. Current status: ${booking.status}`)
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        `Only confirmed bookings can be marked as completed. Current status: ${booking.status}`,
+      )
     }
     if (booking.paymentStatus !== PAYMENT_STATUS.paid) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'This booking has not been paid yet and cannot be marked as completed.')
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'This booking has not been paid yet and cannot be marked as completed.',
+      )
     }
 
     const updatedBooking = await Booking.findByIdAndUpdate(
       bookingId,
-      { $set: { status: BOOKING_STATUS.completed, recordDuration, recordFile } },
+      {
+        $set: { status: BOOKING_STATUS.completed, recordDuration, recordFile },
+      },
       { returnDocument: 'after', session },
     ).populate('user consult slot')
 
     if (!updatedBooking) {
-      throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to mark booking as completed.')
+      throw new AppError(
+        httpStatus.INTERNAL_SERVER_ERROR,
+        'Failed to mark booking as completed.',
+      )
     }
 
     // ✅ Fetch consultAmount from Payment model
@@ -978,7 +1017,11 @@ const completedBooking = async (
     const booker = await User.findById(updatedBooking.user).session(session)
     if (booker) {
       booker.points = (booker.points || 0) + 100
-      await User.findByIdAndUpdate(booker._id, { points: booker.points }, { session })
+      await User.findByIdAndUpdate(
+        booker._id,
+        { points: booker.points },
+        { session },
+      )
 
       if (booker.fcmToken && booker.pushNotify?.points) {
         await sendNotification([booker.fcmToken], {
@@ -992,7 +1035,9 @@ const completedBooking = async (
     }
 
     // Award points to the CONSULTANT
-    const consultant = await User.findById(updatedBooking.consult).session(session)
+    const consultant = await User.findById(updatedBooking.consult).session(
+      session,
+    )
     if (consultant) {
       consultant.points = (consultant.points || 0) + 100
 
@@ -1020,10 +1065,19 @@ const completedBooking = async (
         }
       }
 
-      await User.findByIdAndUpdate(consultant._id, { points: consultant.points }, { session })
+      await User.findByIdAndUpdate(
+        consultant._id,
+        { points: consultant.points },
+        { session },
+      )
 
       if (consultant.fcmToken && consultant.pushNotify?.payment) {
-        await sendBookingsNotification('completed', updatedBooking, consultant, updatedBooking.slot)
+        await sendBookingsNotification(
+          'completed',
+          updatedBooking,
+          consultant,
+          updatedBooking.slot,
+        )
       }
 
       if (consultant.emailNotify?.booking) {
@@ -1043,7 +1097,10 @@ const completedBooking = async (
     await session.abortTransaction()
     throw error instanceof AppError
       ? error
-      : new AppError(httpStatus.INTERNAL_SERVER_ERROR, error.message || 'Failed to complete booking')
+      : new AppError(
+          httpStatus.INTERNAL_SERVER_ERROR,
+          error.message || 'Failed to complete booking',
+        )
   } finally {
     session.endSession()
   }
@@ -1070,14 +1127,14 @@ const rescheduleBooking = async (
 
     // 2. Verify ownership (security)
     // ✅ সঠিক Authorization Check
-    const isUser = booking.user._id.toString() === currentUserId;
-    const isConsult = booking.consult._id.toString() === currentUserId;
+    const isUser = booking.user._id.toString() === currentUserId
+    const isConsult = booking.consult._id.toString() === currentUserId
 
     if (!isUser && !isConsult) {
       throw new AppError(
         httpStatus.FORBIDDEN,
-        'You are not authorized to reschedule this booking. Only the booker or the consultant can reschedule.'
-      );
+        'You are not authorized to reschedule this booking. Only the booker or the consultant can reschedule.',
+      )
     }
 
     // 3. Only confirmed bookings can be rescheduled

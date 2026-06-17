@@ -2,6 +2,72 @@ import { messages } from '../notification/notification.constant'
 import { modeType } from '../notification/notification.interface'
 import { sendNotification } from '../../utils/sentNotification'
 import { SESSION_TYPE } from './booking.constants'
+import { Chat } from '../chat/chat.models'
+import { Message } from '../messages/messages.models'
+import mongoose from 'mongoose'
+
+// Helper: booking IDs থেকে unread message count batch fetch
+export const getUnreadMessageCountsBatch = async (
+  bookingIds: string[],
+  userId: string,
+): Promise<Map<string, number>> => {
+  if (!bookingIds.length) return new Map()
+
+  // booking → chatId map
+  const chats = await Chat.find({
+    booking: { $in: bookingIds },
+  })
+    .select('_id booking')
+    .lean()
+
+  const chatIdToBookingId = new Map<string, string>()
+  const chatIds: string[] = []
+
+  for (const chat of chats) {
+    const chatId = chat._id.toString()
+    const bookingId = chat.booking.toString()
+    chatIdToBookingId.set(chatId, bookingId)
+    chatIds.push(chatId)
+  }
+
+  if (!chatIds.length) return new Map()
+
+  // Unread messages: receiver = currentUser, seen = false
+  const unreadCounts = await Message.aggregate([
+    {
+      $match: {
+        chat: { $in: chatIds.map((id) => new mongoose.Types.ObjectId(id)) },
+        receiver: new mongoose.Types.ObjectId(userId),
+        seen: false,
+      },
+    },
+    {
+      $group: {
+        _id: '$chat',
+        count: { $sum: 1 },
+      },
+    },
+  ])
+
+  const result = new Map<string, number>()
+  for (const item of unreadCounts) {
+    const bookingId = chatIdToBookingId.get(item._id.toString())
+    if (bookingId) {
+      result.set(bookingId, item.count)
+    }
+  }
+
+  return result
+}
+
+// Helper: single booking unread count
+export const getUnreadMessageCount = async (
+  bookingId: string,
+  userId: string,
+): Promise<number> => {
+  const map = await getUnreadMessageCountsBatch([bookingId], userId)
+  return map.get(bookingId) ?? 0
+}
 
 export type TBookingNotifyAction =
   | 'pending'

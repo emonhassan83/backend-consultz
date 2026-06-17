@@ -14,88 +14,96 @@ import { sendNotification } from '../../../utils/sentNotification'
 import { sendWithdrawNotify } from '../../../modules/withdraw/withdraw.utils'
 import { modeType } from '../../../modules/notification/notification.interface'
 import AppError from '../../../errors/AppError'
- 
+import { formatDuration } from '../../utils/formatDuration'
+
 type TBookingCompletePayload = {
   bookingId: string
-  callId:    string
-  duration:  number
+  callId: string
+  duration: number // IN min
 }
- 
+
 export const bookingComplete = eventHandler<TBookingCompletePayload>(
   async (socket: TSocket, data) => {
     // No callback needed — this is triggered internally by callEnd
     if (!data?.bookingId) return
- 
+
     const { bookingId, callId, duration } = data
- 
+
     const session = await mongoose.startSession()
     session.startTransaction()
- 
+
     try {
       // 1. Complete Booking
       const booking = await Booking.findById(bookingId).session(session)
-      if (!booking) throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
- 
+      if (!booking)
+        throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
+
       booking.status = BOOKING_STATUS.completed
       await booking.save({ session })
- 
+
       // 2. Find Payment
       const payment = await Payment.findOne({
-        booking: (booking._id).toString(),
+        booking: booking._id.toString(),
         isDeleted: false,
       }).session(session)
- 
-      if (!payment) throw new AppError(httpStatus.NOT_FOUND, 'Payment not found')
- 
+
+      if (!payment)
+        throw new AppError(httpStatus.NOT_FOUND, 'Payment not found')
+
       // 3. Create Withdraw
-      const contents  = await Contents.findOne().lean()
-      const holdDays  = contents?.paymentHoldDays || 7
+      const contents = await Contents.findOne().lean()
+      const holdDays = contents?.paymentHoldDays || 7
       const proceedAt = dayjs().add(holdDays, 'day').toDate()
- 
+
       const [withdraw] = await Withdraw.create(
-        [{
-          user:      booking.consult,
-          booking:   (booking._id).toString(),
-          amount:    payment.consultAmount,
-          status:    WITHDRAW_STATUS.proceed,
-          proceedAt,
-        }],
+        [
+          {
+            user: booking.consult,
+            booking: booking._id.toString(),
+            amount: payment.consultAmount,
+            status: WITHDRAW_STATUS.proceed,
+            proceedAt,
+          },
+        ],
         { session },
       )
- 
+
       await session.commitTransaction()
- 
+
       // 4. FCM Notifications to both users
       const [caller, receiver] = await Promise.all([
         User.findById(booking.user),
         User.findById(booking.consult),
       ])
- 
+
       const tokens: string[] = []
-      if (caller?.fcmToken)    tokens.push(caller.fcmToken)
-      if (receiver?.fcmToken)  tokens.push(receiver.fcmToken)
- 
+      if (caller?.fcmToken) tokens.push(caller.fcmToken)
+      if (receiver?.fcmToken) tokens.push(receiver.fcmToken)
+
+      // Format for display
+      const formattedDuration = formatDuration(duration)
+
       if (tokens.length > 0) {
         await sendNotification(tokens, {
-          receiver:   caller?._id,
-          message:    'Session completed',
-          description: `Your call has ended. Duration: ${Math.floor(duration)} min`,
-          reference:  callId,
-          modelType:  modeType.Calling,
+          receiver: caller?._id,
+          message: 'Session completed',
+          description: `Your call has ended. Duration: ${formattedDuration}`,
+          reference: callId,
+          modelType: modeType.Calling,
         })
       }
- 
+
       // 5. Withdraw notification to consultant
       await sendWithdrawNotify(WITHDRAW_STATUS.proceed, withdraw, receiver!)
- 
+
       // 6. Emit bookingCompleted back to client
       socket.emit('bookingComplete', {
         bookingId,
         callId,
-        duration,
+        duration: formattedDuration,
         status: BOOKING_STATUS.completed,
       })
- 
+
       console.log(`✅ Booking completed | BookingId: ${bookingId}`)
     } catch (error: any) {
       await session.abortTransaction()

@@ -10,10 +10,11 @@ import { CALLING_STATUS } from '../../../modules/calling/calling.constant';
 import { sendNotification } from '../../../utils/sentNotification';
 import { modeType } from '../../../modules/notification/notification.interface';
 import { callbackFn } from '../../../utils/CallbackFn';
+import { formatDuration } from '../../utils/formatDuration';
 
 type TCallEndPayload = {
   callId: string;
-  duration?: number;        // client থেকে optional duration পাঠাতে পারে
+  duration?: number; // IN min
 };
 
 const callEnd = eventHandler<TCallEndPayload>(
@@ -43,51 +44,21 @@ const callEnd = eventHandler<TCallEndPayload>(
         throw new AppError(httpStatus.NOT_FOUND, 'Call session not found or unauthorized');
       }
 
-      // if (call.status === CALLING_STATUS.completed) {
-      //   throw new AppError(httpStatus.BAD_REQUEST, 'Call already ended');
-      // }
-
       // 2. Calculate duration
       const now = new Date();
       const startTime = call.startedAt || call.createdAt;
-      const finalDuration = clientDuration ?? 
+      const finalDurationInMinutes = clientDuration ?? 
         Math.floor((now.getTime() - startTime.getTime()) / 1000);
+
+      // Format for display
+      const formattedDuration = formatDuration(finalDurationInMinutes);
 
       // 3. Update call
       call.status = CALLING_STATUS.ended;
       call.endedAt = now;
-      call.duration = finalDuration;
+      call.duration = finalDurationInMinutes;
       await call.save({ session });
 
-      // // 4. Complete booking
-      // const booking = await Booking.findById(call.booking).session(session);
-      // if (!booking) throw new AppError(httpStatus.NOT_FOUND, 'Booking not found');
-
-      // booking.status = BOOKING_STATUS.completed;
-      // await booking.save({ session });
-
-      // // 5. Payment & Withdraw
-      // const payment = await Payment.findOne({
-      //   booking: booking._id,
-      //   isDeleted: false,
-      // }).session(session);
-
-      // if (!payment) throw new AppError(httpStatus.NOT_FOUND, 'Payment not found');
-
-      // const contents = await Contents.findOne().lean();
-      // const holdDays = contents?.paymentHoldDays || 7;
-      // const proceedAt = dayjs(now).add(holdDays, 'day').toDate();
-
-      // const [withdraw] = await Withdraw.create(
-      //   [{
-      //     user: booking.consult,
-      //     booking: booking._id,
-      //     amount: payment.consultAmount,
-      //     status: WITHDRAW_STATUS.proceed,
-      //     proceedAt,
-      //   }],
-      //   { session }
-      // );
 
       // 6. Notification to both users
       const [caller, receiver] = await Promise.all([
@@ -103,16 +74,11 @@ const callEnd = eventHandler<TCallEndPayload>(
         await sendNotification(tokens, {
           receiver: caller?._id,
           message: 'Call Ended',
-          description: `Your ${call.isVideo ? 'video' : 'voice'} call has ended. Duration: ${Math.floor(finalDuration / 60)} min`,
+          description: `Your ${call.isVideo ? 'video' : 'voice'} call has ended. Duration: ${formattedDuration}`,
           reference: call._id,
           modelType: modeType.Calling,
         });
       }
-
-      // // 7. Withdraw notification to consultant
-      // if (caller?._id.toString() === booking.consult.toString()) {
-      //   await sendWithdrawNotify(WITHDRAW_STATUS.proceed, withdraw, caller);
-      // }
 
       await session.commitTransaction();
 
@@ -121,7 +87,7 @@ const callEnd = eventHandler<TCallEndPayload>(
 
       socket.to(participants).emit('callEnded', {
         callId: call._id,
-        duration: finalDuration,
+        duration: formattedDuration,
         endedAt: now,
         status: CALLING_STATUS.completed,
       });
@@ -129,7 +95,7 @@ const callEnd = eventHandler<TCallEndPayload>(
       // Caller নিজেও পায়
       socket.emit('callEnded', {
         callId: call._id,
-        duration: finalDuration,
+        duration: formattedDuration,
         endedAt: now,
         status: CALLING_STATUS.completed,
       });
@@ -141,7 +107,7 @@ const callEnd = eventHandler<TCallEndPayload>(
         message: 'Call ended successfully',
         data: {
           callId: call._id,
-          duration: finalDuration,
+          duration: formattedDuration,
           endedAt: now,
         }
       });

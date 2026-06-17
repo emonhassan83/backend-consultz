@@ -642,7 +642,6 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
     const user = await User.findById(viewedUserId)
       .select(
         '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education stripeAccountId isTopExpert pushNotify emailNotify status createdAt',
-        // ── removed: following, followers (now computed from Follow model)
       )
       .lean()
 
@@ -668,7 +667,9 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       pendingWithdrawResult,
       last7DaysFollowersCount,
       totalFollowersCount,
-      totalFollowingCount, // ── how many this user follows
+      totalFollowingCount,
+      // ✅ 1. Pending booking count — field differs by role
+      pendingBookingsCount,
     ] = await Promise.all([
       Booking.countDocuments({
         consult: viewedUserId,
@@ -682,10 +683,8 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
         viewedAt: { $gte: last7Days },
       }),
 
-      // ── is the viewer following this user?
       Follow.exists({ follower: viewerId, following: viewedUserId }),
 
-      // ── completed withdrawals total
       Withdraw.aggregate([
         {
           $match: {
@@ -696,7 +695,6 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
 
-      // ── pending (proceed + hold) withdrawals total
       Withdraw.aggregate([
         {
           $match: {
@@ -707,17 +705,27 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
 
-      // ── new followers in last 7 days
       Follow.countDocuments({
         following: viewedUserId,
         createdAt: { $gte: last7Days },
       }),
 
-      // ── total followers (others following this user)
       Follow.countDocuments({ following: viewedUserId }),
 
-      // ── total following (this user follows others)
       Follow.countDocuments({ follower: viewedUserId }),
+
+      // ✅ role = expert → consult field, role = consult/user → user field
+      user.role === USER_ROLE.expert
+        ? Booking.countDocuments({
+            consult: viewedUserId,
+            status: BOOKING_STATUS.pending,
+            isDeleted: false,
+          })
+        : Booking.countDocuments({
+            user: viewedUserId,
+            status: BOOKING_STATUS.pending,
+            isDeleted: false,
+          }),
     ])
 
     const totalWithdraw = totalWithdrawResult[0]?.total || 0
@@ -730,14 +738,37 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
           )
         : 0
 
+    // ✅ 2. Advising time in human-readable format
     let advisingTimeInHours = 0
+    let advisingTimeFormatted = '0min'
+
     if (user.role === USER_ROLE.expert) {
       const totalMinutesResult = await Booking.aggregate([
-        { $match: { consult: viewedUserId, status: BOOKING_STATUS.completed } },
+        {
+          $match: {
+            consult: viewedUserId,
+            status: BOOKING_STATUS.completed,
+          },
+        },
         { $group: { _id: null, totalMinutes: { $sum: '$sessionDuration' } } },
       ])
-      const minutes = totalMinutesResult[0]?.totalMinutes || 0
-      advisingTimeInHours = Number((minutes / 60).toFixed(2))
+
+      const totalMinutes: number = totalMinutesResult[0]?.totalMinutes || 0
+      advisingTimeInHours = Number((totalMinutes / 60).toFixed(2))
+
+      // ✅ Format: "1h 15min", "2h", "45min", "0min"
+      const hours = Math.floor(totalMinutes / 60)
+      const mins = totalMinutes % 60
+
+      if (hours > 0 && mins > 0) {
+        advisingTimeFormatted = `${hours}h ${mins}min`
+      } else if (hours > 0) {
+        advisingTimeFormatted = `${hours}h`
+      } else if (mins > 0) {
+        advisingTimeFormatted = `${mins}min`
+      } else {
+        advisingTimeFormatted = '0min'
+      }
     }
 
     const avgAttendance =
@@ -761,16 +792,18 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       ...user,
       sessionDurations: sessionDurationsWithPrice,
       totalBookings: completedBookingsCount,
+      pendingBookings: pendingBookingsCount,
       profileSetupProgress,
       advisingTimeInHours,
+      advisingTime: advisingTimeFormatted,
       avgAttendance,
       isFollowing: !!isFollowing,
       profileViewCount,
       totalWithdraw,
       pendingWithdraw,
       followerGrowthRate,
-      followers: totalFollowersCount, // ── people following this user
-      following: totalFollowingCount, // ── people this user follows
+      followers: totalFollowersCount,
+      following: totalFollowingCount,
       isConnectedStripe: !!user.stripeAccountId,
     }
   } catch (error) {
