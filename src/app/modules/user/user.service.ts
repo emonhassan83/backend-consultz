@@ -740,7 +740,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
 
     // ✅ 2. Advising time in human-readable format
     let advisingTimeInHours = 0
-    let advisingTimeFormatted = '0min'
+    let advisingTimeFormatted = '0 min'
 
     if (user.role === USER_ROLE.expert) {
       const totalMinutesResult = await Booking.aggregate([
@@ -767,7 +767,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       } else if (mins > 0) {
         advisingTimeFormatted = `${mins}min`
       } else {
-        advisingTimeFormatted = '0min'
+        advisingTimeFormatted = '0 min'
       }
     }
 

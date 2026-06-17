@@ -558,31 +558,31 @@ export const initializeCronJobs = () => {
         }
 
         // 3. DMs closing soon (59–61 minutes before closing)
-        const dmCloseTime = bookingStart
-          .add(booking.sessionDuration || 60, 'minute')
-          .add(6, 'hour')
-        const timeToDMCloseMinutes = dmCloseTime.diff(now, 'minute')
+        // const dmCloseTime = bookingStart
+        //   .add(booking.sessionDuration || 60, 'minute')
+        //   .add(6, 'hour')
+        // const timeToDMCloseMinutes = dmCloseTime.diff(now, 'minute')
 
-        if (timeToDMCloseMinutes >= 59 && timeToDMCloseMinutes <= 61) {
-          if (user.fcmToken && user.pushNotify?.scheduleRemainder) {
-            notificationsToSend.push({
-              userId: user._id.toString(),
-              fcmToken: user.fcmToken,
-              action: 'dms_closing',
-              booking,
-              slot,
-            })
-          }
-          if (consult.fcmToken && consult.pushNotify?.scheduleRemainder) {
-            notificationsToSend.push({
-              userId: consult._id.toString(),
-              fcmToken: consult.fcmToken,
-              action: 'dms_closing',
-              booking,
-              slot,
-            })
-          }
-        }
+        // if (timeToDMCloseMinutes >= 59 && timeToDMCloseMinutes <= 61) {
+        //   if (user.fcmToken && user.pushNotify?.scheduleRemainder) {
+        //     notificationsToSend.push({
+        //       userId: user._id.toString(),
+        //       fcmToken: user.fcmToken,
+        //       action: 'dms_closing',
+        //       booking,
+        //       slot,
+        //     })
+        //   }
+        //   if (consult.fcmToken && consult.pushNotify?.scheduleRemainder) {
+        //     notificationsToSend.push({
+        //       userId: consult._id.toString(),
+        //       fcmToken: consult.fcmToken,
+        //       action: 'dms_closing',
+        //       booking,
+        //       slot,
+        //     })
+        //   }
+        // }
       }
 
       // 4. Emails batch send
