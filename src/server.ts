@@ -5,9 +5,8 @@ import config from './app/config'
 import { errorlogger, logger } from './app/utils/logger'
 import { seeder } from './app/seeder/seed'
 import colors from 'colors'
-import { initializeCronJobs } from './app/utils/initializeCronJobs'
 import initializeSocketIO from './app/socket/socket.init'
-// import initializeSocketIO from './socket'
+import { initializeCronJobs } from './app/job/jobScheduler'
 
 let server: Server
 export const io = initializeSocketIO(createServer(app))

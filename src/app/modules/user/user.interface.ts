@@ -106,6 +106,7 @@ export interface TUser {
   socialProofBonusClaimed: boolean
   isPhoneOtpVerified: boolean
   isDeleted: boolean
+  lastNoShowBonusAt: Date
   createdAt?: Date
   updatedAt?: Date
 }

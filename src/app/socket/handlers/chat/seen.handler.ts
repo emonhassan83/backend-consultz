@@ -7,54 +7,62 @@ import { chatService } from '../../../modules/chat/chat.service';
 import { Types } from 'mongoose';
 import { callbackFn } from '../../../utils/CallbackFn';
 
-const seenHandler = eventHandler(async (socket: TSocket, { chatId }: any, callback: any) => {
+const seenHandler = eventHandler(async (socket: TSocket, { chatId, bookingId }: any, callback: any) => {
   const userId = socket.auth._id.toString();
 
-  if (!chatId) {
-    return callbackFn(callback, { success: false, message: 'chatId is required' });
+  // ✅ chatId অথবা bookingId যেকোনো একটা থাকলেই চলবে
+  if (!chatId && !bookingId) {
+    return callbackFn(callback, { success: false, message: 'chatId or bookingId is required' });
   }
 
   try {
-    const chat = await Chat.findById(chatId);
+    let chat: any = null;
+
+    if (chatId) {
+      chat = await Chat.findById(chatId);
+    } else if (bookingId) {
+      // ✅ bookingId দিয়ে chat খুঁজে নাও
+      chat = await Chat.findOne({ booking: new Types.ObjectId(bookingId) });
+    }
+
     if (!chat) {
       return callbackFn(callback, { success: false, message: 'Chat not found' });
     }
 
-    // 1. Current user ছাড়া বাকি সবার messages seen করো
+    const resolvedChatId = chat._id.toString();
+
+    // 1. Current user ছাড়া বাকি সবার messages seen করো
     await Message.updateMany(
       {
-        chat: chatId,
+        chat: new Types.ObjectId(resolvedChatId),
         seen: false,
         sender: { $ne: new Types.ObjectId(userId) },
       },
-      { $set: { seen: true } }
+      { $set: { seen: true } },
     );
 
-    // 2. শুধুমাত্র এই chatId এর updated version নিন (full list না)
-    const updatedSingleChat = await chatService.getSingleChat(chatId, userId); 
+    // 2. Updated single chat fetch করো
+    const updatedSingleChat = await chatService.getSingleChat(resolvedChatId, userId);
     if (!updatedSingleChat) {
       return callbackFn(callback, { success: false, message: 'Failed to fetch updated chat' });
     }
 
-    // 3. সব participants কে শুধু এই single chat
-    const participantIds = chat.participants.map((p) => p.toString());
+    // 3. সব participants কে notify করো
+    const participantIds = chat.participants.map((p: any) => p.toString());
 
     await Promise.all(
-      participantIds.map(async (participantId) => {
-        // শুধু এই chat এর আপডেট পাঠান
+      participantIds.map(async (participantId: string) => {
         socket.to(participantId).emit('chat-list', updatedSingleChat);
 
-        // Unread count আপডেট
         const unreadCount = await Message.countDocuments({
           receiver: participantId,
           seen: false,
         });
         socket.to(participantId).emit('new-notifications', unreadCount);
-      })
+      }),
     );
 
-    // Caller কে success পাঠান
-    callbackFn(callback, { success: true });
+    callbackFn(callback, { success: true, chatId: resolvedChatId });
   } catch (err: any) {
     console.error('seen handler error:', err.message);
     callbackFn(callback, { success: false, message: err.message });

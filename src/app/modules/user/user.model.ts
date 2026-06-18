@@ -190,6 +190,10 @@ const userSchema = new Schema<TUser, UserModel>(
     profileCompletionBonusClaimed: { type: Boolean, default: false },
     socialProofBonusClaimed: { type: Boolean, default: false },
     isPhoneOtpVerified: { type: Boolean, default: false },
+    lastNoShowBonusAt: {
+      type: Date,
+      default: null,
+    },
     isDeleted: { type: Boolean, default: false },
   },
   {

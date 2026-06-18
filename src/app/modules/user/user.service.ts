@@ -717,12 +717,12 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       // ✅ role = expert → consult field, role = consult/user → user field
       user.role === USER_ROLE.expert
         ? Booking.countDocuments({
-            consult: viewedUserId,
+            consult: new Types.ObjectId(viewedUserId),
             status: BOOKING_STATUS.pending,
             isDeleted: false,
           })
         : Booking.countDocuments({
-            user: viewedUserId,
+            user: new Types.ObjectId(viewedUserId),
             status: BOOKING_STATUS.pending,
             isDeleted: false,
           }),
@@ -739,36 +739,22 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
         : 0
 
     // ✅ 2. Advising time in human-readable format
-    let advisingTimeInHours = 0
-    let advisingTimeFormatted = '0 min'
+    let advisingTime = 0
 
     if (user.role === USER_ROLE.expert) {
       const totalMinutesResult = await Booking.aggregate([
         {
           $match: {
-            consult: viewedUserId,
+            consult: new Types.ObjectId(viewedUserId),
             status: BOOKING_STATUS.completed,
           },
         },
         { $group: { _id: null, totalMinutes: { $sum: '$sessionDuration' } } },
       ])
+      console.log(totalMinutesResult);
 
       const totalMinutes: number = totalMinutesResult[0]?.totalMinutes || 0
-      advisingTimeInHours = Number((totalMinutes / 60).toFixed(2))
-
-      // ✅ Format: "1h 15min", "2h", "45min", "0min"
-      const hours = Math.floor(totalMinutes / 60)
-      const mins = totalMinutes % 60
-
-      if (hours > 0 && mins > 0) {
-        advisingTimeFormatted = `${hours}h ${mins}min`
-      } else if (hours > 0) {
-        advisingTimeFormatted = `${hours}h`
-      } else if (mins > 0) {
-        advisingTimeFormatted = `${mins}min`
-      } else {
-        advisingTimeFormatted = '0 min'
-      }
+      advisingTime = Number((totalMinutes).toFixed(2))
     }
 
     const avgAttendance =
@@ -794,8 +780,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       totalBookings: completedBookingsCount,
       pendingBookings: pendingBookingsCount,
       profileSetupProgress,
-      advisingTimeInHours,
-      advisingTime: advisingTimeFormatted,
+      advisingTime,
       avgAttendance,
       isFollowing: !!isFollowing,
       profileViewCount,
