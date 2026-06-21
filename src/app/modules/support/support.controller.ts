@@ -4,13 +4,13 @@ import sendResponse from '../../utils/sendResponse'
 import { SupportService } from './support.service'
 
 const createSupport = catchAsync(async (req, res) => {
-  const result = await SupportService.createSupportIntoDB(req.body, req.user._id)
+  const result = await SupportService.sendSupportEmail(req.body, req.user._id)
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
     message: result?.message,
-    data: {},
+    data: null,
   })
 })
 
@@ -20,7 +20,18 @@ const sentSupportMessage = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
-    message: 'Support message sent successfully!',
+    message: result?.messages,
+    data: null,
+  })
+})
+
+const sentFeedbackEmail = catchAsync(async (req, res) => {
+  const result = await SupportService.sendFeedbackEmail(req.body, req.user._id)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Support retrieved successfully!',
     data: result,
   })
 })
@@ -37,17 +48,6 @@ const getAllSupports = catchAsync(async (req, res) => {
   })
 })
 
-const getASupport = catchAsync(async (req, res) => {
-  const result = await SupportService.getASupportFromDB(req.params.id as string)
-
-  sendResponse(res, {
-    success: true,
-    statusCode: 200,
-    message: 'Support retrieved successfully!',
-    data: result,
-  })
-})
-
 const deleteASupport = catchAsync(async (req, res) => {
   const result = await SupportService.deleteASupportFromDB(req.params.id as string)
 
@@ -61,8 +61,8 @@ const deleteASupport = catchAsync(async (req, res) => {
 
 export const SupportControllers = {
   createSupport,
+  sentFeedbackEmail,
   sentSupportMessage,
   getAllSupports,
-  getASupport,
   deleteASupport,
 }

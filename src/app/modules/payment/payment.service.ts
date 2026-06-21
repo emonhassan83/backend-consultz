@@ -206,10 +206,12 @@ const confirmPayment = async (payload: {
       await sendBookingsNotification('pending', booking, consult, booking.slot)
     }
 
+    // sent expert to new booking request add
     if (consult?.emailNotify?.booking) {
       await sendNewBookingToConsultant(consult, booking, user as TUser)
     }
 
+    // user got notification when they are paid
     if (user?.emailNotify?.payment) {
       await sendPaymentSuccessToUser(user, booking, consult as TUser)
     }

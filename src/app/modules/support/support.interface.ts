@@ -11,6 +11,18 @@ export type TSupport = {
   status: TSupportStatus
 }
 
+export interface TFeedback {
+  subject: string
+  feedbackType: string
+  priority: string
+  relatedPageOrFeature?: string
+  description: string
+  expectedOutcome?: string
+  businessImpact?: string[]
+  additionalComments?: string
+  submissionDate?: string
+}
+
 export type TSupportMessage = {
   _id?: string
   subject: string

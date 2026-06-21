@@ -1,77 +1,107 @@
 import httpStatus from 'http-status'
 import AppError from '../../errors/AppError'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { TSupport, TSupportMessage } from './support.interface'
+import { TFeedback, TSupport, TSupportMessage } from './support.interface'
 import { Support } from './support.model'
 import { User } from '../user/user.model'
 import emailSender from '../../utils/emailSender'
 import { SUPPORT_STATUS } from './support.constant'
 import { Contents } from '../contents/contents.models'
+import { createFeedbackEmailTemplate } from '../../templates/feedbackEmail.templete'
+import { createSupportEmailTemplate } from '../../templates/supportEmail.template'
 
-const createSupportIntoDB = async (payload: TSupport, userId: string) => {
-  // 1. Find user
-  const author = await User.findById(userId)
-  if (!author || author?.isDeleted) {
+const FALLBACK_SUPPORT_EMAIL = 'investors@wealthdragons.co.uk'
+
+// ── helper: support email fetch ───────────────────────────────────────────────
+const getSupportEmail = async (): Promise<string> => {
+  const contents = await Contents.findOne({ isDeleted: false }).select('supportEmail')
+  return contents?.supportEmail || FALLBACK_SUPPORT_EMAIL
+}
+
+// ── helper: author fetch ──────────────────────────────────────────────────────
+const getAuthor = async (userId: string) => {
+  const author = await User.findById(userId).select('firstName lastName email isDeleted')
+  if (!author || author.isDeleted) {
     throw new AppError(httpStatus.FORBIDDEN, 'User not found!')
   }
+  return author
+}
 
-  // 2. Get platform support email from Contents
-  const contents = await Contents.findOne({ isDeleted: false }).select(
-    'supportEmail',
+export const sendSupportEmail = async (payload: TSupport, userId: string) => {
+  const [author, supportEmail] = await Promise.all([
+    getAuthor(userId),
+    getSupportEmail(),
+  ])
+
+  const emailHtml = createSupportEmailTemplate(
+    {
+      firstName: author.firstName,
+      lastName:  author.lastName,
+      email:     author.email,
+    },
+    payload,
   )
 
-  // Fallback email added
-  const supportEmail = contents?.supportEmail || 'investors@wealthdragons.co.uk'
-
-  // 3. Prepare email content
-  const emailContent = `
-  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #e0e0e0; border-radius: 10px; background-color: #ffffff;">
-    <h2 style="color: #1a1a1a; margin-bottom: 20px; border-bottom: 2px solid #333333; padding-bottom: 12px;">
-      New Support Request
-    </h2>
-    
-    <p style="color: #333333; margin: 8px 0;">
-      <strong>From:</strong> ${author.firstName} ${author.lastName} (${author.email})
-    </p>
-    <p style="color: #333333; margin: 8px 0;">
-      <strong>Subject:</strong> ${payload.subject}
-    </p>
-    
-    <hr style="border: none; border-top: 1px solid #dddddd; margin: 25px 0;">
-
-    <p style="color: #1a1a1a; font-weight: bold; margin-bottom: 8px;">Message:</p>
-    <p style="background: #f5f5f5; padding: 18px; border-radius: 6px; color: #333333; line-height: 1.6;">
-      ${payload.messages}
-    </p>
-    
-    <br>
-    <p style="color: #666666; font-size: 12px; text-align: center; margin-top: 25px;">
-      This message was sent from Consultz Support System.
-    </p>
-  </div>
-`
-
-  // 4. Send email to platform support
   try {
     await emailSender(
       supportEmail,
       `Support Request: ${payload.subject}`,
-      emailContent,
+      emailHtml
     )
-
     console.log(`✅ Support email sent to ${supportEmail}`)
   } catch (error: any) {
     console.error('Failed to send support email:', error)
-    throw new AppError(
-      httpStatus.INTERNAL_SERVER_ERROR,
-      'Failed to send support request',
-    )
+    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to send support request')
   }
 
   return {
     success: true,
-    message:
-      'Your support request has been sent successfully. We will get back to you soon.',
+    message: 'Your support request has been sent successfully. We will get back to you soon.',
+  }
+}
+
+export const sendFeedbackEmail = async (payload: TFeedback, userId: string) => {
+  // 1. Find user
+  const author = await User.findById(userId).select('firstName lastName email isDeleted')
+  if (!author || author.isDeleted) {
+    throw new AppError(httpStatus.FORBIDDEN, 'User not found!')
+  }
+
+  // 2. Support email
+  const contents = await Contents.findOne({ isDeleted: false }).select('supportEmail')
+  const supportEmail = contents?.supportEmail || 'info@consultz.com'
+
+  // 3. Set submission date if not provided
+  if (!payload.submissionDate) {
+    payload.submissionDate = new Date().toLocaleDateString('en-GB') // DD/MM/YYYY
+  }
+
+  // 4. Build email HTML
+  const emailHtml = createFeedbackEmailTemplate(
+    {
+      firstName: author.firstName,
+      lastName:  author.lastName,
+      email:     author.email,
+    },
+    payload,
+  )
+
+  // 5. Send
+  try {
+    await emailSender(
+      supportEmail,
+      `[${payload.priority}] ${payload.feedbackType} — ${payload.subject ?? payload.description.slice(0, 60)}`,
+      emailHtml,
+    )
+    console.log(`✅ Feedback email sent to ${supportEmail}`)
+  } catch (error: any) {
+    console.error('Failed to send feedback email:', error)
+    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to send support request')
+  }
+
+  return {
+    success: true,
+    message: 'Your feedback has been submitted successfully. We will review it shortly.',
   }
 }
 
@@ -140,20 +170,6 @@ const getAllSupportsFromDB = async (query: Record<string, unknown>) => {
   }
 }
 
-const getASupportFromDB = async (id: string) => {
-  const result = await Support.findById(id).populate([
-    {
-      path: 'author',
-      select: 'firstName lastName email photoUrl',
-    },
-  ])
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Support not found')
-  }
-
-  return result
-}
-
 const deleteASupportFromDB = async (id: string) => {
   const support = await Support.findById(id)
   if (!support) {
@@ -169,9 +185,9 @@ const deleteASupportFromDB = async (id: string) => {
 }
 
 export const SupportService = {
-  createSupportIntoDB,
+  sendSupportEmail,
+  sendFeedbackEmail,
   sentSupportMessageIntoDB,
   getAllSupportsFromDB,
-  getASupportFromDB,
   deleteASupportFromDB,
 }

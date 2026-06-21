@@ -1,0 +1,324 @@
+import { TUser } from '../modules/user/user.interface'
+import { TBookings } from '../modules/booking/booking.interface'
+
+// ── Base layout ───────────────────────────────────────────────────────────────
+const baseLayout = (title: string, recipientName: string, body: string) => `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>${title}</title>
+</head>
+<body style="margin:0; padding:0; background:#f5f5f5; font-family: Arial, sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5; padding:30px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:8px; overflow:hidden; border:1px solid #e0e0e0;">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:#1a1a1a; padding:24px 32px;">
+              <p style="margin:0; color:#999999; font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase;">Consultz</p>
+              <h1 style="margin:6px 0 0; color:#ffffff; font-size:20px; font-weight:700;">${title}</h1>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:28px 32px;">
+              <p style="margin:0 0 20px; font-size:14px; color:#333333;">Dear ${recipientName},</p>
+              ${body}
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f9f9f9; border-top:1px solid #eeeeee; padding:16px 32px; text-align:center;">
+              <p style="margin:0; font-size:12px; color:#999999;">Best regards, <strong>Consultz Team</strong></p>
+              <p style="margin:6px 0 0; font-size:11px; color:#cccccc;">© ${new Date().getFullYear()} Consultz App. All rights reserved.</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`
+
+// ── Info block ─────────────────────────────────────────────────────────────────
+const infoBlock = (rows: { label: string; value: string }[]) => `
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9f9f9; border:1px solid #e8e8e8; border-radius:6px; margin:16px 0;">
+    ${rows
+      .map(
+        (row) => `
+      <tr>
+        <td style="padding:10px 16px; border-bottom:1px solid #eeeeee;">
+          <span style="font-size:11px; color:#888888; display:block; margin-bottom:2px;">${row.label}</span>
+          <span style="font-size:14px; color:#1a1a1a; font-weight:600;">${row.value}</span>
+        </td>
+      </tr>
+    `,
+      )
+      .join('')}
+  </table>
+`
+
+// ── Notice block ──────────────────────────────────────────────────────────────
+const noticeBlock = (text: string, type: 'info' | 'warning' | 'success' = 'info') => {
+  const borderColor = type === 'warning' ? '#999999' : type === 'success' ? '#555555' : '#cccccc'
+  return `
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-left:3px solid ${borderColor}; background:#f9f9f9; border-radius:0 6px 6px 0; margin:16px 0;">
+      <tr>
+        <td style="padding:12px 16px; font-size:13px; color:#444444; line-height:1.6;">${text}</td>
+      </tr>
+    </table>
+  `
+}
+
+// ── Text paragraph ─────────────────────────────────────────────────────────────
+const para = (text: string) =>
+  `<p style="margin:0 0 14px; font-size:14px; color:#444444; line-height:1.7;">${text}</p>`
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. New booking request → consultant
+// ─────────────────────────────────────────────────────────────────────────────
+export const newBookingToConsultantTemplate = (
+  consult: TUser,
+  booking: TBookings,
+  user: TUser,
+): string => {
+  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+
+  const body = `
+    ${para('You have received a new booking request. Please review the details below and respond from your dashboard.')}
+    ${infoBlock([
+      { label: 'Client', value: `${user.firstName} ${user.lastName}` },
+      { label: 'Session Type', value: booking.sessionType },
+      { label: 'Date & Time', value: sessionInfo },
+      { label: 'Amount', value: `£${booking.price}` },
+    ])}
+    ${noticeBlock('Please confirm or decline this request as soon as possible to avoid automatic cancellation.')}
+  `
+
+  return baseLayout('New Booking Request', consult.firstName, body)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. Booking cancelled → user
+// ─────────────────────────────────────────────────────────────────────────────
+export const bookingCancelledToUserTemplate = (
+  user: TUser,
+  consult: TUser,
+  booking: TBookings,
+  reason: string,
+  cancelledByName: string,
+  withRefund: boolean,
+): string => {
+  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+
+  const body = `
+    ${para(`Your booking with <strong>${consult.firstName} ${consult.lastName}</strong> has been cancelled by <strong>${cancelledByName}</strong>.`)}
+    ${infoBlock([
+      { label: 'Session', value: sessionInfo },
+      { label: 'Reason', value: reason },
+    ])}
+    ${withRefund ? noticeBlock('A full refund has been initiated and will be reflected in your account shortly.', 'info') : ''}
+    ${para('If this was unexpected, please contact our support team.')}
+  `
+
+  return baseLayout('Booking Cancelled', user.firstName, body)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. Booking cancelled → consultant
+// ─────────────────────────────────────────────────────────────────────────────
+export const bookingCancelledToConsultantTemplate = (
+  consult: TUser,
+  user: TUser,
+  booking: TBookings,
+  reason: string,
+  cancelledByName: string,
+): string => {
+  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+
+  const body = `
+    ${para(`Your booking with <strong>${user.firstName} ${user.lastName}</strong> has been cancelled by <strong>${cancelledByName}</strong>.`)}
+    ${infoBlock([
+      { label: 'Session', value: sessionInfo },
+      { label: 'Reason', value: reason },
+    ])}
+    ${para('If you have any questions, please contact our support team.')}
+  `
+
+  return baseLayout('Booking Cancelled', consult.firstName, body)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. Session completed → consultant
+// ─────────────────────────────────────────────────────────────────────────────
+export const sessionCompletedToConsultantTemplate = (
+  consult: TUser,
+  booking: TBookings,
+  user: TUser,
+  consultAmount: number,
+): string => {
+  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+
+  const body = `
+    ${para(`Your session with <strong>${user.firstName} ${user.lastName}</strong> has been successfully completed.`)}
+    ${infoBlock([
+      { label: 'Session', value: sessionInfo },
+      { label: 'Earnings', value: `£${consultAmount.toFixed(2)}` },
+      { label: 'Status', value: 'Payment Processing' },
+    ])}
+    ${noticeBlock('Your payment is being processed and will be transferred to your connected account soon.')}
+    ${para('Thank you for your service on Consultz.')}
+  `
+
+  return baseLayout('Session Completed', consult.firstName, body)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. Booking rescheduled → user
+// ─────────────────────────────────────────────────────────────────────────────
+export const bookingRescheduledToUserTemplate = (
+  user: TUser,
+  consult: TUser,
+  booking: TBookings,
+): string => {
+  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+
+  const body = `
+    ${para(`Your booking with <strong>${consult.firstName} ${consult.lastName}</strong> has been rescheduled.`)}
+    ${infoBlock([
+      { label: 'New Date & Time', value: sessionInfo },
+      { label: 'Session Type', value: booking.sessionType },
+    ])}
+    ${noticeBlock('Please ensure you are available at the new time.')}
+  `
+
+  return baseLayout('Booking Rescheduled', user.firstName, body)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. Booking rescheduled → consultant
+// ─────────────────────────────────────────────────────────────────────────────
+export const bookingRescheduledToConsultantTemplate = (
+  consult: TUser,
+  user: TUser,
+  booking: TBookings,
+): string => {
+  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+
+  const body = `
+    ${para(`Your booking with <strong>${user.firstName} ${user.lastName}</strong> has been rescheduled.`)}
+    ${infoBlock([
+      { label: 'New Date & Time', value: sessionInfo },
+      { label: 'Session Type', value: booking.sessionType },
+    ])}
+    ${noticeBlock('Please update your schedule accordingly.')}
+  `
+
+  return baseLayout('Booking Rescheduled', consult.firstName, body)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. Session reminder (10 min / join now)
+// ─────────────────────────────────────────────────────────────────────────────
+export const sessionReminderTemplate = (
+  recipientName: string,
+  otherName: string,
+  sessionInfo: string,
+  isJoinCall: boolean,
+): string => {
+  const title = isJoinCall ? 'Join Your Session Now' : 'Session Starting Soon'
+
+  const body = `
+    ${para(isJoinCall ? 'Your session is starting now. Please join immediately.' : 'Your session is starting in 10 minutes. Please be ready.')}
+    ${infoBlock([
+      { label: 'With', value: otherName },
+      { label: 'Date & Time', value: sessionInfo },
+    ])}
+    ${noticeBlock('Please check your dashboard and join the call on time.')}
+  `
+
+  return baseLayout(title, recipientName, body)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. Not responded → user
+// ─────────────────────────────────────────────────────────────────────────────
+export const notRespondedToUserTemplate = (
+  user: TUser,
+  consult: TUser,
+  booking: TBookings,
+  refundProcessed: boolean,
+): string => {
+  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+
+  const body = `
+    ${para(`Your confirmed booking with <strong>${consult.firstName} ${consult.lastName}</strong> was not completed by the consultant.`)}
+    ${infoBlock([
+      { label: 'Session', value: sessionInfo },
+      { label: 'Status', value: 'Not Responded' },
+    ])}
+    ${
+      refundProcessed
+        ? noticeBlock('A full refund has been initiated and will be processed shortly.', 'info')
+        : noticeBlock('No refund was applicable for this booking.', 'info')
+    }
+    ${para('If you have any questions, please contact our support team.')}
+  `
+
+  return baseLayout('Booking Not Responded', user.firstName, body)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. Not responded → consultant
+// ─────────────────────────────────────────────────────────────────────────────
+export const notRespondedToConsultantTemplate = (
+  consult: TUser,
+  user: TUser,
+  booking: TBookings,
+): string => {
+  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+
+  const body = `
+    ${para(`Your confirmed booking with <strong>${user.firstName} ${user.lastName}</strong> was not completed.`)}
+    ${infoBlock([
+      { label: 'Session', value: sessionInfo },
+      { label: 'Status', value: 'Not Responded' },
+    ])}
+    ${noticeBlock('This booking has been automatically closed. Please ensure you attend your future sessions on time to maintain your reliability rating.', 'warning')}
+  `
+
+  return baseLayout('Booking Not Responded', consult.firstName, body)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. Payment success → user
+// ─────────────────────────────────────────────────────────────────────────────
+export const paymentSuccessToUserTemplate = (
+  user: TUser,
+  booking: TBookings,
+  expert: TUser,
+): string => {
+  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+
+  const body = `
+    ${para('Your payment has been successfully processed. Your booking is now pending approval from the consultant.')}
+    ${infoBlock([
+      { label: 'Expert', value: `${expert.firstName} ${expert.lastName}` },
+      { label: 'Session Type', value: booking.sessionType },
+      { label: 'Date & Time', value: sessionInfo },
+      { label: 'Amount Paid', value: `£${booking.price}` },
+    ])}
+    ${noticeBlock('You will be notified once the consultant confirms your booking.')}
+    ${para('Thank you for choosing Consultz!')}
+  `
+
+  return baseLayout('Payment Successful', user.firstName, body)
+}

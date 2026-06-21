@@ -13,6 +13,11 @@ router.post(
   zodValidationRequest(SupportValidation.createValidationSchema),
   SupportControllers.createSupport,
 )
+router.post(
+  '/feedback',
+  auth(USER_ROLE.consult, USER_ROLE.expert),
+  SupportControllers.sentFeedbackEmail,
+)
 
 router.post(
   '/sent-message/:id',
@@ -24,7 +29,5 @@ router.post(
 router.delete('/:id', auth(USER_ROLE.admin), SupportControllers.deleteASupport)
 
 router.get('/', auth(USER_ROLE.admin), SupportControllers.getAllSupports)
-
-router.get('/:id', auth(USER_ROLE.admin), SupportControllers.getASupport)
 
 export const SupportRoutes = router
