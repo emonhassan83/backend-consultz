@@ -1121,7 +1121,7 @@ const rescheduleBooking = async (
   try {
     // 1. Find the booking
     const booking = await Booking.findById(id)
-      .populate('user consult slot')
+      .populate('user consult slot localDate localTime')
       .session(session)
     if (!booking || booking.isDeleted) {
       throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
