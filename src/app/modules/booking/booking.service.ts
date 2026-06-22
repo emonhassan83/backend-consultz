@@ -1109,7 +1109,9 @@ const completedBooking = async (
 const rescheduleBooking = async (
   id: string,
   payload: {
-    slot: string
+    slot: string,
+    localDate: string,
+    localTime: string
   },
   currentUserId: string, // added for ownership check (recommended)
 ) => {
@@ -1186,6 +1188,8 @@ const rescheduleBooking = async (
 
     // 8. Assign new slot to booking
     booking.slot = new mongoose.Types.ObjectId(newSlot._id)
+    booking.localDate = payload.localDate
+    booking.localTime = payload.localTime
     await booking.save({ session })
 
     // 9. Mark new slot as booked

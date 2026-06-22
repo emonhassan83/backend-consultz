@@ -87,7 +87,7 @@ export const bookingComplete = eventHandler<TBookingCompletePayload>(
         await sendNotification(tokens, {
           receiver: caller?._id,
           message: 'Session completed',
-          description: `Your call has ended. Duration: ${formattedDuration}`,
+          description: `Your call has ended. Duration: ${duration}min`,
           reference: callId,
           modelType: modeType.Calling,
         })
@@ -100,7 +100,7 @@ export const bookingComplete = eventHandler<TBookingCompletePayload>(
       socket.emit('bookingComplete', {
         bookingId,
         callId,
-        duration: formattedDuration,
+        duration: duration,
         status: BOOKING_STATUS.completed,
       })
 

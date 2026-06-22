@@ -17,10 +17,14 @@ const createValidationSchema = z.object({
     sessionDuration: z
       .number()
       .positive({ message: 'Session duration must be greater than 0' }),
-    price: z.number().nonnegative({ message: 'Price must be zero or a positive number' }),
+    price: z
+      .number()
+      .nonnegative({ message: 'Price must be zero or a positive number' }),
     timezone: z.string().min(1, { message: 'Timezone is required' }).optional(),
     mainQuestion: z.string().min(1, { message: 'Main question is required' }),
-    challengeQuestion: z.string().min(1, { message: 'Challenge question is required' }),
+    challengeQuestion: z
+      .string()
+      .min(1, { message: 'Challenge question is required' }),
     backgroundQuestion: z
       .string()
       .min(1, { message: 'Background question is required' }),
@@ -30,6 +34,8 @@ const createValidationSchema = z.object({
 const rescheduleValidationSchema = z.object({
   body: z.object({
     slot: objectIdSchema,
+    localDate: z.string({ message: 'Local date required' }),
+    localTime: z.string({ message: 'Local time required' }),
   }),
 })
 
