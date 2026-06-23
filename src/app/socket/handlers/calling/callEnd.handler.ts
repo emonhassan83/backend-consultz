@@ -10,7 +10,6 @@ import { CALLING_STATUS } from '../../../modules/calling/calling.constant';
 import { sendNotification } from '../../../utils/sentNotification';
 import { modeType } from '../../../modules/notification/notification.interface';
 import { callbackFn } from '../../../utils/CallbackFn';
-import { formatDuration } from '../../utils/formatDuration';
 
 type TCallEndPayload = {
   callId: string;
@@ -50,9 +49,6 @@ const callEnd = eventHandler<TCallEndPayload>(
       const finalDurationInMinutes = clientDuration ?? 
         Math.floor((now.getTime() - startTime.getTime()) / 1000);
 
-      // Format for display
-      const formattedDuration = formatDuration(finalDurationInMinutes);
-
       // 3. Update call
       call.status = CALLING_STATUS.ended;
       call.endedAt = now;
@@ -74,7 +70,7 @@ const callEnd = eventHandler<TCallEndPayload>(
         await sendNotification(tokens, {
           receiver: caller?._id,
           message: 'Call Ended',
-          description: `Your ${call.isVideo ? 'video' : 'voice'} call has ended. Duration: ${formattedDuration}`,
+          description: `Your ${call.isVideo ? 'video' : 'voice'} call has ended. Duration: ${clientDuration}`,
           reference: call._id,
           modelType: modeType.Calling,
         });
@@ -87,7 +83,7 @@ const callEnd = eventHandler<TCallEndPayload>(
 
       socket.to(participants).emit('callEnded', {
         callId: call._id,
-        duration: formattedDuration,
+        duration: clientDuration,
         endedAt: now,
         status: CALLING_STATUS.completed,
       });
@@ -95,7 +91,7 @@ const callEnd = eventHandler<TCallEndPayload>(
       // Caller নিজেও পায়
       socket.emit('callEnded', {
         callId: call._id,
-        duration: formattedDuration,
+        duration: clientDuration,
         endedAt: now,
         status: CALLING_STATUS.completed,
       });
@@ -107,7 +103,7 @@ const callEnd = eventHandler<TCallEndPayload>(
         message: 'Call ended successfully',
         data: {
           callId: call._id,
-          duration: formattedDuration,
+          duration: clientDuration,
           endedAt: now,
         }
       });

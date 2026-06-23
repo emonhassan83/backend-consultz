@@ -14,7 +14,6 @@ import { sendNotification } from '../../../utils/sentNotification'
 import { sendWithdrawNotify } from '../../../modules/withdraw/withdraw.utils'
 import { modeType } from '../../../modules/notification/notification.interface'
 import AppError from '../../../errors/AppError'
-import { formatDuration } from '../../utils/formatDuration'
 
 type TBookingCompletePayload = {
   bookingId: string
@@ -80,8 +79,6 @@ export const bookingComplete = eventHandler<TBookingCompletePayload>(
       if (caller?.fcmToken) tokens.push(caller.fcmToken)
       if (receiver?.fcmToken) tokens.push(receiver.fcmToken)
 
-      // Format for display
-      const formattedDuration = formatDuration(duration)
 
       if (tokens.length > 0) {
         await sendNotification(tokens, {
