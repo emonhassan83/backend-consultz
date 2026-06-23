@@ -180,7 +180,7 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
 
     call.status = CALLING_STATUS.completed
     call.endedAt = now
-    call.duration = duration
+    call.duration = duration as any
     await call.save({ session })
 
     /* booking complete */
