@@ -13,7 +13,7 @@ import { callbackFn } from '../../../utils/CallbackFn';
 
 type TCallEndPayload = {
   callId: string;
-  duration?: number; // IN min
+  duration?: string;
 };
 
 const callEnd = eventHandler<TCallEndPayload>(
@@ -45,14 +45,11 @@ const callEnd = eventHandler<TCallEndPayload>(
 
       // 2. Calculate duration
       const now = new Date();
-      const startTime = call.startedAt || call.createdAt;
-      const finalDurationInMinutes = clientDuration ?? 
-        Math.floor((now.getTime() - startTime.getTime()) / 1000);
 
       // 3. Update call
       call.status = CALLING_STATUS.ended;
       call.endedAt = now;
-      call.duration = finalDurationInMinutes;
+      call.duration = clientDuration;
       await call.save({ session });
 
 

@@ -18,7 +18,7 @@ import AppError from '../../../errors/AppError'
 type TBookingCompletePayload = {
   bookingId: string
   callId: string
-  duration: number // IN min
+  duration: string
 }
 
 export const bookingComplete = eventHandler<TBookingCompletePayload>(
@@ -84,7 +84,7 @@ export const bookingComplete = eventHandler<TBookingCompletePayload>(
         await sendNotification(tokens, {
           receiver: caller?._id,
           message: 'Session completed',
-          description: `Your call has ended. Duration: ${duration}min`,
+          description: `Your call has ended. Duration: ${duration}`,
           reference: callId,
           modelType: modeType.Calling,
         })

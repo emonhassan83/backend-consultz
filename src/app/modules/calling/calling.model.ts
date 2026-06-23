@@ -55,8 +55,7 @@ const callingSchema = new Schema(
       default: null,
     },
     duration: {
-      type: Number,
-      default: 0, // seconds
+      type: String
     },
     token: {
       type: String,
