@@ -522,10 +522,10 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
     const now = dayjs()
     const hoursLeft = slotDateTime.diff(now, 'hour')
 
-    if (hoursLeft < 12) {
+    if (hoursLeft < 2) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        'Cancellation not allowed within 12 hours of the scheduled time',
+        'Cancellation not allowed within 2 hours of the scheduled time',
       )
     }
 
@@ -579,7 +579,11 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
           refundProcessed = true
         } catch (refundError: any) {
           console.error('Refund failed:', refundError.message)
-          // If you want to sent notify admin
+          // Also throw error if fail
+          throw new AppError(
+            httpStatus.INTERNAL_SERVER_ERROR,
+            `Refund failed via Stripe: ${refundError.message}. Cancellation aborted.`,
+          )
         }
       }
     }
@@ -1109,8 +1113,8 @@ const completedBooking = async (
 const rescheduleBooking = async (
   id: string,
   payload: {
-    slot: string,
-    localDate: string,
+    slot: string
+    localDate: string
     localTime: string
   },
   currentUserId: string, // added for ownership check (recommended)

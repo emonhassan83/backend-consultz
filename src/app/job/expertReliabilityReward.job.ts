@@ -1,3 +1,5 @@
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
 import { User } from '../modules/user/user.model'
 import { Booking } from '../modules/booking/booking.models'
 import { BOOKING_STATUS } from '../modules/booking/booking.constants'
@@ -5,13 +7,16 @@ import { USER_ROLE, USER_STATUS } from '../modules/user/user.constant'
 import { sendNotification } from '../utils/sentNotification'
 import { modeType } from '../modules/notification/notification.interface'
 
+dayjs.extend(utc)
+
 export const expertReliabilityRewardJob = async (): Promise<void> => {
-  console.log('[No-Show Bonus] Job started')
+  console.log('[Reliability Reward] Job started')
 
-  const now = new Date()
-  const thirtyDaysAgo = new Date(now)
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+  const nowUtc = dayjs.utc().toDate()
+  const thirtyDaysAgo = dayjs.utc().subtract(30, 'day').toDate()
 
+  // Only check experts who have never received this bonus
+  // or whose last bonus was more than 30 days ago
   const experts = await User.find({
     role: USER_ROLE.expert,
     status: USER_STATUS.active,
@@ -20,11 +25,12 @@ export const expertReliabilityRewardJob = async (): Promise<void> => {
       { lastNoShowBonusAt: null },
       { lastNoShowBonusAt: { $lte: thirtyDaysAgo } },
     ],
-  }).select('_id points fcmToken pushNotify lastNoShowBonusAt')
+  }).select('_id fcmToken pushNotify lastNoShowBonusAt')
 
-  console.log(`[No-Show Bonus] Checking ${experts.length} eligible experts`)
+  console.log(`[Reliability Reward] Checking ${experts.length} eligible experts`)
 
   for (const expert of experts) {
+    // Count no-show bookings for this expert in the last 30 days
     const noShowCount = await Booking.countDocuments({
       consult: expert._id,
       status: BOOKING_STATUS.not_responded,
@@ -33,27 +39,34 @@ export const expertReliabilityRewardJob = async (): Promise<void> => {
     })
 
     if (noShowCount > 0) {
-      console.log(`[No-Show Bonus] ❌ Expert ${expert._id} has ${noShowCount} no-shows — skipping`)
+      console.log(
+        `[Reliability Reward] ❌ Expert ${expert._id} has ${noShowCount} no-shows — skipping`,
+      )
       continue
     }
 
+    // Award 300 points and update the last bonus timestamp
     await User.findByIdAndUpdate(expert._id, {
       $inc: { points: 300 },
-      lastNoShowBonusAt: now,
+      lastNoShowBonusAt: nowUtc,
     })
 
-    console.log(`[No-Show Bonus] ✅ 300 points awarded to expert ${expert._id}`)
+    console.log(`[Reliability Reward] ✅ 300 points awarded to expert ${expert._id}`)
 
+    // Send push notification if enabled
     if (expert.fcmToken && expert.pushNotify?.points) {
       await sendNotification([expert.fcmToken], {
         receiver: expert._id,
         message: 'Reliability Bonus Awarded!',
-        description: 'Congratulations! You had zero no-shows in the last 30 days and earned 300 points. Keep it up! 🎉',
+        description:
+          'Congratulations! You had zero no-shows in the last 30 days and earned 300 points. Keep it up! 🎉',
         reference: expert._id,
         modelType: modeType.Achievement,
-      })
+      }).catch((err) =>
+        console.error(`Push failed for expert ${expert._id}:`, err),
+      )
     }
   }
 
-  console.log('[No-Show Bonus] Job completed')
+  console.log('[Reliability Reward] Job completed')
 }

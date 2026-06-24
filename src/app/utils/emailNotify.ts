@@ -183,7 +183,7 @@ export const sendNotRespondedEmail = async (
     tasks.push(
       emailSender(
         user.email,
-        'Booking Not Responded',
+        'Your Booking Has Been Cancelled – Full Refund Initiated',
         notRespondedToUserTemplate(user, consult, booking, refundProcessed),
       ).catch((err) => console.error(`Not responded email failed (user ${user._id}):`, err)),
     )
@@ -193,7 +193,7 @@ export const sendNotRespondedEmail = async (
     tasks.push(
       emailSender(
         consult.email,
-        'Booking Not Responded',
+        'Booking Marked as Not Responded – Action Required',
         notRespondedToConsultantTemplate(consult, user, booking),
       ).catch((err) => console.error(`Not responded email failed (consult ${consult._id}):`, err)),
     )

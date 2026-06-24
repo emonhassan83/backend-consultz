@@ -123,3 +123,29 @@ export const withdrawStatusChangeTemplate = (
 
   return baseLayout(`Withdrawal ${statusLabel}`, consultant.firstName, body)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. Withdrawal on hold → consultant (Stripe not connected)
+// ─────────────────────────────────────────────────────────────────────────────
+export const withdrawOnHoldTemplate = (
+  consultant: TUser,
+  withdraw: TWithdraw,
+): string => {
+  const body = `
+    ${para('Your withdrawal request is currently on hold because your Stripe account is not yet connected.')}
+
+    ${infoBlock([
+      { label: 'Amount', value: `£${withdraw.amount.toFixed(2)}` },
+      { label: 'Status', value: 'On Hold' },
+      { label: 'Reason', value: 'Stripe account not connected' },
+    ])}
+
+    ${noticeBlock(
+      'Please connect your Stripe account through the Consultz app. Once connected, your withdrawal will be processed automatically on the next scheduled transfer run.',
+    )}
+
+    ${para('If you need help connecting your Stripe account, please contact our support team.')}
+  `
+
+  return baseLayout('Withdrawal On Hold – Action Required', consultant.firstName, body)
+}
