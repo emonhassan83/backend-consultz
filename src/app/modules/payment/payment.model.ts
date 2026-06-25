@@ -15,6 +15,7 @@ const paymentSchema = new Schema<TPayment>(
     transactionId: { type: String, required: true },
     platformCommission: { type: Number, default: 0 },
     consultAmount: { type: Number, default: 0 },
+    vat: { type: Number, default: 0 },
     amount: { type: Number, min: 0 },
     status: {
       type: String,

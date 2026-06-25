@@ -16,12 +16,12 @@ const createNotificationIntoDB = async (payload: TNotification) => {
     reference,
     modelType,
     ...othersData
-  } = payload;
+  } = payload
 
   // 1. Validate receiver
-  const user = await User.findById(receiver).select('fcmToken isDeleted');
+  const user = await User.findById(receiver).select('fcmToken isDeleted')
   if (!user || user.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Receiver user not found!');
+    throw new AppError(httpStatus.NOT_FOUND, 'Receiver user not found!')
   }
 
   // 2. Create notification in database
@@ -31,26 +31,29 @@ const createNotificationIntoDB = async (payload: TNotification) => {
     description,
     reference,
     modelType,
-    ...othersData,        // যদি আরও কোনো ফিল্ড থাকে
-  });
+    ...othersData, // যদি আরও কোনো ফিল্ড থাকে
+  })
 
   if (!notification) {
-    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to create notification');
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to create notification',
+    )
   }
 
   // 3. Real-time socket notification (if socketio is available)
   try {
     // @ts-ignore
-    const io = global?.socketio;
+    const io = global?.socketio
     if (io) {
-      const eventName = `notification::${receiver}`;
+      const eventName = `notification::${receiver}`
       io.emit(eventName, {
         ...notification.toObject(),
         createdAt: new Date(), // or moment().format('YYYY-MM-DD HH:mm:ss')
-      });
+      })
     }
   } catch (socketError: any) {
-    console.warn('Socket emission failed (non-critical):', socketError.message);
+    console.warn('Socket emission failed (non-critical):', socketError.message)
   }
 
   // 4. Push notification via FCM (if token exists)
@@ -61,24 +64,24 @@ const createNotificationIntoDB = async (payload: TNotification) => {
       description,
       reference: reference || null,
       modelType: modelType,
-    };
+    }
 
     try {
-      await sendNotification([user.fcmToken], notifyPayload);
+      await sendNotification([user.fcmToken], notifyPayload)
     } catch (fcmError: any) {
-      console.warn('FCM notification failed (non-critical):', fcmError.message);
+      console.warn('FCM notification failed (non-critical):', fcmError.message)
       // Don't throw error here — notification creation should still succeed
     }
   }
 
-  return notification;
-};
+  return notification
+}
 
 const sendGeneralNotificationIntoDB = async (payload: TNotification) => {
   const { message, description, ...othersData } = payload
 
-  const userIds = (await User.distinct('_id', { role: USER_ROLE.consult })).map((id) =>
-    id.toString(),
+  const userIds = (await User.distinct('_id', { role: USER_ROLE.consult })).map(
+    (id) => id.toString(),
   )
   const notifications = userIds.map((userId) => ({
     receiver: userId,
@@ -120,14 +123,9 @@ const getAllNotificationFromDB = async (
 
   // 2. Get all notifications with pagination
   const notificationQuery = new QueryBuilder(
-    Notification.find(baseFilter)
-      // .populate([
-      //   {
-      //     path: 'reference',
-      //     select: 'description sessionType', // প্রয়োজন অনুযায়ী populate করো
-      //   },
-      // ])
-      .select('message description date read modelType createdAt'),
+    Notification.find(baseFilter).select(
+      'reference message description date read modelType createdAt',
+    ),
     query,
   )
     .filter()

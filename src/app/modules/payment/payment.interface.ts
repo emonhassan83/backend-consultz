@@ -10,6 +10,7 @@ export type TPayment = {
   paymentIntentId: string
   platformCommission: number
   consultAmount: number
+  vat: number
   amount: number
   status: TPaymentStatus
   isPaid: boolean

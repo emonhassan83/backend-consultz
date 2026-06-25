@@ -9,7 +9,7 @@ import { Types } from 'mongoose'
 import { TUser } from '../user/user.interface'
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
-  apiVersion: '2026-05-27.dahlia',
+  apiVersion: '2026-06-24.dahlia',
   typescript: true,
 })
 
