@@ -46,7 +46,7 @@ const callStart = eventHandler<TCallStartPayload>(
 
       const booking = await Booking.findOne({
         _id: bookingId,
-        status: { $in: [BOOKING_STATUS.confirmed, BOOKING_STATUS.completed] },
+        status: { $in: [BOOKING_STATUS.confirmed, BOOKING_STATUS.running, BOOKING_STATUS.completed] },
         isDeleted: false,
         $or: [{ user: callerId }, { consult: callerId }],
       }).session(session)
@@ -112,6 +112,15 @@ const callStart = eventHandler<TCallStartPayload>(
         ] as any,
         { session },
       )
+
+      // Mark booking as running on first call start only
+      if (booking.status === BOOKING_STATUS.confirmed) {
+        await Booking.findByIdAndUpdate(
+          bookingId,
+          { status: BOOKING_STATUS.running, sessionStartedAt: new Date() },
+          { session },
+        )
+      }
 
       await session.commitTransaction()
 

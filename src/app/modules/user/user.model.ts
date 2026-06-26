@@ -156,6 +156,8 @@ const userSchema = new Schema<TUser, UserModel>(
     stripeAccountId: { type: String, default: null },
     referralCode: { type: String, default: () => generateReferralCode() },
     referredBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    vatRegistrationNumber: { type: String, default: null },
+    isVatRegistered: { type: Boolean, default: true },
 
     status: {
       type: String,

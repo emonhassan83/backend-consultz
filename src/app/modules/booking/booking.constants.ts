@@ -15,6 +15,7 @@ export const BOOKING_STATUS = {
   pending: 'pending',
   declined: 'declined',
   confirmed: 'confirmed',
+  running: 'running',
   completed: 'completed',
   not_responded: 'not_responded',
   cancelled: 'cancelled',

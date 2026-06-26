@@ -130,6 +130,9 @@ const createBookings = async (payload: TBookings, userId: string) => {
     payload.slot = new mongoose.Types.ObjectId(slotTime._id)
     payload.timezone = consult.timeZone || 'UTC'
     payload.status = BOOKING_STATUS.pending
+    payload.isExpertVatRegistered = !!(
+      consult.isVatRegistered && consult.vatRegistrationNumber
+    )
 
     // Calculate DM close time
     const sessionDurationMinutes = payload.sessionDuration || 60

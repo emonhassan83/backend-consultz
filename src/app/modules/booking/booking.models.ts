@@ -36,6 +36,14 @@ const bookingsSchema = new Schema<TBookings>(
       type: Number,
       required: true,
     },
+    isExpertVatRegistered: {
+      type: Boolean,
+      default: false,
+    },
+    sessionStartedAt: {
+      type: Date,
+      default: null,
+    },
     timezone: {
       type: String,
       required: true,

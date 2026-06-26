@@ -8,10 +8,23 @@ export type TPayment = {
   booking: Types.ObjectId
   transactionId: string
   paymentIntentId: string
-  platformCommission: number
-  consultAmount: number
-  vat: number
-  amount: number
+  isExpertVatRegistered: boolean
+
+  // What consultee pays
+  consultationFee: number       // Expert's net fee (before VAT)
+  vat: number                   // VAT on expert's fee (0 if not VAT registered)
+  amount: number                // Total consultee pays (consultationFee + vat)
+
+  // Platform breakdown
+  platformCommission: number    // Consultz net commission
+  platformVat: number           // VAT on platform commission
+  platformTotal: number         // Total Consultz keeps (commission + platformVat)
+
+  // Expert payout breakdown
+  consultAmount: number         // Total paid to expert (amount - platformTotal)
+  expertVatOwed: number         // VAT expert must account to HMRC
+  expertNet: number             // Expert's net earnings after HMRC (consultAmount - expertVatOwed)
+
   status: TPaymentStatus
   isPaid: boolean
   isDeleted: boolean

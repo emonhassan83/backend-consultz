@@ -68,18 +68,39 @@ const createPaymentIntent = async (payload: {
     { apiVersion: '2026-05-27.dahlia' },
   )
 
-  /* ========= 4. Calculate Amount ========= */
-  const contents = await Contents.findOne({ isDeleted: false }).select(
-    'consultationFee',
-  )
+  /* ========= 4. Calculate Amount with VAT Breakdown ========= */
+  const [contents, consultant] = await Promise.all([
+    Contents.findOne({ isDeleted: false }).select('consultationFee'),
+    User.findById(booking.consult).select('isVatRegistered vatRegistrationNumber'),
+  ])
 
+  const VAT_RATE = 0.2
   const consultationFeePercent = contents?.consultationFee || 0
 
-  const amount = booking.price
-  const platformCommission = parseFloat(
-    ((amount * consultationFeePercent) / 100).toFixed(2),
+  const isExpertVatRegistered = !!(
+    consultant?.isVatRegistered && consultant?.vatRegistrationNumber
   )
-  const consultAmount = parseFloat((amount - platformCommission).toFixed(2))
+
+  // What consultee pays
+  const consultationFee = booking.price
+  const vat = isExpertVatRegistered
+    ? parseFloat((consultationFee * VAT_RATE).toFixed(2))
+    : 0
+  const amount = parseFloat((consultationFee + vat).toFixed(2))
+
+  // Platform breakdown
+  const platformCommission = parseFloat(
+    ((consultationFee * consultationFeePercent) / 100).toFixed(2),
+  )
+  const platformVat = parseFloat((platformCommission * VAT_RATE).toFixed(2))
+  const platformTotal = parseFloat((platformCommission + platformVat).toFixed(2))
+
+  // Expert payout breakdown
+  const consultAmount = parseFloat((amount - platformTotal).toFixed(2))
+  const expertVatOwed = isExpertVatRegistered
+    ? parseFloat((vat - platformVat).toFixed(2))
+    : 0
+  const expertNet = parseFloat((consultAmount - expertVatOwed).toFixed(2))
 
   /* ========= 5. Create PaymentIntent ========= */
   const paymentIntent = await stripe.paymentIntents.create({
@@ -99,9 +120,16 @@ const createPaymentIntent = async (payload: {
     { booking: bookingId, isPaid: false },
     {
       account: userId,
+      isExpertVatRegistered,
+      consultationFee,
+      vat,
       amount,
       platformCommission,
+      platformVat,
+      platformTotal,
       consultAmount,
+      expertVatOwed,
+      expertNet,
       paymentIntentId: paymentIntent.id,
       status: PAYMENT_STATUS.unpaid,
     },

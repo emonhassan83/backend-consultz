@@ -13,6 +13,8 @@ export interface TBookings {
   mainQuestion: string
   challengeQuestion: string
   backgroundQuestion: string
+  isExpertVatRegistered: boolean
+  sessionStartedAt?: Date
   paymentStatus: TPaymentStatus
   recordDuration: number
   recordFile: string

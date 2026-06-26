@@ -49,23 +49,29 @@ export const bookingComplete = eventHandler<TBookingCompletePayload>(
       if (!payment)
         throw new AppError(httpStatus.NOT_FOUND, 'Payment not found')
 
-      // 3. Create Withdraw
+      // 3. Create Withdraw (idempotent — skip if already created by cron job)
+      const existingWithdraw = await Withdraw.findOne({
+        booking: booking._id.toString(),
+      }).session(session)
+
       const contents = await Contents.findOne().lean()
       const holdDays = contents?.paymentHoldDays || 7
       const proceedAt = dayjs().add(holdDays, 'day').toDate()
 
-      const [withdraw] = await Withdraw.create(
-        [
-          {
-            user: booking.consult,
-            booking: booking._id.toString(),
-            amount: payment.consultAmount,
-            status: WITHDRAW_STATUS.proceed,
-            proceedAt,
-          },
-        ],
-        { session },
-      )
+      const withdraw = existingWithdraw ?? (
+        await Withdraw.create(
+          [
+            {
+              user: booking.consult,
+              booking: booking._id.toString(),
+              amount: payment.consultAmount,
+              status: WITHDRAW_STATUS.proceed,
+              proceedAt,
+            },
+          ],
+          { session },
+        )
+      )[0]
 
       await session.commitTransaction()
 

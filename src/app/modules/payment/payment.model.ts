@@ -13,10 +13,22 @@ const paymentSchema = new Schema<TPayment>(
     account: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     booking: { type: Schema.Types.ObjectId, ref: 'Booking', required: true },
     transactionId: { type: String, required: true },
+    isExpertVatRegistered: { type: Boolean, default: false },
+
+    // What consultee pays
+    consultationFee: { type: Number, default: 0 },   // Expert's net fee
+    vat: { type: Number, default: 0 },               // VAT on expert's fee
+    amount: { type: Number, min: 0, default: 0 },    // Total consultee pays
+
+    // Platform breakdown
     platformCommission: { type: Number, default: 0 },
+    platformVat: { type: Number, default: 0 },
+    platformTotal: { type: Number, default: 0 },
+
+    // Expert payout breakdown
     consultAmount: { type: Number, default: 0 },
-    vat: { type: Number, default: 0 },
-    amount: { type: Number, min: 0 },
+    expertVatOwed: { type: Number, default: 0 },
+    expertNet: { type: Number, default: 0 },
     status: {
       type: String,
       enum: Object.values(PAYMENT_STATUS),

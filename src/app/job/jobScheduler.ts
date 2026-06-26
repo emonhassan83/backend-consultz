@@ -5,6 +5,7 @@ import { expertReliabilityRewardJob } from './expertReliabilityReward.job'
 import { expertResponseTimeRewardJob } from './expertResponseTimeReward.job'
 import { timeSensitiveNotificationsJob } from './timeSensitiveNotifications.job'
 import { autoMarkNotRespondedJob } from './autoMarkNotResponded.job'
+import { sessionCompleteCheckJob } from './sessionCompleteCheck.job'
 
 // All cron schedules run in UTC — booking-level timezones are handled inside each job
 const CRON_TIMEZONE = 'UTC'
@@ -16,6 +17,7 @@ let reliabilityRewardJobRunning = false
 let responseTimeRewardJobRunning = false
 let timeSensitiveJobRunning = false
 let notRespondedJobRunning = false
+let sessionCompleteJobRunning = false
 
 export const initializeCronJobs = () => {
   console.log('🕒 Starting background jobs...')
@@ -124,6 +126,25 @@ export const initializeCronJobs = () => {
         console.error('❌ Auto-mark not responded job error:', err)
       } finally {
         notRespondedJobRunning = false
+      }
+    },
+    { timezone: CRON_TIMEZONE },
+  )
+
+  // 7. Session complete check — runs every minute
+  // Auto-completes running bookings whose sessionDuration has elapsed
+  // and creates a withdraw request for the expert (fallback for missed socket events)
+  cron.schedule(
+    '* * * * *',
+    async () => {
+      if (sessionCompleteJobRunning) return
+      sessionCompleteJobRunning = true
+      try {
+        await sessionCompleteCheckJob()
+      } catch (err) {
+        console.error('❌ Session complete check job error:', err)
+      } finally {
+        sessionCompleteJobRunning = false
       }
     },
     { timezone: CRON_TIMEZONE },
