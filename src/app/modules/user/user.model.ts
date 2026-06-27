@@ -157,7 +157,7 @@ const userSchema = new Schema<TUser, UserModel>(
     referralCode: { type: String, default: () => generateReferralCode() },
     referredBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     vatRegistrationNumber: { type: String, default: null },
-    isVatRegistered: { type: Boolean, default: true },
+    isVatRegistered: { type: Boolean, default: false },
 
     status: {
       type: String,
