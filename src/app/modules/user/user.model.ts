@@ -158,6 +158,7 @@ const userSchema = new Schema<TUser, UserModel>(
     referredBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     vatRegistrationNumber: { type: String, default: null },
     isVatRegistered: { type: Boolean, default: false },
+    vatPercentage: { type: Number, default: 0, min: 0, max: 100 },
 
     status: {
       type: String,

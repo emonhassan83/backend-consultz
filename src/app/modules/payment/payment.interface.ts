@@ -12,8 +12,8 @@ export type TPayment = {
 
   // What consultee pays
   consultationFee: number       // Expert's net fee (before VAT)
-  vat: number                   // VAT on expert's fee (0 if not VAT registered)
-  amount: number                // Total consultee pays (consultationFee + vat)
+  consultantVat: number         // VAT on expert's fee (0 if not VAT registered)
+  amount: number                // Total consultee pays (consultationFee + consultantVat)
 
   // Platform breakdown
   platformCommission: number    // Consultz net commission

@@ -98,6 +98,7 @@ export interface TUser {
   stripeAccountId: string
   vatRegistrationNumber: string
   isVatRegistered: boolean
+  vatPercentage: number
   balance: number
   status: TUserStatus
   expireAt: Date

@@ -71,35 +71,39 @@ const createPaymentIntent = async (payload: {
   /* ========= 4. Calculate Amount with VAT Breakdown ========= */
   const [platformFeeContent, consultant] = await Promise.all([
     Contents.findOne({ key: 'platformFeePercentage' }).lean(),
-    User.findById(booking.consult).select('isVatRegistered vatRegistrationNumber'),
+    User.findById(booking.consult).select('isVatRegistered vatRegistrationNumber vatPercentage'),
   ])
 
-  const VAT_RATE = 0.2
+  const PLATFORM_VAT_RATE = 0.2
   const platformFeePercentage = platformFeeContent?.value || 0
 
   const isExpertVatRegistered = !!(
     consultant?.isVatRegistered && consultant?.vatRegistrationNumber
   )
 
+  // Expert's VAT percentage from their profile (e.g., 5%)
+  const expertVatPercentage = consultant?.vatPercentage || 0
+
   // What consultee pays
   const consultationFee = booking.price
-  const vat = isExpertVatRegistered
-    ? parseFloat((consultationFee * VAT_RATE).toFixed(2))
+  
+  // Expert VAT calculated based on expert's VAT percentage
+  const expertVat = isExpertVatRegistered
+    ? parseFloat((consultationFee * (expertVatPercentage / 100)).toFixed(2))
     : 0
-  const amount = parseFloat((consultationFee + vat).toFixed(2))
+  
+  const amount = parseFloat((consultationFee + expertVat).toFixed(2))
 
   // Platform breakdown
   const platformCommission = parseFloat(
     ((consultationFee * platformFeePercentage) / 100).toFixed(2),
   )
-  const platformVat = parseFloat((platformCommission * VAT_RATE).toFixed(2))
+  const platformVat = parseFloat((platformCommission * PLATFORM_VAT_RATE).toFixed(2))
   const platformTotal = parseFloat((platformCommission + platformVat).toFixed(2))
 
   // Expert payout breakdown
   const consultAmount = parseFloat((amount - platformTotal).toFixed(2))
-  const expertVatOwed = isExpertVatRegistered
-    ? parseFloat((vat - platformVat).toFixed(2))
-    : 0
+  const expertVatOwed = parseFloat((expertVat - platformVat).toFixed(2))
   const expertNet = parseFloat((consultAmount - expertVatOwed).toFixed(2))
 
   /* ========= 5. Create PaymentIntent ========= */
@@ -122,7 +126,7 @@ const createPaymentIntent = async (payload: {
       account: userId,
       isExpertVatRegistered,
       consultationFee,
-      vat,
+      consultantVat: expertVat,
       amount,
       platformCommission,
       platformVat,

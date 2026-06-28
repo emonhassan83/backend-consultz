@@ -17,7 +17,7 @@ const paymentSchema = new Schema<TPayment>(
 
     // What consultee pays
     consultationFee: { type: Number, default: 0 },   // Expert's net fee
-    vat: { type: Number, default: 0 },               // VAT on expert's fee
+    consultantVat: { type: Number, default: 0 },     // VAT on expert's fee
     amount: { type: Number, min: 0, default: 0 },    // Total consultee pays
 
     // Platform breakdown
