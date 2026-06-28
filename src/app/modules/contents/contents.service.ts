@@ -1,55 +1,84 @@
 import httpStatus from 'http-status'
-import { TContents } from './contents.interface'
-import QueryBuilder from '../../builder/QueryBuilder'
 import { Contents } from './contents.models'
 import AppError from '../../errors/AppError'
+import { GENERAL_KEYS } from './contents.constants'
 
-// Create a new content
-const createContents = async (payload: TContents) => {
-  const result = await Contents.create(payload)
-  if (!result) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Content creation failed')
+// Get single content by key
+const getContent = async (key: string) => {
+  if (!key) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Key is required')
   }
 
-  return result
-}
-
-// Get all contents
-const getAllContents = async (query: Record<string, any>) => {
-  const ContentModel = new QueryBuilder(
-    Contents.find({ isDeleted: false }).select('termsAndConditions paymentHoldDays consultationFee updatedAt') as any,
-    query,
-  )
-    .search([''])
-    .filter()
-    .paginate()
-    .sort()
-    .fields()
-
-  const data = await ContentModel.modelQuery
-  const meta = await ContentModel.countTotal()
-  return {
-    data,
-    meta,
+  // Get from database
+  const content = await Contents.findOne({ key }).select('-__v').lean()
+  if (!content) {
+    throw new AppError(
+      httpStatus.NOT_FOUND,
+      `Content with key "${key}" not found`,
+    )
   }
-}
-
-// Update content
-const updateContents = async (payload: Partial<TContents>) => {
-  const content = await Contents.findOne().select('termsAndConditions paymentHoldDays consultationFee updatedAt')
-  if (!content || content?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Content not found!')
-  }
-
-  // Update the content document
-  Object.assign(content, payload)
-  await content.save()
 
   return content
 }
 
+// Get all general contents
+const getGeneralContents = async () => {
+  // Get from database
+  const contents = await Contents.find({ key: { $in: GENERAL_KEYS } }).select('-__v').lean()
+
+  return contents
+}
+
+// Create or update single content
+const createOrUpdate = async (key: string, payload: any) => {
+  if (!key || key === 'generals') {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Key is required and cannot be "generals"',
+    )
+  }
+
+  // Update database
+  const content = await Contents.findOneAndUpdate(
+    { key },
+    { key, value: payload.value ?? payload, name: payload.name },
+    { returnDocument: 'after', upsert: true },
+  ).select('-__v')
+
+  return content
+}
+
+// Update multiple general contents
+const updateGenerals = async (payload: Record<string, any>) => {
+  const validKeys = GENERAL_KEYS.filter(key => payload[key] !== undefined)
+
+  if (validKeys.length === 0) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'No valid general content keys provided',
+    )
+  }
+
+  // Update database
+  const updates = validKeys.map(key =>
+    Contents.findOneAndUpdate(
+      { key },
+      { value: payload[key] },
+      { upsert: true, returnDocument: 'after' },
+    ).select('-__v'),
+  )
+
+  const updatedContents = await Promise.all(updates)
+
+  return {
+    message: `Updated ${validKeys.length} general contents`,
+    data: updatedContents,
+  }
+}
+
 export const contentsService = {
-  createContents,
-  getAllContents,
-  updateContents
+  getContent,
+  getGeneralContents,
+  createOrUpdate,
+  updateGenerals
 }

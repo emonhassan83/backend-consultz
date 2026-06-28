@@ -1,33 +1,50 @@
-import { z } from 'zod'
+import { z } from 'zod';
+import { ALLOWED_KEYS, GENERAL_KEYS } from './contents.constants';
 
-const updateValidationSchema = z.object({
-  body: z.object({
-    termsAndConditions: z
-      .string({
-        message: 'Terms and conditions are required',
-      })
-      .optional(),
+export type TGeneralKey = (typeof GENERAL_KEYS)[number];
 
-    paymentHoldDays: z
-      .number({
-        message: 'paymentHoldDays is required'
-      })
-      .min(1, { message: 'paymentHoldDays must be at least 1' })
-      .max(60, { message: 'paymentHoldDays cannot exceed 60' })
-      .optional(),
-
-    consultationFee: z
-      .number({
-        message: 'consultationFee is required'
-      })
-      .min(0, { message: 'consultationFee cannot be negative' })
-      .max(40, { message: 'consultationFee cannot exceed 40' })
-      .optional(),
-  })
-    // Optional: Add .strict() if you want to reject unknown fields
-    .strict(),
+// Get Single Content by Key
+const getContentByKeyZodSchema = z.object({
+  params: z.object({
+    key: z.enum(ALLOWED_KEYS as unknown as [string, ...string[]], {
+      message: 'Invalid setting key provided',
+    }),
+  }),
 });
 
-export const contentsValidation = {
-  updateValidationSchema
-}
+// Create or Update Single Setting
+const createOrUpdateSettingZodSchema = z.object({
+  params: z.object({
+    key: z.enum(ALLOWED_KEYS as unknown as [string, ...string[]], {
+      message: 'Invalid setting key provided',
+    }),
+  }),
+  body: z.object({
+    value: z.any(),
+    name: z.string().trim().optional(),
+  }),
+});
+
+// Update Multiple General Settings
+const updateGeneralsZodSchema = z.object({
+  body: z
+    .object({
+      paymentHoldDays: z.number().optional(),
+      platformFeePercentage: z.number().optional(),
+      supportContract: z.string().optional(),
+      supportEmail: z.string().email({ message: 'Invalid email' }).optional(),
+
+      // Trams and condition
+      tramsAndCondition: z.string().optional(),
+      privacyAndPolicy: z.string().optional(),
+    })
+    .refine((data) => Object.keys(data).length > 0, {
+      message: 'At least one general setting value must be provided',
+    }),
+});
+
+export const ContentValidation = {
+  getContentByKeyZodSchema,
+  createOrUpdateSettingZodSchema,
+  updateGeneralsZodSchema,
+};

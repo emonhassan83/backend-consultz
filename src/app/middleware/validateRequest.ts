@@ -6,7 +6,9 @@ const zodValidationRequest = (schema: ZodTypeAny) => {
   return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     // validation
     await schema.parseAsync({
+      params: req.params,
       body: req.body,
+      query: req.query,
     })
     next()
   })

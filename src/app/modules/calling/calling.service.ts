@@ -198,8 +198,8 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
     if (!payment) throw new AppError(httpStatus.NOT_FOUND, 'Payment not found')
 
     /* withdraw create */
-    const contents = await Contents.findOne().lean()
-    const holdDays = contents?.paymentHoldDays || 7
+    const paymentHoldDaysContent = await Contents.findOne({ key: 'paymentHoldDays' }).lean()
+    const holdDays = paymentHoldDaysContent?.value || 7
 
     const proceedAt = dayjs(now).add(holdDays, 'day').toDate()
 

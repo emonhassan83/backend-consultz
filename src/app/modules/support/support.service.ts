@@ -14,8 +14,8 @@ const FALLBACK_SUPPORT_EMAIL = 'investors@wealthdragons.co.uk'
 
 // ── helper: support email fetch ───────────────────────────────────────────────
 const getSupportEmail = async (): Promise<string> => {
-  const contents = await Contents.findOne({ isDeleted: false }).select('supportEmail')
-  return contents?.supportEmail || FALLBACK_SUPPORT_EMAIL
+  const supportEmailContent = await Contents.findOne({ key: 'supportEmail' }).lean()
+  return supportEmailContent?.value || FALLBACK_SUPPORT_EMAIL
 }
 
 // ── helper: author fetch ──────────────────────────────────────────────────────
@@ -68,8 +68,8 @@ export const sendFeedbackEmail = async (payload: TFeedback, userId: string) => {
   }
 
   // 2. Support email
-  const contents = await Contents.findOne({ isDeleted: false }).select('supportEmail')
-  const supportEmail = contents?.supportEmail || 'info@consultz.com'
+  const supportEmailContent = await Contents.findOne({ key: 'supportEmail' }).lean()
+  const supportEmail = supportEmailContent?.value || 'info@consultz.com'
 
   // 3. Set submission date if not provided
   if (!payload.submissionDate) {

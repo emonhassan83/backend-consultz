@@ -10,7 +10,10 @@
     "lint:fix": "npx eslint src --fix",
     "prettier": "prettier --ignore-path .gitignore --write \"./src/**/*.+(js|ts|json)\"",
     "prettier:fix": "npx prettier --write src",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "seed:admin": "ts-node-dev --transpile-only src/app/seeder/seedAdmin.ts",
+    "seed:content": "ts-node-dev --transpile-only src/app/seeder/seedContent.ts",
+    "seed:category": "ts-node-dev --transpile-only src/app/seeder/seedCategory.ts"
   },
   "keywords": [],
   "author": "",

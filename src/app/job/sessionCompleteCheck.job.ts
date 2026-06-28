@@ -33,8 +33,8 @@ export const sessionCompleteCheckJob = async (): Promise<void> => {
     `Session Complete Check Job: ${runningBookings.length} running bookings found`,
   )
 
-  const contents = await Contents.findOne().lean()
-  const holdDays = contents?.paymentHoldDays || 7
+  const paymentHoldDaysContent = await Contents.findOne({ key: 'paymentHoldDays' }).lean()
+  const holdDays = paymentHoldDaysContent?.value || 7
   let completedCount = 0
 
   for (const booking of runningBookings) {

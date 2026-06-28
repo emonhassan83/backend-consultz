@@ -3,7 +3,6 @@ import app from './app'
 import mongoose from 'mongoose'
 import config from './app/config'
 import { errorlogger, logger } from './app/utils/logger'
-import { seeder } from './app/seeder/seed'
 import colors from 'colors'
 import initializeSocketIO from './app/socket/socket.init'
 import { initializeCronJobs } from './app/job/jobScheduler'
@@ -16,13 +15,6 @@ async function main() {
     await mongoose.connect(config.database_url as string)
 
     logger.info('Connected to database')
-
-    // default task added
-    await Promise.all([
-      seeder.seedAdmin(),
-      seeder.seedContents(),
-      seeder.seedCategories(),
-    ])
 
     // run the corn job
     initializeCronJobs()

@@ -54,8 +54,8 @@ export const bookingComplete = eventHandler<TBookingCompletePayload>(
         booking: booking._id.toString(),
       }).session(session)
 
-      const contents = await Contents.findOne().lean()
-      const holdDays = contents?.paymentHoldDays || 7
+      const paymentHoldDaysContent = await Contents.findOne({ key: 'paymentHoldDays' }).lean()
+      const holdDays = paymentHoldDaysContent?.value || 7
       const proceedAt = dayjs().add(holdDays, 'day').toDate()
 
       const withdraw = existingWithdraw ?? (

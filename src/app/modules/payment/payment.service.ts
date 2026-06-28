@@ -69,13 +69,13 @@ const createPaymentIntent = async (payload: {
   )
 
   /* ========= 4. Calculate Amount with VAT Breakdown ========= */
-  const [contents, consultant] = await Promise.all([
-    Contents.findOne({ isDeleted: false }).select('consultationFee'),
+  const [platformFeeContent, consultant] = await Promise.all([
+    Contents.findOne({ key: 'platformFeePercentage' }).lean(),
     User.findById(booking.consult).select('isVatRegistered vatRegistrationNumber'),
   ])
 
   const VAT_RATE = 0.2
-  const consultationFeePercent = contents?.consultationFee || 0
+  const platformFeePercentage = platformFeeContent?.value || 0
 
   const isExpertVatRegistered = !!(
     consultant?.isVatRegistered && consultant?.vatRegistrationNumber
@@ -90,7 +90,7 @@ const createPaymentIntent = async (payload: {
 
   // Platform breakdown
   const platformCommission = parseFloat(
-    ((consultationFee * consultationFeePercent) / 100).toFixed(2),
+    ((consultationFee * platformFeePercentage) / 100).toFixed(2),
   )
   const platformVat = parseFloat((platformCommission * VAT_RATE).toFixed(2))
   const platformTotal = parseFloat((platformCommission + platformVat).toFixed(2))
