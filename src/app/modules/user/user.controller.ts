@@ -257,6 +257,18 @@ const deleteMyProfile = catchAsync(async (req, res) => {
   })
 })
 
+// ✅ Update VAT Info
+const updateVatInfo = catchAsync(async (req, res) => {
+  const result = await UserService.updateVatInfoFromDB(req?.user?._id, req.body)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'VAT information updated successfully!',
+    data: result,
+  })
+})
+
 export const UserControllers = {
   registerUser,
   getAllUsers,
@@ -274,4 +286,5 @@ export const UserControllers = {
   updateMyProfile,
   changeUserNotify,
   deleteMyProfile,
+  updateVatInfo,
 }

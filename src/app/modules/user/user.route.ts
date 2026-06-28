@@ -42,6 +42,14 @@ router.put(
   UserControllers.updateMyProfile,
 )
 
+// ✅ Update VAT Info
+router.put(
+  '/vat-info',
+  auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult),
+  zodValidationRequest(UserValidation.updateVatInfoValidationSchema),
+  UserControllers.updateVatInfo,
+)
+
 router.delete(
   '/delete-profile',
   auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult),

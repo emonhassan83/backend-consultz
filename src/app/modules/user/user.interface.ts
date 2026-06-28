@@ -96,9 +96,9 @@ export interface TUser {
   referralCode: string,
   referredBy: Types.ObjectId
   stripeAccountId: string
-  vatRegistrationNumber: string
+  country: string
+  vatRegistrationNumber: string | null
   isVatRegistered: boolean
-  vatPercentage: number
   balance: number
   status: TUserStatus
   expireAt: Date

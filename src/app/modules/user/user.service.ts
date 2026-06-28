@@ -20,6 +20,7 @@ import {
 import mongoose, { QueryFilter, Types } from 'mongoose'
 import { Booking } from '../booking/booking.models'
 import { BOOKING_STATUS } from '../booking/booking.constants'
+import { validateVatNumber } from '../../utils/vatValidation'
 import { sendNotification } from '../../utils/sentNotification'
 import { Follow } from '../connection/connection.models'
 import { ProfileView } from '../profileView/profileView.model'
@@ -641,7 +642,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
   try {
     const user = await User.findById(viewedUserId)
       .select(
-        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education stripeAccountId isTopExpert pushNotify emailNotify isVatRegistered vatPercentage status createdAt',
+        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education stripeAccountId isTopExpert pushNotify emailNotify isVatRegistered vatRegistrationNumber status createdAt',
       )
       .lean()
 
@@ -1261,6 +1262,46 @@ const deleteAUserFromDB = async (userId: string) => {
   return result
 }
 
+/**
+ * Update VAT info for consultant
+ * Validates VAT number and fetches current VAT rate from jsonvat.com
+ */
+const updateVatInfoFromDB = async (userId: string, payload: {
+  country: string
+  isVatRegistered: boolean
+  vatRegistrationNumber?: string
+}) => {
+  const user = await User.findById(userId)
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found')
+  }
+
+  // Validate VAT number if user is VAT registered
+  if (payload.isVatRegistered && payload.vatRegistrationNumber) {
+    const validationResult = await validateVatNumber(payload.country, payload.vatRegistrationNumber)
+    
+    if (!validationResult.valid) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        `Invalid VAT registration number for country ${payload.country}`,
+      )
+    }
+  }
+
+  // Update user
+  user.country = payload.country
+  user.isVatRegistered = payload.isVatRegistered
+  user.vatRegistrationNumber = payload.isVatRegistered ? (payload.vatRegistrationNumber || '') : null
+
+  await user.save()
+
+  return {
+    country: user.country,
+    isVatRegistered: user.isVatRegistered,
+    vatRegistrationNumber: user.vatRegistrationNumber,
+  }
+}
+
 export const UserService = {
   registerUserIntoDB,
   getAllUsersFromDB,
@@ -1277,4 +1318,5 @@ export const UserService = {
   updateUserInfoFromDB,
   updateLocationFromDB,
   deleteAUserFromDB,
+  updateVatInfoFromDB,
 }

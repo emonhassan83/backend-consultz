@@ -249,9 +249,28 @@ const changeStatusValidationSchema = z.object({
   }),
 })
 
+// ✅ VAT Info Validation Schema
+const updateVatInfoValidationSchema = z.object({
+  body: z.object({
+    country: z
+      .string()
+      .length(2, { message: 'Country code must be exactly 2 characters (e.g., GB, US, DE)' })
+      .toUpperCase(),
+    isVatRegistered: z.boolean({
+      message: 'isVatRegistered must be true or false',
+    }),
+    vatRegistrationNumber: z
+      .string()
+      .min(3, { message: 'VAT registration number is too short' })
+      .max(20, { message: 'VAT registration number is too long' })
+      .optional(),
+  }),
+})
+
 export const UserValidation = {
   createValidationSchema,
   updateValidationSchema,
   changeStatusValidationSchema,
   updateNotifySettingsValidation,
+  updateVatInfoValidationSchema,
 }

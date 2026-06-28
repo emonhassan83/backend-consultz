@@ -18,6 +18,7 @@ import {
 } from '../../utils/emailNotify'
 import { Contents } from '../contents/contents.models'
 import { Chat } from '../chat/chat.models'
+import { getVatRateForCountry } from '../../utils/vatRate'
 import { CHAT_STATUS } from '../chat/chat.constants'
 import { TUser } from '../user/user.interface'
 
@@ -71,7 +72,7 @@ const createPaymentIntent = async (payload: {
   /* ========= 4. Calculate Amount with VAT Breakdown ========= */
   const [platformFeeContent, consultant] = await Promise.all([
     Contents.findOne({ key: 'platformFeePercentage' }).lean(),
-    User.findById(booking.consult).select('isVatRegistered vatRegistrationNumber vatPercentage'),
+    User.findById(booking.consult).select('country isVatRegistered vatRegistrationNumber'),
   ])
 
   const PLATFORM_VAT_RATE = 0.2
@@ -81,15 +82,17 @@ const createPaymentIntent = async (payload: {
     consultant?.isVatRegistered && consultant?.vatRegistrationNumber
   )
 
-  // Expert's VAT percentage from their profile (e.g., 5%)
-  const expertVatPercentage = consultant?.vatPercentage || 0
-
   // What consultee pays
   const consultationFee = booking.price
   
-  // Expert VAT calculated based on expert's VAT percentage
-  const expertVat = isExpertVatRegistered
-    ? parseFloat((consultationFee * (expertVatPercentage / 100)).toFixed(2))
+  // Expert's country-based VAT rate from jsonvat.com (live fetch)
+  const expertVatRate = isExpertVatRegistered && consultant?.country
+    ? await getVatRateForCountry(consultant.country)
+    : null
+  
+  // Expert VAT calculated based on country's current VAT rate
+  const expertVat = expertVatRate
+    ? parseFloat((consultationFee * (expertVatRate / 100)).toFixed(2))
     : 0
   
   const amount = parseFloat((consultationFee + expertVat).toFixed(2))
