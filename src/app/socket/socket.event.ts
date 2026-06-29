@@ -35,7 +35,7 @@ export const registerSocketEvents = (socket: Socket) => {
   // 📞 calling events
  tSocket.on('call-start', (data, callback) => {
     console.log('📡 call-start event received | callback type:', typeof callback);
-    callStart.call(tSocket, data, callback);   // এটি ঠিক আছে
+    callStart.call(tSocket, data, callback);
   });
   tSocket.on('call-accept', (data, callback) => callAccept.call(tSocket, data, callback));
   tSocket.on('call-cancel', (data, callback) => callCancel.call(tSocket, data, callback));

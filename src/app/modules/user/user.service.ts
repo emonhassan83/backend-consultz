@@ -21,6 +21,7 @@ import mongoose, { QueryFilter, Types } from 'mongoose'
 import { Booking } from '../booking/booking.models'
 import { BOOKING_STATUS } from '../booking/booking.constants'
 import { validateVatNumber } from '../../utils/vatValidation'
+import { getVatRateForCountry } from '../../utils/vatRate'
 import { sendNotification } from '../../utils/sentNotification'
 import { Follow } from '../connection/connection.models'
 import { ProfileView } from '../profileView/profileView.model'
@@ -642,7 +643,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
   try {
     const user = await User.findById(viewedUserId)
       .select(
-        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education stripeAccountId isTopExpert pushNotify emailNotify isVatRegistered vatRegistrationNumber status createdAt',
+        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education stripeAccountId isTopExpert pushNotify emailNotify isVatRegistered country status createdAt',
       )
       .lean()
 
@@ -657,6 +658,12 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       )
     }
 
+    // ── Dynamic VAT Rate Fetch (if user is VAT registered) ─────────────────────
+    let vatPercentage: number | null = null;
+    if (user.isVatRegistered && user.country) {
+      vatPercentage = await getVatRateForCountry(user.country);
+    }
+
     const last7Days = dayjs().subtract(7, 'day').toDate()
 
     const [
@@ -669,7 +676,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       last7DaysFollowersCount,
       totalFollowersCount,
       totalFollowingCount,
-      // ✅ 1. Pending booking count — field differs by role
+      // Pending booking count — field differs by role
       pendingBookingsCount,
     ] = await Promise.all([
       Booking.countDocuments({
@@ -791,6 +798,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       followers: totalFollowersCount,
       following: totalFollowingCount,
       isConnectedStripe: !!user.stripeAccountId,
+      vatPercentage
     }
   } catch (error) {
     await session.abortTransaction()

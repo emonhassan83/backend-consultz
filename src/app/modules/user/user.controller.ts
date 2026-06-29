@@ -257,7 +257,7 @@ const deleteMyProfile = catchAsync(async (req, res) => {
   })
 })
 
-// ✅ Update VAT Info
+// Update VAT Info
 const updateVatInfo = catchAsync(async (req, res) => {
   const result = await UserService.updateVatInfoFromDB(req?.user?._id, req.body)
 

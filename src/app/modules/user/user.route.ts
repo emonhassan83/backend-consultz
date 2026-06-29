@@ -42,7 +42,7 @@ router.put(
   UserControllers.updateMyProfile,
 )
 
-// ✅ Update VAT Info
+// Update VAT Info
 router.put(
   '/vat-info',
   auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult),
