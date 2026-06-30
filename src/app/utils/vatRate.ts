@@ -20,6 +20,7 @@ const LOCAL_FALLBACK_RATES: Record<string, number> = {
   'CA': 5,  // GST
 
   // Asia Pacific
+  'BD': 15, // VAT Bangladesh
   'AU': 10, // GST
   'NZ': 15, // GST
   'SG': 9,  // GST

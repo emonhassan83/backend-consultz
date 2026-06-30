@@ -211,9 +211,11 @@ export const validateVatNumber = async (
     return { valid: false, name: '', address: '' }
   }
 
-  // ── APIFreaks Validation (if key is configured) ───────────────────────────
+  // ── APIFreaks Validation (if key is configured and country is EU or UK) ───
   const apiKey = config.apifreaks_key;
-  if (apiKey) {
+  const isEuOrUk = ['AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'EL', 'ES', 'FI', 'FR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK', 'GB'].includes(country);
+  
+  if (apiKey && isEuOrUk) {
     try {
       // Ensure the VAT number starts with the country code for APIFreaks (if not already present)
       let prefixedVat = cleanVatNumber;
