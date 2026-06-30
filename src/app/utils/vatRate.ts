@@ -71,7 +71,7 @@ export const getVatRateForCountry = async (countryCode: string): Promise<number>
 
   if (apiKey) {
     try {
-      const response = await fetch(`https://api.apifreaks.com/v1/vat/rates?country=${country}`, {
+      const response = await fetch(`https://api.apifreaks.com/v1.0/vat/rates/country?country=${country}`, {
         method: 'GET',
         headers: {
           'X-apiKey': apiKey,
@@ -84,7 +84,8 @@ export const getVatRateForCountry = async (countryCode: string): Promise<number>
         const standardRate = data?.standard_rate;
 
         if (standardRate !== undefined && standardRate !== null) {
-          return Number(standardRate);
+          // APIFreaks returns rate as a decimal (e.g. 0.20 for 20%), so multiply by 100 to match local percentage mapping.
+          return Number(standardRate) * 100;
         }
       } else {
         console.warn(`APIFreaks returned status ${response.status}. Falling back to local VAT mapping.`);

@@ -223,7 +223,7 @@ export const validateVatNumber = async (
         prefixedVat = `${country}${cleanVatNumber}`;
       }
 
-      const response = await fetch(`https://api.apifreaks.com/v1/vat/validate?vat_number=${prefixedVat}`, {
+      const response = await fetch(`https://api.apifreaks.com/v1.0/vat/validation?vatNumber=${prefixedVat}`, {
         method: 'GET',
         headers: {
           'X-apiKey': apiKey,
@@ -235,8 +235,8 @@ export const validateVatNumber = async (
         const data = await response.json();
         return {
           valid: data?.valid === true,
-          name: data?.company?.name || '',
-          address: data?.company?.address || '',
+          name: data?.company?.company_name || '',
+          address: data?.company?.company_address || '',
         };
       } else {
         console.warn(`APIFreaks validation returned status ${response.status}. Falling back to local/VIES/HMRC check.`);
