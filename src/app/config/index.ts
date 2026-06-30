@@ -18,7 +18,7 @@ export default {
   jwt_access_expires_in: process.env.JWT_ACCESS_EXPIRE_IN,
   jwt_refresh_expires_in: process.env.JWT_REFRESH_EXPIRE_IN,
   reset_pass_link: process.env.RESET_PASS_LINK,
-    firebase: {
+  firebase: {
     project_id: process.env.FIREBASE_PROJECT_ID,
     private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
     private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
@@ -37,14 +37,14 @@ export default {
   },
   payment_success_url: process.env.PAYMENT_SUCCESS_URL,
   payment_cancel_url: process.env.PAYMENT_CANCEL_URL,
-   aws: {
+  aws: {
     accessKeyId: process.env.S3_BUCKET_ACCESS_KEY,
     secretAccessKey: process.env.S3_BUCKET_SECRET_ACCESS_KEY,
     s3BaseUrl: process.env.S3_BASE_URL,
     s3_api: process.env.S3_API,
     region: process.env.AWS_REGION,
     bucket: process.env.AWS_BUCKET_NAME,
-    endpoint: process.env.SPACES_API,  
+    endpoint: process.env.SPACES_API,
   },
   twilio: {
     accountSid: process.env.TWILIO_ACCOUNT_SID,
@@ -61,4 +61,5 @@ export default {
     teamId: process.env.APNS_TEAM_ID,
     bundleId: process.env.APNS_BUNDLE_ID,
   },
+  apifreaks_key: process.env.APIFREAKS_KEY,
 }

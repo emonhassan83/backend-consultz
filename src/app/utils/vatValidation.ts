@@ -1,28 +1,30 @@
+import config from "../config";
+
 // Supported countries for VAT validation
 const SUPPORTED_COUNTRIES = [
   // EU Countries (VIES validation)
   'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'EL', 'ES',
   'FI', 'FR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT',
   'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK',
-  
+
   // UK (HMRC validation)
   'GB',
-  
+
   // North America
   'US', 'CA',
-  
+
   // Asia Pacific
   'AU', 'NZ', 'SG', 'JP', 'KR', 'IN', 'CN', 'HK', 'MY', 'TH',
-  
+
   // Middle East
   'AE', 'SA', 'IL', 'TR',
-  
+
   // South America
   'BR', 'AR', 'CL', 'CO',
-  
+
   // Africa
   'ZA', 'EG', 'NG',
-  
+
   // Other
   'CH', 'NO', 'IS', 'LI', 'MC'
 ]
@@ -59,11 +61,11 @@ const basicRegexCheck = (countryCode: string, vatNumber: string): boolean => {
     'SE': /^SE\d{10}\d{2}$/,
     'SI': /^SI\d{8}$/,
     'SK': /^SK\d{10}$/,
-    
+
     // North America
     'US': /^\d{2}-?\d{7}$/, // EIN format (simplified)
     'CA': /^\d{9}RT\d{4}$/, // Business Number format
-    
+
     // Asia Pacific
     'AU': /^\d{11}$/, // ABN
     'NZ': /^\d{8,9}$/, // NZBN
@@ -75,24 +77,24 @@ const basicRegexCheck = (countryCode: string, vatNumber: string): boolean => {
     'HK': /^\d{8}$/, // Business Registration Number
     'MY': /^[A-Z0-9]{12}$/, // Tax Identification Number
     'TH': /^\d{13}$/, // Taxpayer Identification Number
-    
+
     // Middle East
     'AE': /^\d{15}$/, // Trade License Number
     'SA': /^\d{15}$/, // Commercial Registration
     'IL': /^\d{9}$/, // VAT Number
     'TR': /^\d{10}$/, // Vergi No
-    
+
     // South America
     'BR': /^\d{14}$/, // CNPJ
     'AR': /^\d{11}$/, // CUIT
     'CL': /^\d{9,10}$/, // RUT
     'CO': /^\d{9,10}$/, // NIT
-    
+
     // Africa
     'ZA': /^\d{10}$/, // VAT Number
     'EG': /^\d{9}$/, // Tax Identification Number
     'NG': /^\d{10,14}$/, // TIN
-    
+
     // Other
     'CH': /^[A-Z]{3}-\d{3}\.[A-Z]{3}$/, // VAT ID
     'NO': /^\d{9}MVA$/, // Orgnr
@@ -202,39 +204,83 @@ export const validateVatNumber = async (
 }> => {
   const country = countryCode.toUpperCase()
 
-  // Remove any spaces from VAT number
-  const cleanVatNumber = vatNumber.replace(/\s/g, '')
+  // Remove any spaces and dashes from VAT number
+  const cleanVatNumber = vatNumber.replace(/[\s-]/g, '')
 
+  if (!cleanVatNumber) {
+    return { valid: false, name: '', address: '' }
+  }
+
+  // ── APIFreaks Validation (if key is configured) ───────────────────────────
+  const apiKey = config.apifreaks_key;
+  if (apiKey) {
+    try {
+      // Ensure the VAT number starts with the country code for APIFreaks (if not already present)
+      let prefixedVat = cleanVatNumber;
+      if (!cleanVatNumber.startsWith(country)) {
+        prefixedVat = `${country}${cleanVatNumber}`;
+      }
+
+      const response = await fetch(`https://api.apifreaks.com/v1/vat/validate?vat_number=${prefixedVat}`, {
+        method: 'GET',
+        headers: {
+          'X-apiKey': apiKey,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          valid: data?.valid === true,
+          name: data?.company?.name || '',
+          address: data?.company?.address || '',
+        };
+      } else {
+        console.warn(`APIFreaks validation returned status ${response.status}. Falling back to local/VIES/HMRC check.`);
+      }
+    } catch (error) {
+      console.error('Failed to validate VAT via APIFreaks, falling back to local checks:', error);
+    }
+  }
+
+  // ── Existing Fallback Logic ────────────────────────────────────────────────
   // EU countries - use VIES API
   if (['AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'EL', 'ES', 'FI', 'FR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK'].includes(country)) {
     return validateEuVat(country, cleanVatNumber)
   }
-  
+
   // UK - use HMRC API
   if (country === 'GB') {
     return validateUkVat(cleanVatNumber)
   }
-  
-  // Other supported countries - regex validation
-  if (SUPPORTED_COUNTRIES.includes(country)) {
-    return { valid: basicRegexCheck(country, cleanVatNumber), name: '', address: '' }
+
+  // Specific regex checks for defined countries
+  if (basicRegexCheck(country, cleanVatNumber)) {
+    return { valid: true, name: '', address: '' }
   }
-  
-  // Unsupported country
-  console.warn(`VAT validation not supported for country: ${country}`)
-  return { valid: false, name: '', address: '' }
+
+  // Check if country has a specific regex check but failed it
+  const definedCountries = ['US', 'CA', 'AU', 'NZ', 'SG', 'JP', 'KR', 'IN', 'CN', 'HK', 'MY', 'TH', 'AE', 'SA', 'IL', 'TR', 'BR', 'AR', 'CL', 'CO', 'ZA', 'EG', 'NG', 'CH', 'NO', 'IS', 'LI', 'MC']
+  if (definedCountries.includes(country)) {
+    return { valid: false, name: '', address: '' }
+  }
+
+  // General fallback validation for any other country (alphanumeric, 4-20 characters)
+  const isAlphanumeric = /^[A-Z0-9]{4,20}$/i.test(cleanVatNumber)
+  return { valid: isAlphanumeric, name: '', address: '' }
 }
 
 /**
- * Get supported countries list
+ * Get supported countries list (returns a wildcard indicator since all 2-letter codes are accepted now)
  */
 export const getSupportedCountries = (): string[] => {
   return [...SUPPORTED_COUNTRIES]
 }
 
 /**
- * Check if a country supports VAT validation
+ * Check if a country supports VAT validation (allows any 2-letter country code)
  */
 export const isCountrySupported = (countryCode: string): boolean => {
-  return SUPPORTED_COUNTRIES.includes(countryCode.toUpperCase())
+  return /^[A-Z]{2}$/.test(countryCode.toUpperCase())
 }
