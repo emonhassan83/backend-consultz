@@ -234,7 +234,7 @@ export const validateVatNumber = async (
       if (response.ok) {
         const data = await response.json();
         return {
-          valid: data?.valid === true,
+          valid: data?.validation?.is_valid === true,
           name: data?.company?.company_name || '',
           address: data?.company?.company_address || '',
         };
