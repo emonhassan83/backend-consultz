@@ -312,10 +312,22 @@ const getAllBookings = async (
   const bookingIds = data.map((b: any) => b._id.toString())
   const unreadMap = await getUnreadMessageCountsBatch(bookingIds, currentUserId)
 
-  const enriched = data.map((booking: any) => ({
-    ...booking.toObject(),
-    unreadMessageCount: unreadMap.get(booking._id.toString()) ?? 0,
-  }))
+  // ✅ Batch payment details
+  const payments = await Payment.find({ booking: { $in: bookingIds } }).lean()
+  const paymentMap = new Map()
+  payments.forEach((p: any) => {
+    paymentMap.set(p.booking.toString(), p)
+  })
+
+  const enriched = data.map((booking: any) => {
+    const payment = paymentMap.get(booking._id.toString())
+    return {
+      ...booking.toObject(),
+      unreadMessageCount: unreadMap.get(booking._id.toString()) ?? 0,
+      totalPay: payment?.amount || 0,
+      vat: payment?.consultantVat || 0,
+    }
+  })
 
   return { data: enriched, meta }
 }
@@ -407,10 +419,22 @@ const getAllBookingsByDate = async (
   const bookingIds = bookings.map((b) => b._id.toString())
   const unreadMap = await getUnreadMessageCountsBatch(bookingIds, userId)
 
-  const enrichBooking = (booking: any) => ({
-    ...booking.toObject(),
-    unreadMessageCount: unreadMap.get(booking._id.toString()) ?? 0,
+  // ✅ Batch payment details
+  const payments = await Payment.find({ booking: { $in: bookingIds } }).lean()
+  const paymentMap = new Map()
+  payments.forEach((p: any) => {
+    paymentMap.set(p.booking.toString(), p)
   })
+
+  const enrichBooking = (booking: any) => {
+    const payment = paymentMap.get(booking._id.toString())
+    return {
+      ...booking.toObject(),
+      unreadMessageCount: unreadMap.get(booking._id.toString()) ?? 0,
+      totalPay: payment?.amount || 0,
+      vat: payment?.consultantVat || 0,
+    }
+  }
 
   if (targetDates.length === 1) {
     return {
@@ -463,9 +487,13 @@ const getBookingsById = async (id: string, currentUserId: string) => {
     currentUserId,
   )
 
+  const payment = await Payment.findOne({ booking: result._id.toString() }).lean()
+
   return {
     ...result.toObject(),
     unreadMessageCount,
+    totalPay: payment?.amount || 0,
+    vat: payment?.consultantVat || 0,
   }
 }
 

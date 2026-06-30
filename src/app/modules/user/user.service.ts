@@ -165,7 +165,7 @@ const getAllUsersFromDB = async (
     const days = (query.availability as string)
       .split(',')
       .map((d) => d.trim().toLowerCase())
-      .filter(Boolean)as ('sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat')[]
+      .filter(Boolean) as ('sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat')[]
     if (days.length > 0) {
       orConditions.push({ 'availability.day': { $in: days } })
     }
@@ -643,7 +643,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
   try {
     const user = await User.findById(viewedUserId)
       .select(
-        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education stripeAccountId isTopExpert pushNotify emailNotify isVatRegistered country status createdAt',
+        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education stripeAccountId isTopExpert pushNotify emailNotify isVatRegistered vatRegistrationNumber country status createdAt',
       )
       .lean()
 
@@ -725,15 +725,15 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       // ✅ role = expert → consult field, role = consult/user → user field
       user.role === USER_ROLE.expert
         ? Booking.countDocuments({
-            consult: new Types.ObjectId(viewedUserId),
-            status: BOOKING_STATUS.pending,
-            isDeleted: false,
-          })
+          consult: new Types.ObjectId(viewedUserId),
+          status: BOOKING_STATUS.pending,
+          isDeleted: false,
+        })
         : Booking.countDocuments({
-            user: new Types.ObjectId(viewedUserId),
-            status: BOOKING_STATUS.pending,
-            isDeleted: false,
-          }),
+          user: new Types.ObjectId(viewedUserId),
+          status: BOOKING_STATUS.pending,
+          isDeleted: false,
+        }),
     ])
 
     const totalWithdraw = totalWithdrawResult[0]?.total || 0
@@ -742,8 +742,8 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
     const followerGrowthRate =
       totalFollowersCount > 0
         ? parseFloat(
-            ((last7DaysFollowersCount / totalFollowersCount) * 100).toFixed(2),
-          )
+          ((last7DaysFollowersCount / totalFollowersCount) * 100).toFixed(2),
+        )
         : 0
 
     // ✅ 2. Advising time in human-readable format
@@ -768,9 +768,9 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
     const avgAttendance =
       totalBookingsCountAll > 0
         ? Math.min(
-            Math.round((completedBookingsCount / totalBookingsCountAll) * 100),
-            100,
-          )
+          Math.round((completedBookingsCount / totalBookingsCountAll) * 100),
+          100,
+        )
         : 0
 
     const profileSetupProgress = calculateProfileSetupProgress(user)
@@ -798,16 +798,18 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       followers: totalFollowersCount,
       following: totalFollowingCount,
       isConnectedStripe: !!user.stripeAccountId,
-      vatPercentage
+      isVatRegisted: user.isVatRegistered ?? false,
+      vatRegistrationNumber: user.vatRegistrationNumber ?? null,
+      vatPercentage: vatPercentage || 0,
     }
   } catch (error) {
     await session.abortTransaction()
     throw error instanceof AppError
       ? error
       : new AppError(
-          httpStatus.INTERNAL_SERVER_ERROR,
-          'Failed to fetch user profile',
-        )
+        httpStatus.INTERNAL_SERVER_ERROR,
+        'Failed to fetch user profile',
+      )
   } finally {
     session.endSession()
   }
@@ -1103,36 +1105,36 @@ const updateUserInfoFromDB = async (
 
     const requiredFields = isConsult
       ? [
-          'firstName',
-          'lastName',
-          'email',
-          'phoneNumber',
-          'dob',
-          'photoUrl',
-          'coverPhoto',
-          'timeZone',
-          'priceRange',
-          'interests',
-          'learningStyles',
-          'availability',
-        ]
+        'firstName',
+        'lastName',
+        'email',
+        'phoneNumber',
+        'dob',
+        'photoUrl',
+        'coverPhoto',
+        'timeZone',
+        'priceRange',
+        'interests',
+        'learningStyles',
+        'availability',
+      ]
       : [
-          'firstName',
-          'lastName',
-          'email',
-          'phoneNumber',
-          'dob',
-          'photoUrl',
-          'coverPhoto',
-          'bio',
-          'socialProfiles',
-          'hourlyRate',
-          'expertise',
-          'skills',
-          'advisingStyles',
-          'sessionDurations',
-          'availability',
-        ]
+        'firstName',
+        'lastName',
+        'email',
+        'phoneNumber',
+        'dob',
+        'photoUrl',
+        'coverPhoto',
+        'bio',
+        'socialProfiles',
+        'hourlyRate',
+        'expertise',
+        'skills',
+        'advisingStyles',
+        'sessionDurations',
+        'availability',
+      ]
 
     const isProfileNowComplete = requiredFields.every((field) => {
       const value =
@@ -1169,7 +1171,7 @@ const updateUserInfoFromDB = async (
       isExpert &&
       finalPayload.availability !== undefined &&
       JSON.stringify(user.availability) !==
-        JSON.stringify(finalPayload.availability)
+      JSON.stringify(finalPayload.availability)
 
     // Step 5: Apply payload and save
     Object.assign(user, finalPayload)
@@ -1206,9 +1208,9 @@ const updateUserInfoFromDB = async (
     throw error instanceof AppError
       ? error
       : new AppError(
-          httpStatus.INTERNAL_SERVER_ERROR,
-          'Failed to update user information',
-        )
+        httpStatus.INTERNAL_SERVER_ERROR,
+        'Failed to update user information',
+      )
   } finally {
     session.endSession()
   }
@@ -1287,7 +1289,7 @@ const updateVatInfoFromDB = async (userId: string, payload: {
   // Validate VAT number if user is VAT registered
   if (payload.isVatRegistered && payload.vatRegistrationNumber) {
     const validationResult = await validateVatNumber(payload.country, payload.vatRegistrationNumber)
-    
+
     if (!validationResult.valid) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
@@ -1306,7 +1308,9 @@ const updateVatInfoFromDB = async (userId: string, payload: {
   return {
     country: user.country,
     isVatRegistered: user.isVatRegistered,
+    isVatRegisted: user.isVatRegistered,
     vatRegistrationNumber: user.vatRegistrationNumber,
+    vatRegistration: user.vatRegistrationNumber,
   }
 }
 
