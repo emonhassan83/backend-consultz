@@ -73,16 +73,16 @@ const createBookings = async (payload: TBookings, userId: string) => {
     }
 
     // 🔥 NEW CHECK: Prevent same user from booking the same slot again if it's still booked
-    const unpaidBooking = await Booking.findOne({
-      user: userId,
-      consult: consult?._id,
-      slot: slotId,
-      isDeleted: false,
-      paymentStatus: PAYMENT_STATUS.unpaid,
-    }).session(session)
-    if (unpaidBooking) {
-      return unpaidBooking
-    }
+    // const unpaidBooking = await Booking.findOne({
+    //   user: userId,
+    //   consult: consult?._id,
+    //   slot: slotId,
+    //   isDeleted: false,
+    //   paymentStatus: PAYMENT_STATUS.unpaid,
+    // }).session(session)
+    // if (unpaidBooking) {
+    //   return unpaidBooking
+    // }
 
     const existingBooking = await Booking.findOne({
       consult: consult?._id,
@@ -193,9 +193,9 @@ const createBookings = async (payload: TBookings, userId: string) => {
     throw error instanceof AppError
       ? error
       : new AppError(
-          httpStatus.INTERNAL_SERVER_ERROR,
-          'Failed to create booking',
-        )
+        httpStatus.INTERNAL_SERVER_ERROR,
+        'Failed to create booking',
+      )
   } finally {
     session.endSession()
   }
@@ -1133,9 +1133,9 @@ const completedBooking = async (
     throw error instanceof AppError
       ? error
       : new AppError(
-          httpStatus.INTERNAL_SERVER_ERROR,
-          error.message || 'Failed to complete booking',
-        )
+        httpStatus.INTERNAL_SERVER_ERROR,
+        error.message || 'Failed to complete booking',
+      )
   } finally {
     session.endSession()
   }
