@@ -95,6 +95,7 @@ const createBookings = async (payload: TBookings, userId: string) => {
           BOOKING_STATUS.declined,
         ],
       }, // ignore bookings
+      paymentStatus: PAYMENT_STATUS.paid
     }).session(session)
 
     if (existingBooking) {
