@@ -23,10 +23,11 @@ router.put(
   contentsController.createOrUpdateContent,
 )
 
+// Get all general contents
+router.get('/general', contentsController.getGeneralContents)
+
 // Get single content by key
 router.get('/', contentsController.getContent)
 
-// Get all general contents
-router.get('/', contentsController.getGeneralContents)
 
 export const contentsRoutes = router
