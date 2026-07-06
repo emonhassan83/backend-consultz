@@ -69,7 +69,7 @@ const registerUserIntoDB = async (
     // Already active user
     throw new AppError(
       httpStatus.FORBIDDEN,
-      'User already exists with this email',
+      `A ${existingUser.role} account already exists with this email. Please use a different email.`,
     )
   }
 
