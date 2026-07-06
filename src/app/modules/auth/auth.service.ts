@@ -97,6 +97,7 @@ const loginUser = async (payload: TLoginUser) => {
       status: user.status,
       registerWith: user.registerWith,
       deviceType: payload.deviceType || user.deviceType,
+      timeZone: user.timeZone,
     },
   }
 }
