@@ -11,6 +11,7 @@ import {
 import { createReminderEmailContent } from '../utils/emailNotify'
 import emailSender from '../utils/emailSender'
 import { TBookings } from '../modules/booking/booking.interface'
+import { TUser } from '../modules/user/user.interface'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -53,6 +54,8 @@ export const timeSensitiveNotificationsJob = async (): Promise<void> => {
   }[] = []
 
   const emailPromises: Promise<void>[] = []
+  const tenMinReminderSentBookingIds: string[] = []
+  const joinCallReminderSentBookingIds: string[] = []
 
   for (const booking of todayBookings) {
     const slot = booking.slot
@@ -82,7 +85,8 @@ export const timeSensitiveNotificationsJob = async (): Promise<void> => {
     const sessionInfo = `${booking.localDate} • ${booking.localTime} (${bookingTimezone})`
 
     // ── 10-minute reminder ────────────────────────────────────────────────────
-    if (timeToStartMinutes >= 9 && timeToStartMinutes <= 10) {
+    if (timeToStartMinutes <= 10 && timeToStartMinutes >= 2 && !booking.is10MinReminderSent) {
+      tenMinReminderSentBookingIds.push(booking._id.toString())
       if (user.fcmToken && user.pushNotify?.scheduleRemainder) {
         notificationsToSend.push({
           userId: user._id.toString(),
@@ -131,8 +135,9 @@ export const timeSensitiveNotificationsJob = async (): Promise<void> => {
       }
     }
 
-    // ── Join call reminder (0–1 min before start) ─────────────────────────────
-    if (timeToStartMinutes >= 0 && timeToStartMinutes <= 1) {
+    // ── Join call reminder (0–1 min before start or up to 3 min after) ──────
+    if (timeToStartMinutes <= 1 && timeToStartMinutes >= -3 && !booking.isJoinCallReminderSent) {
+      joinCallReminderSentBookingIds.push(booking._id.toString())
       if (user.fcmToken && user.pushNotify?.scheduleRemainder) {
         notificationsToSend.push({
           userId: user._id.toString(),
@@ -194,10 +199,25 @@ export const timeSensitiveNotificationsJob = async (): Promise<void> => {
         sendBookingsNotification(
           n.action as TBookingNotifyAction,
           n.booking,
-          userMap.get(n.userId),
+          userMap.get(n.userId) as TUser,
+          userMap.get(n.booking.consult.toString()) as TUser,
           n.slot,
         ),
       ),
+    )
+  }
+
+  if (tenMinReminderSentBookingIds.length > 0) {
+    await Booking.updateMany(
+      { _id: { $in: tenMinReminderSentBookingIds } },
+      { is10MinReminderSent: true }
+    )
+  }
+
+  if (joinCallReminderSentBookingIds.length > 0) {
+    await Booking.updateMany(
+      { _id: { $in: joinCallReminderSentBookingIds } },
+      { isJoinCallReminderSent: true }
     )
   }
 

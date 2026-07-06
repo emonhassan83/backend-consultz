@@ -78,13 +78,13 @@ export const sendSessionCompletedToConsultant = async (
   consult: TUser,
   booking: TBookings,
   user: TUser,
-  consultAmount: number,
+  payment: any,
 ) => {
   if (!consult?.email) return
   await emailSender(
     consult.email,
     'Session Completed – Payment Processing',
-    sessionCompletedToConsultantTemplate(consult, booking, user, consultAmount),
+    sessionCompletedToConsultantTemplate(consult, booking, user, payment),
   ).catch((err) => console.error(`Session completed email failed (consult ${consult._id}):`, err))
 }
 
@@ -161,12 +161,13 @@ export const sendPaymentSuccessToUser = async (
   user: TUser,
   booking: TBookings,
   expert: TUser,
+  payment?: any,
 ) => {
   if (!user?.email || !user.emailNotify?.payment) return
   await emailSender(
     user.email,
     'Payment Successful – Booking Pending Approval',
-    paymentSuccessToUserTemplate(user, booking, expert),
+    paymentSuccessToUserTemplate(user, booking, expert, payment),
   ).catch((err) => console.error(`Payment success email failed (user ${user._id}):`, err))
 }
 

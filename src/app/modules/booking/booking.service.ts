@@ -633,6 +633,7 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
         'cancellation',
         cancelledBooking,
         booker,
+        expert as TUser,
         slot,
         { cancelledBy },
       )
@@ -642,6 +643,7 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
         'cancellation',
         cancelledBooking,
         expert,
+        expert as TUser,
         slot,
         { cancelledBy },
       )
@@ -810,7 +812,8 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
         'confirmed',
         updatedBooking,
         user,
-        updatedBooking.slot,
+        updatedBooking.consult as any,
+        updatedBooking.slot as any,
       )
     }
 
@@ -931,14 +934,14 @@ const declineBooking = async (
 
     // 7. Push notification to booker
     if (booker && booker.fcmToken && booker.pushNotify?.bookingAndSchedule) {
-      await sendBookingsNotification('declined', updatedBooking, booker, slot, {
+      await sendBookingsNotification('declined', updatedBooking, booker, expert as TUser, slot as any, {
         cancelledBy: 'booker',
       })
     }
 
     // 8. Push notification to expert (optional — self declined)
     if (expert && expert.fcmToken && expert.pushNotify?.bookingAndSchedule) {
-      await sendBookingsNotification('declined', updatedBooking, expert, slot, {
+      await sendBookingsNotification('declined', updatedBooking, expert, expert as TUser, slot as any, {
         cancelledBy: 'consult',
       })
     }
@@ -1043,7 +1046,6 @@ const completedBooking = async (
       booking: bookingId,
       isDeleted: false,
     })
-      .select('consultAmount')
       .session(session)
       .lean()
 
@@ -1112,7 +1114,8 @@ const completedBooking = async (
           'completed',
           updatedBooking,
           consultant,
-          updatedBooking.slot,
+          consultant as TUser,
+          updatedBooking.slot as any,
         )
       }
 
@@ -1122,7 +1125,7 @@ const completedBooking = async (
           consultant,
           updatedBooking,
           booker as TUser,
-          consultAmount,
+          paymentRecord,
         )
       }
     }
@@ -1240,13 +1243,13 @@ const rescheduleBooking = async (
 
     // 11. Send notification (reschedule)
     if (user && user?.fcmToken && user.pushNotify?.bookingAndSchedule)
-      await sendBookingsNotification('reschedule', booking, user, newSlot)
+      await sendBookingsNotification('reschedule', booking, user, consultant as TUser, newSlot)
     if (
       consultant &&
       consultant?.fcmToken &&
       consultant.pushNotify?.bookingAndSchedule
     )
-      await sendBookingsNotification('reschedule', booking, consultant, newSlot)
+      await sendBookingsNotification('reschedule', booking, consultant, consultant as TUser, newSlot)
 
     // sent reschedule email
     if (user && consultant) {

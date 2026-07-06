@@ -12,6 +12,8 @@ import { BOOKING_STATUS, PAYMENT_STATUS } from '../modules/booking/booking.const
 import { sendBookingsNotification } from '../modules/booking/booking.utils'
 import { sendNotRespondedEmail } from '../utils/emailNotify'
 import config from '../config'
+import { TUser } from '../modules/user/user.interface'
+import { TBookingSlots } from '../modules/bookingSlots/bookingSlots.interface'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -31,21 +33,21 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
     // ✅ Server এর current UTC time — booking এর timezone দিয়ে আলাদাভাবে check হবে
     const nowUtc = dayjs.utc()
 
-    const oldConfirmedBookings = await Booking.find({
-      status: BOOKING_STATUS.confirmed,
+    const oldBookings = await Booking.find({
+      status: { $in: [BOOKING_STATUS.confirmed, BOOKING_STATUS.pending] },
       isDeleted: false,
     })
       .populate('slot')
       .session(session)
 
-    console.log(`Found ${oldConfirmedBookings.length} confirmed bookings to check`)
+    console.log(`Found ${oldBookings.length} bookings to check`)
 
     // ✅ postCommitTasks — session commit এর পরে email/push পাঠাবো
     const postCommitTasks: (() => Promise<void>)[] = []
 
     let updatedCount = 0
 
-    for (const booking of oldConfirmedBookings) {
+    for (const booking of oldBookings) {
       const slot = booking.slot as any
 
       if (!slot?.date || !slot?.time) {
@@ -72,14 +74,17 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
 
       // ✅ UTC এ convert করে compare — timezone-safe
       const bookingStartUtc = bookingStartLocal.utc()
-      const hoursSinceStart = nowUtc.diff(bookingStartUtc, 'hour', true)
+      const minutesSinceStart = nowUtc.diff(bookingStartUtc, 'minute', true)
 
       console.log(
-        `Booking ${booking._id} | tz: ${bookingTimezone} | start: ${bookingStartLocal.format()} | hours since: ${hoursSinceStart.toFixed(2)}`,
+        `Booking ${booking._id} | tz: ${bookingTimezone} | start: ${bookingStartLocal.format()} | minutes since start: ${minutesSinceStart.toFixed(2)}`,
       )
 
-      // 24 ঘণ্টা পার না হলে skip
-      if (hoursSinceStart < 24) continue
+      if (booking.status === BOOKING_STATUS.confirmed) {
+        if (minutesSinceStart < booking.sessionDuration) continue
+      } else if (booking.status === BOOKING_STATUS.pending) {
+        if (minutesSinceStart < 0) continue
+      }
 
       // ── Mark as not_responded ──────────────────────────────────────────────
       await Booking.findByIdAndUpdate(
@@ -138,13 +143,13 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
 
       postCommitTasks.push(async () => {
         if (booker?.fcmToken && booker.pushNotify?.bookingAndSchedule) {
-          await sendBookingsNotification('not_responded', capturedBooking, booker, slotInfo).catch(
+          await sendBookingsNotification('not_responded', capturedBooking, booker as TUser, expert as TUser, slotInfo as TBookingSlots).catch(
             (err) => console.error(`Push failed (booker ${booker._id}):`, err),
           )
         }
 
         if (expert?.fcmToken && expert.pushNotify?.bookingAndSchedule) {
-          await sendBookingsNotification('not_responded', capturedBooking, expert, slotInfo).catch(
+          await sendBookingsNotification('not_responded', capturedBooking, booker as TUser, expert as TUser, slotInfo as TBookingSlots).catch(
             (err) => console.error(`Push failed (expert ${expert._id}):`, err),
           )
         }

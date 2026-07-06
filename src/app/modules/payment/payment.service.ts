@@ -233,12 +233,12 @@ const confirmPayment = async (payload: {
 
     /* ========= 6. Notifications ========= */
     const [consult, user] = await Promise.all([
-      User.findById(booking.consult).select('fcmToken emailNotify firstName lastName email'),
+      User.findById(booking.consult).select('fcmToken emailNotify firstName lastName email country isVatRegistered vatRegistrationNumber'),
       User.findById(userId).select('emailNotify firstName lastName email')
     ])
 
     if (consult?.fcmToken) {
-      await sendBookingsNotification('pending', booking, consult, booking.slot)
+      await sendBookingsNotification('pending', booking, consult, consult as unknown as TUser, booking.slot as any)
     }
 
     // sent expert to new booking request add
@@ -248,7 +248,7 @@ const confirmPayment = async (payload: {
 
     // user got notification when they are paid
     if (user?.emailNotify?.payment) {
-      await sendPaymentSuccessToUser(user, booking, consult as TUser)
+      await sendPaymentSuccessToUser(user, booking, consult as TUser, payment)
     }
 
     return {

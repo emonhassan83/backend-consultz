@@ -94,6 +94,14 @@ const bookingsSchema = new Schema<TBookings>(
     respondedAt: {
       type: Date,
     },
+    is10MinReminderSent: {
+      type: Boolean,
+      default: false,
+    },
+    isJoinCallReminderSent: {
+      type: Boolean,
+      default: false,
+    },
     isDeleted: { type: Boolean, default: false },
   },
   {

@@ -5,6 +5,8 @@ import { SESSION_TYPE } from './booking.constants'
 import { Chat } from '../chat/chat.models'
 import { Message } from '../messages/messages.models'
 import mongoose from 'mongoose'
+import { TUser } from '../user/user.interface'
+import { TBookingSlots } from '../bookingSlots/bookingSlots.interface'
 
 // Helper: booking IDs থেকে unread message count batch fetch
 export const getUnreadMessageCountsBatch = async (
@@ -71,6 +73,7 @@ export const getUnreadMessageCount = async (
 
 export type TBookingNotifyAction =
   | 'pending'
+  | 'pending_reminder'
   | 'confirmed'
   | 'declined'
   | 'cancellation'
@@ -98,8 +101,9 @@ const formatSessionType = (type: string) => {
 export const sendBookingsNotification = async (
   action: TBookingNotifyAction,
   booking: any,
-  user: any,
-  slot: any,
+  user: TUser,
+  expert: TUser,
+  slot: TBookingSlots,
   extra?: { cancelledBy?: 'booker' | 'consult' },
 ) => {
   if (!user?.fcmToken) return
@@ -108,10 +112,10 @@ export const sendBookingsNotification = async (
   const sessionInfo = `${slot?.date || 'N/A'} at ${slot?.time || 'N/A'} (${booking.timezone || 'UTC'})`
 
   // Determine who is the "other party" (the person the receiver is interacting with)
-  const isReceiverUser = user._id.toString() === booking.user?._id?.toString()
+  const isReceiverUser = user._id.toString() === user?._id?.toString()
   const otherPartyName = isReceiverUser
-    ? booking.consult?.firstName || 'your expert'
-    : booking.user?.firstName || 'your client'
+    ? expert?.firstName || 'your expert'
+    : user?.firstName || 'your client'
 
   let message = ''
   let description = ''
@@ -119,17 +123,22 @@ export const sendBookingsNotification = async (
   switch (action) {
     case 'pending':
       message = messages.booking.request
-      description = `${sessionTypeFormatted} session requested with ${booking.user.firstName} on ${sessionInfo}`
+      description = `${sessionTypeFormatted} session requested with ${user.firstName} on ${sessionInfo}`
+      break
+
+    case 'pending_reminder':
+      message = 'Booking Request Reminder'
+      description = `Reminder: ${sessionTypeFormatted} session requested by ${user?.firstName || 'your client'} on ${sessionInfo}`
       break
 
     case 'confirmed':
       message = messages.booking.confirmed
-      description = `${sessionTypeFormatted} session with ${booking.consult.firstName} on ${sessionInfo}`
+      description = `${sessionTypeFormatted} session with ${expert.firstName} on ${sessionInfo}`
       break
 
     case 'declined':
       message = messages.booking.declined
-      description = `${sessionTypeFormatted} session with ${booking.consult.firstName} was declined.`
+      description = `${sessionTypeFormatted} session with ${expert.firstName} was declined.`
       break
 
     case 'cancellation':
@@ -139,7 +148,7 @@ export const sendBookingsNotification = async (
       } else if (extra?.cancelledBy === 'consult') {
         description = `${sessionTypeFormatted} session on ${sessionInfo} was cancelled by user.`
       } else {
-        description = `${sessionTypeFormatted} session with ${booking.consult.firstName} on ${sessionInfo} cancelled`
+        description = `${sessionTypeFormatted} session with ${expert.firstName} on ${sessionInfo} cancelled`
       }
       break
 
@@ -150,7 +159,7 @@ export const sendBookingsNotification = async (
 
     case 'reschedule':
       message = messages.booking.rescheduled
-      description = `${sessionTypeFormatted} session with ${booking.consult.firstName} rescheduled to ${sessionInfo}`
+      description = `${sessionTypeFormatted} session with ${expert.firstName} rescheduled to ${sessionInfo}`
       break
 
     case 'morning_reminder':
@@ -174,14 +183,14 @@ export const sendBookingsNotification = async (
       break
 
     case 'join_call':
-      message = messages.bookingSchedule.join_call
-      description = `Your ${sessionTypeFormatted} session with ${otherPartyName} is starting now`
+      message = 'Call is Live!'
+      description = `Your ${sessionTypeFormatted} session with ${otherPartyName} is live. Join the call immediately!`
       break
 
     default:
       throw new Error('Invalid booking notification action')
   }
-  
+
   const notifyPayload = {
     receiver: user._id,
     message,

@@ -163,17 +163,32 @@ export const sessionCompletedToConsultantTemplate = (
   consult: TUser,
   booking: TBookings,
   user: TUser,
-  consultAmount: number,
+  payment: any,
 ): string => {
   const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
 
+  const isPaymentObject = typeof payment === 'object' && payment !== null
+  const consultAmount = isPaymentObject ? payment.consultAmount : payment
+  const expertVatOwed = isPaymentObject ? payment.expertVatOwed : 0
+  const expertNet = isPaymentObject ? payment.expertNet : consultAmount
+
+  const rows = [
+    { label: 'Session', value: sessionInfo },
+    { label: 'Net Earnings', value: `£${(expertNet || 0).toFixed(2)}` },
+  ]
+
+  if (isPaymentObject && payment.isExpertVatRegistered) {
+    rows.push({ label: 'VAT Owed', value: `£${(expertVatOwed || 0).toFixed(2)}` })
+  }
+
+  rows.push(
+    { label: 'Total Earnings', value: `£${(consultAmount || 0).toFixed(2)}` },
+    { label: 'Status', value: 'Payment Processing' }
+  )
+
   const body = `
     ${para(`Your session with <strong>${user.firstName} ${user.lastName}</strong> has been successfully completed.`)}
-    ${infoBlock([
-      { label: 'Session', value: sessionInfo },
-      { label: 'Earnings', value: `£${consultAmount.toFixed(2)}` },
-      { label: 'Status', value: 'Payment Processing' },
-    ])}
+    ${infoBlock(rows)}
     ${noticeBlock('Your payment is being processed and will be transferred to your connected account soon.')}
     ${para('Thank you for your service on Consultz.')}
   `
@@ -318,18 +333,37 @@ export const paymentSuccessToUserTemplate = (
   user: TUser,
   booking: TBookings,
   expert: TUser,
+  payment?: any,
 ): string => {
   const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
 
+  const isPaymentObject = typeof payment === 'object' && payment !== null
+  const subtotal = isPaymentObject ? payment.consultationFee : booking.price
+  const vatAmount = isPaymentObject ? payment.consultantVat : 0
+  const totalAmount = isPaymentObject ? payment.amount : booking.price
+  const isExpertVatRegistered = isPaymentObject ? payment.isExpertVatRegistered : false
+  const vatNumber = expert.vatRegistrationNumber || 'N/A'
+
+  const rows = [
+    { label: 'Expert', value: `${expert.firstName} ${expert.lastName}` },
+    { label: 'Session Type', value: booking.sessionType },
+    { label: 'Date & Time', value: sessionInfo },
+  ]
+
+  if (isExpertVatRegistered) {
+    rows.push({ label: 'Expert VAT Registration Number', value: vatNumber })
+  }
+
+  rows.push(
+    { label: 'Subtotal (excl. VAT)', value: `£${(subtotal || 0).toFixed(2)}` },
+    { label: 'VAT (Tax)', value: `£${(vatAmount || 0).toFixed(2)}` },
+    { label: 'Total Amount Paid (incl. VAT)', value: `£${(totalAmount || 0).toFixed(2)}` }
+  )
+
   const body = `
     ${para('Your payment has been successfully processed. Your booking is now pending approval from the consultant.')}
-    ${infoBlock([
-      { label: 'Expert', value: `${expert.firstName} ${expert.lastName}` },
-      { label: 'Session Type', value: booking.sessionType },
-      { label: 'Date & Time', value: sessionInfo },
-      { label: 'Amount Paid', value: `£${booking.price}` },
-    ])}
-    ${noticeBlock('You will be notified once the consultant confirms your booking.')}
+    ${infoBlock(rows)}
+    ${noticeBlock('This receipt can be used by VAT-registered businesses for tax purposes. You will be notified once the consultant confirms your booking.')}
     ${para('Thank you for choosing Consultz!')}
   `
 

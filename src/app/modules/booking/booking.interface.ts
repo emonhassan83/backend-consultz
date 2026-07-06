@@ -27,6 +27,8 @@ export interface TBookings {
   status: TBookingStatus
   isDeleted: boolean
   respondedAt?: Date
+  is10MinReminderSent?: boolean
+  isJoinCallReminderSent?: boolean
   createdAt?: Date
   updatedAt?: Date
 }

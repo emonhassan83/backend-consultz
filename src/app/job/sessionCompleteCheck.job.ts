@@ -12,6 +12,7 @@ import { BOOKING_STATUS } from '../modules/booking/booking.constants'
 import { WITHDRAW_STATUS } from '../modules/withdraw/withdraw.constant'
 import { sendWithdrawNotify } from '../modules/withdraw/withdraw.utils'
 import { sendSessionCompletedToConsultant } from '../utils/emailNotify'
+import { TPayment } from '../modules/payment/payment.interface'
 
 export const sessionCompleteCheckJob = async (): Promise<void> => {
   console.log('Session Complete Check Job started')
@@ -79,7 +80,7 @@ export const sessionCompleteCheckJob = async (): Promise<void> => {
         continue
       }
 
-      const payment = await Payment.findOne({
+      const payment: TPayment | null = await Payment.findOne({
         booking: booking._id.toString(),
         isPaid: true,
         isDeleted: false,
@@ -139,7 +140,7 @@ export const sessionCompleteCheckJob = async (): Promise<void> => {
           consultant as any,
           booking as any,
           booker as any,
-          payment.consultAmount,
+          payment,
         ).catch((err) =>
           console.error(`Email failed (booking ${booking._id}):`, err),
         )

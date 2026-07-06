@@ -6,6 +6,7 @@ import { expertResponseTimeRewardJob } from './expertResponseTimeReward.job'
 import { timeSensitiveNotificationsJob } from './timeSensitiveNotifications.job'
 import { autoMarkNotRespondedJob } from './autoMarkNotResponded.job'
 import { sessionCompleteCheckJob } from './sessionCompleteCheck.job'
+import { pendingBookingReminderJob } from './pendingBookingReminder.job'
 
 // All cron schedules run in UTC — booking-level timezones are handled inside each job
 const CRON_TIMEZONE = 'UTC'
@@ -18,6 +19,7 @@ let responseTimeRewardJobRunning = false
 let timeSensitiveJobRunning = false
 let notRespondedJobRunning = false
 let sessionCompleteJobRunning = false
+let pendingBookingReminderJobRunning = false
 
 export const initializeCronJobs = () => {
   console.log('🕒 Starting background jobs...')
@@ -145,6 +147,24 @@ export const initializeCronJobs = () => {
         console.error('❌ Session complete check job error:', err)
       } finally {
         sessionCompleteJobRunning = false
+      }
+    },
+    { timezone: CRON_TIMEZONE },
+  )
+
+  // 8. Pending booking reminder — runs every 10 minutes
+  // Sends reminder notifications to experts if a booking request remains pending
+  cron.schedule(
+    '*/10 * * * *',
+    async () => {
+      if (pendingBookingReminderJobRunning) return
+      pendingBookingReminderJobRunning = true
+      try {
+        await pendingBookingReminderJob()
+      } catch (err) {
+        console.error('❌ Pending booking reminder job error:', err)
+      } finally {
+        pendingBookingReminderJobRunning = false
       }
     },
     { timezone: CRON_TIMEZONE },
