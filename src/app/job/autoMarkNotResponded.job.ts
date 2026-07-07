@@ -83,7 +83,9 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
       if (booking.status === BOOKING_STATUS.confirmed) {
         if (minutesSinceStart < booking.sessionDuration) continue
       } else if (booking.status === BOOKING_STATUS.pending) {
-        if (minutesSinceStart < 0) continue
+        // Give the expert a short grace period at the scheduled start before
+        // expiring an unaccepted request and refunding the consultee.
+        if (minutesSinceStart < 5) continue
       }
 
       // ── Mark as not_responded ──────────────────────────────────────────────
@@ -100,31 +102,11 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
       )
 
       // ── Refund ────────────────────────────────────────────────────────────
-      let refundProcessed = false
-
       const payment = await Payment.findOne({
         booking: booking._id as any,
         isPaid: true,
         isDeleted: false,
       }).session(session)
-
-      if (payment?.paymentIntentId) {
-        try {
-          await stripe.refunds.create({
-            payment_intent: payment.paymentIntentId,
-            amount: payment.amount * 100,
-          })
-          await Payment.updateOne(
-            { _id: payment._id },
-            { status: PAYMENT_STATUS.refunded },
-            { session },
-          )
-          refundProcessed = true
-          console.log(`✅ Refund processed for booking ${booking._id}`)
-        } catch (refundError: any) {
-          console.error(`Refund failed for booking ${booking._id}:`, refundError.message)
-        }
-      }
 
       // ── Fetch user data for notifications ─────────────────────────────────
       const [booker, expert, slotInfo] = await Promise.all([
@@ -139,9 +121,36 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
 
       // ✅ Session commit এর পরে push/email পাঠাবো
       const capturedBooking = booking
-      const capturedRefundProcessed = refundProcessed
+      const capturedPayment = payment
 
       postCommitTasks.push(async () => {
+        let refundProcessed = false
+
+        // Run Stripe only after MongoDB commits. The idempotency key prevents
+        // duplicate refunds if this task is retried.
+        if (capturedPayment?.paymentIntentId) {
+          try {
+            await stripe.refunds.create(
+              {
+                payment_intent: capturedPayment.paymentIntentId,
+                amount: Math.round(capturedPayment.amount * 100),
+              },
+              { idempotencyKey: `booking-not-responded-${capturedBooking._id}` },
+            )
+            await Payment.updateOne(
+              { _id: capturedPayment._id },
+              { status: PAYMENT_STATUS.refunded },
+            )
+            refundProcessed = true
+            console.log(`Refund processed for booking ${capturedBooking._id}`)
+          } catch (refundError: any) {
+            console.error(
+              `Refund failed for booking ${capturedBooking._id}:`,
+              refundError.message,
+            )
+          }
+        }
+
         if (booker?.fcmToken && booker.pushNotify?.bookingAndSchedule) {
           await sendBookingsNotification('not_responded', capturedBooking, booker as TUser, expert as TUser, slotInfo as TBookingSlots).catch(
             (err) => console.error(`Push failed (booker ${booker._id}):`, err),
@@ -149,7 +158,9 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
         }
 
         if (expert?.fcmToken && expert.pushNotify?.bookingAndSchedule) {
-          await sendBookingsNotification('not_responded', capturedBooking, booker as TUser, expert as TUser, slotInfo as TBookingSlots).catch(
+          await sendBookingsNotification('not_responded', capturedBooking, expert as TUser, expert as TUser, slotInfo as TBookingSlots, {
+            otherPartyName: booker?.firstName || 'your client',
+          }).catch(
             (err) => console.error(`Push failed (expert ${expert._id}):`, err),
           )
         }
@@ -159,7 +170,7 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
             booker as any,
             expert as any,
             capturedBooking as any,
-            capturedRefundProcessed,
+            refundProcessed,
           ).catch((err) => console.error(`Email failed for booking ${capturedBooking._id}:`, err))
         }
       })

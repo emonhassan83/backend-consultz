@@ -96,10 +96,10 @@ export const initializeCronJobs = () => {
     { timezone: CRON_TIMEZONE },
   )
 
-  // 5. Time-sensitive notifications — runs every 5 minutes
+  // 5. Time-sensitive notifications — runs every minute
   // Sends 10-min reminders and join-call notifications per booking timezone
   cron.schedule(
-    '*/5 * * * *',
+    '* * * * *',
     async () => {
       if (timeSensitiveJobRunning) return
       timeSensitiveJobRunning = true
@@ -114,11 +114,12 @@ export const initializeCronJobs = () => {
     { timezone: CRON_TIMEZONE },
   )
 
-  // 6. Auto-mark not responded — runs at midnight UTC
-  // Marks confirmed bookings as not_responded if 24h has passed (per booking timezone)
+  // 6. Auto-mark not responded — runs every minute
+  // Expires pending bookings after a 5-minute grace period and marks missed
+  // confirmed sessions after their scheduled duration.
   // Also frees the slot and issues a Stripe refund
   cron.schedule(
-    '0 0 * * *',
+    '* * * * *',
     async () => {
       if (notRespondedJobRunning) return
       notRespondedJobRunning = true

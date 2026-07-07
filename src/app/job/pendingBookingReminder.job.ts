@@ -30,6 +30,7 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
   for (const booking of pendingBookings) {
     const slot = booking.slot as any
     const expert = booking.consult as any
+    const booker = booking.user as any
 
     if (!slot || !expert) continue
 
@@ -60,6 +61,7 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
           expert as TUser,
           expert as TUser,
           slot,
+          { requesterName: booker?.firstName || 'your client' },
         )
         console.log(`Pending reminder notification sent to expert ${expert._id} for booking ${booking._id}`)
       } catch (err) {

@@ -104,7 +104,11 @@ export const sendBookingsNotification = async (
   user: TUser,
   expert: TUser,
   slot: TBookingSlots,
-  extra?: { cancelledBy?: 'booker' | 'consult' },
+  extra?: {
+    cancelledBy?: 'booker' | 'consult'
+    otherPartyName?: string
+    requesterName?: string
+  },
 ) => {
   if (!user?.fcmToken) return
 
@@ -112,10 +116,10 @@ export const sendBookingsNotification = async (
   const sessionInfo = `${slot?.date || 'N/A'} at ${slot?.time || 'N/A'} (${booking.timezone || 'UTC'})`
 
   // Determine who is the "other party" (the person the receiver is interacting with)
-  const isReceiverUser = user._id.toString() === user?._id?.toString()
-  const otherPartyName = isReceiverUser
+  const isReceiverBooker = user._id.toString() === booking.user?.toString()
+  const otherPartyName = extra?.otherPartyName || (isReceiverBooker
     ? expert?.firstName || 'your expert'
-    : user?.firstName || 'your client'
+    : 'your client')
 
   let message = ''
   let description = ''
@@ -123,12 +127,12 @@ export const sendBookingsNotification = async (
   switch (action) {
     case 'pending':
       message = messages.booking.request
-      description = `${sessionTypeFormatted} session requested with ${user.firstName} on ${sessionInfo}`
+      description = `${sessionTypeFormatted} session requested by ${extra?.requesterName || 'a client'} on ${sessionInfo}`
       break
 
     case 'pending_reminder':
       message = 'Booking Request Reminder'
-      description = `Reminder: ${sessionTypeFormatted} session requested by ${user?.firstName || 'your client'} on ${sessionInfo}`
+      description = `Reminder: ${sessionTypeFormatted} session requested by ${extra?.requesterName || 'your client'} on ${sessionInfo}`
       break
 
     case 'confirmed':
@@ -138,17 +142,17 @@ export const sendBookingsNotification = async (
 
     case 'declined':
       message = messages.booking.declined
-      description = `${sessionTypeFormatted} session with ${expert.firstName} was declined.`
+      description = `${sessionTypeFormatted} session with ${otherPartyName} was declined.`
       break
 
     case 'cancellation':
       message = messages.booking.cancellation
       if (extra?.cancelledBy === 'booker') {
-        description = `${sessionTypeFormatted} session on ${sessionInfo} was cancelled by consult.`
+        description = `${sessionTypeFormatted} session on ${sessionInfo} was cancelled by the client.`
       } else if (extra?.cancelledBy === 'consult') {
-        description = `${sessionTypeFormatted} session on ${sessionInfo} was cancelled by user.`
+        description = `${sessionTypeFormatted} session on ${sessionInfo} was cancelled by the consultant.`
       } else {
-        description = `${sessionTypeFormatted} session with ${expert.firstName} on ${sessionInfo} cancelled`
+        description = `${sessionTypeFormatted} session with ${otherPartyName} on ${sessionInfo} was cancelled.`
       }
       break
 
@@ -159,7 +163,7 @@ export const sendBookingsNotification = async (
 
     case 'reschedule':
       message = messages.booking.rescheduled
-      description = `${sessionTypeFormatted} session with ${expert.firstName} rescheduled to ${sessionInfo}`
+      description = `${sessionTypeFormatted} session with ${otherPartyName} rescheduled to ${sessionInfo}`
       break
 
     case 'morning_reminder':

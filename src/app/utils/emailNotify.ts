@@ -181,10 +181,14 @@ export const sendNotRespondedEmail = async (
   const tasks: Promise<void>[] = []
 
   if (user?.email && user.emailNotify?.booking) {
+    const userSubject = refundProcessed
+      ? 'Your Booking Has Been Cancelled – Full Refund Initiated'
+      : 'Your Booking Has Been Cancelled – Refund Processing Update'
+
     tasks.push(
       emailSender(
         user.email,
-        'Your Booking Has Been Cancelled – Full Refund Initiated',
+        userSubject,
         notRespondedToUserTemplate(user, consult, booking, refundProcessed),
       ).catch((err) => console.error(`Not responded email failed (user ${user._id}):`, err)),
     )

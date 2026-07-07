@@ -288,16 +288,16 @@ export const notRespondedToUserTemplate = (
     ${
       refundProcessed
         ? noticeBlock(
-            `Your booking has been cancelled successfully, and a full refund of <strong>£${booking.price}</strong> has been initiated. The amount will be credited back to your original payment method within <strong>5 to 10 business days</strong>, depending on your bank's processing time. If you do not see the refund after 10 business days, please contact your bank or reach out to our support team.`,
+            `Your booking has been cancelled successfully, and a full refund of <strong>£${booking.price}</strong> has been initiated. The amount will be credited back to your original payment method within approximately <strong>3 to 7 business days</strong>, depending on your bank's processing time. If you do not see the refund after this period, please contact your bank or reach out to our support team.`,
             'info',
           )
         : noticeBlock(
-            'Your booking has been cancelled. No payment was collected, so no refund is required.',
+            `Your booking has been cancelled. We received your payment of <strong>£${booking.price}</strong>, but the refund could not be initiated automatically. Our support team will review it and arrange the full refund to your original payment method.`,
             'info',
           )
     }
 
-    ${para('We sincerely apologies for the inconvenience caused. The consultant\'s reliability score has been affected as a result of this missed session.')}
+    ${para('We sincerely apologise. The consultant\'s reliability score has been affected as a result of this missed session.')}
     ${para('You are welcome to rebook with another consultant at any time. If you need further assistance, please contact our support team.')}
   `
 

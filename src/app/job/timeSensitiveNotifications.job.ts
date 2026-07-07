@@ -1,7 +1,6 @@
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
-import { BookingSlots } from '../modules/bookingSlots/bookingSlots.model'
 import { Booking } from '../modules/booking/booking.models'
 import { User } from '../modules/user/user.model'
 import {
@@ -16,19 +15,20 @@ import { TUser } from '../modules/user/user.interface'
 dayjs.extend(utc)
 dayjs.extend(timezone)
 
-export const timeSensitiveNotificationsJob = async (): Promise<void> => {
+export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise<void> => {
   // Current time in UTC — each booking's timezone will be used for comparison
   const nowUtc = dayjs.utc()
-  const todayUtcDate = nowUtc.format('YYYY-MM-DD')
 
-  // Fetch today's slot IDs (based on UTC date — slots store UTC date strings)
-  const todaySlots = await BookingSlots.find({ date: todayUtcDate }).distinct('_id')
-
-  // Fetch all confirmed bookings for today's slots
+  // Avoid a UTC-date slot pre-filter: slot date/time must be interpreted using
+  // each booking's timezone, especially around midnight and date boundaries.
   const todayBookings = (await Booking.find({
-    slot: { $in: todaySlots },
+    ...(bookingId ? { _id: bookingId } : {}),
     status: 'confirmed',
     isDeleted: false,
+    $or: [
+      { is10MinReminderSent: { $ne: true } },
+      { isJoinCallReminderSent: { $ne: true } },
+    ],
   })
     .populate('slot')
     .lean()) as any[]
@@ -51,11 +51,14 @@ export const timeSensitiveNotificationsJob = async (): Promise<void> => {
     action: string
     booking: TBookings
     slot: any
+    reminderType: 'ten_min' | 'join_call'
   }[] = []
 
   const emailPromises: Promise<void>[] = []
   const tenMinReminderSentBookingIds: string[] = []
   const joinCallReminderSentBookingIds: string[] = []
+  const failedTenMinBookingIds = new Set<string>()
+  const failedJoinCallBookingIds = new Set<string>()
 
   for (const booking of todayBookings) {
     const slot = booking.slot
@@ -85,7 +88,7 @@ export const timeSensitiveNotificationsJob = async (): Promise<void> => {
     const sessionInfo = `${booking.localDate} • ${booking.localTime} (${bookingTimezone})`
 
     // ── 10-minute reminder ────────────────────────────────────────────────────
-    if (timeToStartMinutes <= 10 && timeToStartMinutes >= 2 && !booking.is10MinReminderSent) {
+    if (timeToStartMinutes <= 10 && timeToStartMinutes >= 0 && !booking.is10MinReminderSent) {
       tenMinReminderSentBookingIds.push(booking._id.toString())
       if (user.fcmToken && user.pushNotify?.scheduleRemainder) {
         notificationsToSend.push({
@@ -94,6 +97,7 @@ export const timeSensitiveNotificationsJob = async (): Promise<void> => {
           action: '10min_reminder',
           booking,
           slot,
+          reminderType: 'ten_min',
         })
       }
       if (consult.fcmToken && consult.pushNotify?.scheduleRemainder) {
@@ -103,6 +107,7 @@ export const timeSensitiveNotificationsJob = async (): Promise<void> => {
           action: '10min_reminder',
           booking,
           slot,
+          reminderType: 'ten_min',
         })
       }
       if (user.email && user.emailNotify?.schedule) {
@@ -116,7 +121,11 @@ export const timeSensitiveNotificationsJob = async (): Promise<void> => {
               sessionInfo,
               false,
             ),
-          ).catch((err) => console.error(`10min email failed (user ${user._id}):`, err)),
+          ).catch((err) => {
+            failedTenMinBookingIds.add(booking._id.toString())
+            console.error(`10min email failed (user ${user._id}):`, err)
+            throw err
+          }),
         )
       }
       if (consult.email && consult.emailNotify?.schedule) {
@@ -130,7 +139,11 @@ export const timeSensitiveNotificationsJob = async (): Promise<void> => {
               sessionInfo,
               false,
             ),
-          ).catch((err) => console.error(`10min email failed (consult ${consult._id}):`, err)),
+          ).catch((err) => {
+            failedTenMinBookingIds.add(booking._id.toString())
+            console.error(`10min email failed (consult ${consult._id}):`, err)
+            throw err
+          }),
         )
       }
     }
@@ -145,6 +158,7 @@ export const timeSensitiveNotificationsJob = async (): Promise<void> => {
           action: 'join_call',
           booking,
           slot,
+          reminderType: 'join_call',
         })
       }
       if (consult.fcmToken && consult.pushNotify?.scheduleRemainder) {
@@ -154,6 +168,7 @@ export const timeSensitiveNotificationsJob = async (): Promise<void> => {
           action: 'join_call',
           booking,
           slot,
+          reminderType: 'join_call',
         })
       }
       if (user.email && user.emailNotify?.schedule) {
@@ -167,7 +182,11 @@ export const timeSensitiveNotificationsJob = async (): Promise<void> => {
               sessionInfo,
               true,
             ),
-          ).catch((err) => console.error(`Join email failed (user ${user._id}):`, err)),
+          ).catch((err) => {
+            failedJoinCallBookingIds.add(booking._id.toString())
+            console.error(`Join email failed (user ${user._id}):`, err)
+            throw err
+          }),
         )
       }
       if (consult.email && consult.emailNotify?.schedule) {
@@ -181,7 +200,11 @@ export const timeSensitiveNotificationsJob = async (): Promise<void> => {
               sessionInfo,
               true,
             ),
-          ).catch((err) => console.error(`Join email failed (consult ${consult._id}):`, err)),
+          ).catch((err) => {
+            failedJoinCallBookingIds.add(booking._id.toString())
+            console.error(`Join email failed (consult ${consult._id}):`, err)
+            throw err
+          }),
         )
       }
     }
@@ -202,21 +225,40 @@ export const timeSensitiveNotificationsJob = async (): Promise<void> => {
           userMap.get(n.userId) as TUser,
           userMap.get(n.booking.consult.toString()) as TUser,
           n.slot,
-        ),
+          {
+            otherPartyName:
+              n.userId === n.booking.user.toString()
+                ? userMap.get(n.booking.consult.toString())?.firstName || 'your expert'
+                : userMap.get(n.booking.user.toString())?.firstName || 'your client',
+          },
+        ).catch((error) => {
+          const failedSet = n.reminderType === 'ten_min'
+            ? failedTenMinBookingIds
+            : failedJoinCallBookingIds
+          failedSet.add(n.booking._id!.toString())
+          throw error
+        }),
       ),
     )
   }
 
-  if (tenMinReminderSentBookingIds.length > 0) {
+  const successfulTenMinIds = tenMinReminderSentBookingIds.filter(
+    (id) => !failedTenMinBookingIds.has(id),
+  )
+  const successfulJoinCallIds = joinCallReminderSentBookingIds.filter(
+    (id) => !failedJoinCallBookingIds.has(id),
+  )
+
+  if (successfulTenMinIds.length > 0) {
     await Booking.updateMany(
-      { _id: { $in: tenMinReminderSentBookingIds } },
+      { _id: { $in: successfulTenMinIds } },
       { is10MinReminderSent: true }
     )
   }
 
-  if (joinCallReminderSentBookingIds.length > 0) {
+  if (successfulJoinCallIds.length > 0) {
     await Booking.updateMany(
-      { _id: { $in: joinCallReminderSentBookingIds } },
+      { _id: { $in: successfulJoinCallIds } },
       { isJoinCallReminderSent: true }
     )
   }

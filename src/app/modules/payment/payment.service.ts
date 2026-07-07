@@ -238,7 +238,14 @@ const confirmPayment = async (payload: {
     ])
 
     if (consult?.fcmToken) {
-      await sendBookingsNotification('pending', booking, consult, consult as unknown as TUser, booking.slot as any)
+      await sendBookingsNotification(
+        'pending',
+        booking,
+        consult,
+        consult as unknown as TUser,
+        booking.slot as any,
+        { requesterName: user?.firstName || 'a client' },
+      )
     }
 
     // sent expert to new booking request add

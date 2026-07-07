@@ -29,6 +29,7 @@ import isoWeek from 'dayjs/plugin/isoWeek'
 import { modeType } from '../notification/notification.interface'
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore'
 import { TUser } from '../user/user.interface'
+import { timeSensitiveNotificationsJob } from '../../job/timeSensitiveNotifications.job'
 
 dayjs.extend(isSameOrBefore)
 dayjs.extend(isoWeek)
@@ -645,7 +646,10 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
         expert,
         expert as TUser,
         slot,
-        { cancelledBy },
+        {
+          cancelledBy,
+          otherPartyName: booker?.firstName || 'your client',
+        },
       )
     }
 
@@ -819,6 +823,12 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
 
     await session.commitTransaction()
 
+    // A booking may be accepted inside the normal reminder window. Evaluate it
+    // immediately so it does not depend on the next cron tick.
+    await timeSensitiveNotificationsJob(bookingId).catch((error) =>
+      console.error(`Immediate reminder failed for booking ${bookingId}:`, error),
+    )
+
     return updatedBooking
   } catch (error) {
     await session.abortTransaction()
@@ -943,6 +953,7 @@ const declineBooking = async (
     if (expert && expert.fcmToken && expert.pushNotify?.bookingAndSchedule) {
       await sendBookingsNotification('declined', updatedBooking, expert, expert as TUser, slot as any, {
         cancelledBy: 'consult',
+        otherPartyName: booker?.firstName || 'your client',
       })
     }
 
@@ -1249,7 +1260,14 @@ const rescheduleBooking = async (
       consultant?.fcmToken &&
       consultant.pushNotify?.bookingAndSchedule
     )
-      await sendBookingsNotification('reschedule', booking, consultant, consultant as TUser, newSlot)
+      await sendBookingsNotification(
+        'reschedule',
+        booking,
+        consultant,
+        consultant as TUser,
+        newSlot,
+        { otherPartyName: user?.firstName || 'your client' },
+      )
 
     // sent reschedule email
     if (user && consultant) {
