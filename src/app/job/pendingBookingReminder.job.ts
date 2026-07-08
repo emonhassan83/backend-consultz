@@ -39,7 +39,10 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
     const expert = booking.consult as any
     const booker = booking.user as any
 
-    if (!slot || !expert) continue
+    if (!slot || !expert) {
+      console.warn(`Booking ${booking._id} is missing its slot or expert; reminder skipped.`)
+      continue
+    }
 
     // Determine booking slot start time in UTC
     const bookingTimezone = booking.timezone || 'UTC'
@@ -69,7 +72,7 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
     // Send push notification if expert has it enabled
     if (expert.fcmToken && expert.pushNotify?.bookingAndSchedule) {
       try {
-        await sendBookingsNotification(
+        const deliveryResult = await sendBookingsNotification(
           'pending_reminder',
           booking,
           expert as TUser,
@@ -77,6 +80,11 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
           slot,
           { requesterName: booker?.firstName || 'your client' },
         )
+
+        if (!deliveryResult || deliveryResult.successCount < 1) {
+          throw new Error('Firebase did not deliver the reminder to the expert token')
+        }
+
         await Booking.updateOne(
           { _id: booking._id, status: BOOKING_STATUS.pending },
           { lastPendingReminderSentAt: new Date() },
@@ -85,6 +93,10 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
       } catch (err) {
         console.error(`Failed to send pending reminder notification for booking ${booking._id}:`, err)
       }
+    } else {
+      console.log(
+        `Pending reminder skipped for booking ${booking._id}: expert has no FCM token or booking notifications are disabled.`,
+      )
     }
   }
 

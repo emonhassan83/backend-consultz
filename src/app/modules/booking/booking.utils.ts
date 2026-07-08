@@ -203,5 +203,5 @@ export const sendBookingsNotification = async (
     modelType: modeType.Booking,
   }
 
-  await sendNotification([user.fcmToken], notifyPayload)
+  return await sendNotification([user.fcmToken], notifyPayload)
 }
