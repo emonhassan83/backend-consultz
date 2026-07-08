@@ -98,14 +98,26 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
       }
 
       // ── Mark as not_responded ──────────────────────────────────────────────
-      await Booking.findByIdAndUpdate(
-        booking._id,
+      const markedBooking = await Booking.findOneAndUpdate(
+        {
+          _id: booking._id,
+          status: booking.status,
+          slot: slot._id,
+          updatedAt: booking.updatedAt,
+        },
         { status: BOOKING_STATUS.not_responded, respondedAt: new Date() },
-        { session },
+        { session, new: true },
       )
 
+      // The booking was rescheduled/updated after this job read it. Never mark
+      // a stale schedule as not responded.
+      if (!markedBooking) {
+        console.log(`Booking ${booking._id} changed while being checked; skipping stale expiry.`)
+        continue
+      }
+
       await BookingSlots.findByIdAndUpdate(
-        booking.slot,
+        slot._id,
         { isBooked: false },
         { session },
       )

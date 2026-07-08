@@ -1191,18 +1191,29 @@ const rescheduleBooking = async (
       )
     }
 
-    // 3. Only confirmed bookings can be rescheduled
-    // if (booking.status !== BOOKING_STATUS.confirmed) {
-    //   throw new AppError(
-    //     httpStatus.BAD_REQUEST,
-    //     'Only confirmed bookings can be rescheduled',
-    //   )
-    // }
+    // 3. Only active bookings can be rescheduled. A closed booking must never
+    // be moved back into the active lifecycle.
+    if (
+      booking.status !== BOOKING_STATUS.confirmed &&
+      booking.status !== BOOKING_STATUS.pending
+    ) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        `A ${booking.status} booking cannot be rescheduled`,
+      )
+    }
 
     // 4. Find the new slot
     const newSlot = await BookingSlots.findById(payload.slot).session(session)
     if (!newSlot) {
       throw new AppError(httpStatus.BAD_REQUEST, 'New slot not found')
+    }
+
+    if (newSlot.author.toString() !== booking.consult._id.toString()) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'The new slot does not belong to this consultant',
+      )
     }
 
     // 5. New slot must not be already booked
@@ -1211,8 +1222,25 @@ const rescheduleBooking = async (
     }
 
     // 6. Validate new slot date & time (must be in future + buffer)
-    const slotDateTimeStr = `${newSlot.date} ${newSlot.time}` // e.g. "2025-02-10 14:00"
-    const slotDateTime = dayjs(slotDateTimeStr, 'YYYY-MM-DD HH:mm')
+    const bookingTimezone = booking.timezone || 'UTC'
+    const hasValidLocalDateTime = dayjs(
+      `${payload.localDate} ${payload.localTime}`,
+      'YYYY-MM-DD HH:mm',
+      true,
+    ).isValid()
+    const rescheduledDate = hasValidLocalDateTime ? payload.localDate : newSlot.date
+    const rescheduledTime = hasValidLocalDateTime ? payload.localTime : newSlot.time
+
+    let slotDateTime: dayjs.Dayjs
+    try {
+      slotDateTime = dayjs.tz(
+        `${rescheduledDate} ${rescheduledTime}`,
+        'YYYY-MM-DD HH:mm',
+        bookingTimezone,
+      )
+    } catch {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid booking timezone')
+    }
 
     if (!slotDateTime.isValid()) {
       throw new AppError(
@@ -1221,10 +1249,10 @@ const rescheduleBooking = async (
       )
     }
 
-    const now = dayjs()
+    const now = dayjs.utc()
     const minBufferMinutes = 60 // Minimum advance time required (adjustable)
 
-    if (slotDateTime.isBefore(now.add(minBufferMinutes, 'minute'))) {
+    if (slotDateTime.utc().isBefore(now.add(minBufferMinutes, 'minute'))) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
         `New slot must be at least ${minBufferMinutes} minutes in the future. Slot time: ${slotDateTime.format('YYYY-MM-DD HH:mm')}`,
@@ -1232,17 +1260,39 @@ const rescheduleBooking = async (
     }
 
     // 7. Free up the old slot
-    const oldSlot = await BookingSlots.findById(booking.slot).session(session)
+    const oldSlotId = (booking.slot as any)._id || booking.slot
+    const oldSlot = await BookingSlots.findById(oldSlotId).session(session)
     if (oldSlot) {
       oldSlot.isBooked = false
       await oldSlot.save({ session })
     }
 
-    // 8. Assign new slot to booking
-    booking.slot = new mongoose.Types.ObjectId(newSlot._id)
-    booking.localDate = payload.localDate
-    booking.localTime = payload.localTime
-    await booking.save({ session })
+    // 8. Atomically assign the new schedule and reset schedule-specific flags.
+    const updatedBooking = await Booking.findOneAndUpdate(
+      {
+        _id: booking._id,
+        status: booking.status,
+        slot: oldSlotId,
+      },
+      {
+        $set: {
+          slot: newSlot._id,
+          localDate: rescheduledDate,
+          localTime: rescheduledTime,
+          is10MinReminderSent: false,
+          isJoinCallReminderSent: false,
+          lastPendingReminderSentAt: null,
+        },
+      },
+      { new: true, session },
+    )
+
+    if (!updatedBooking) {
+      throw new AppError(
+        httpStatus.CONFLICT,
+        'Booking schedule changed concurrently. Please try again.',
+      )
+    }
 
     // 9. Mark new slot as booked
     newSlot.isBooked = true
@@ -1256,7 +1306,7 @@ const rescheduleBooking = async (
 
     // 11. Send notification (reschedule)
     if (user && user?.fcmToken && user.pushNotify?.bookingAndSchedule)
-      await sendBookingsNotification('reschedule', booking, user, consultant as TUser, newSlot)
+      await sendBookingsNotification('reschedule', updatedBooking, user, consultant as TUser, newSlot)
     if (
       consultant &&
       consultant?.fcmToken &&
@@ -1264,7 +1314,7 @@ const rescheduleBooking = async (
     )
       await sendBookingsNotification(
         'reschedule',
-        booking,
+        updatedBooking,
         consultant,
         consultant as TUser,
         newSlot,
@@ -1273,11 +1323,11 @@ const rescheduleBooking = async (
 
     // sent reschedule email
     if (user && consultant) {
-      await sendRescheduleEmail(user, consultant, booking)
+      await sendRescheduleEmail(user, consultant, updatedBooking)
     }
 
     await session.commitTransaction()
-    return booking
+    return updatedBooking
   } catch (error) {
     await session.abortTransaction()
     throw error
