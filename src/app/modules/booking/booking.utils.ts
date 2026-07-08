@@ -113,7 +113,7 @@ export const sendBookingsNotification = async (
   if (!user?.fcmToken) return
 
   const sessionTypeFormatted = formatSessionType(booking.sessionType)
-  const sessionInfo = `${slot?.date || 'N/A'} at ${slot?.time || 'N/A'} (${booking.timezone || 'UTC'})`
+  const sessionInfo = `${booking.localDate || slot?.date || 'N/A'} at ${booking.localTime || slot?.time || 'N/A'} (${booking.timezone || 'UTC'})`
 
   // Determine who is the "other party" (the person the receiver is interacting with)
   const isReceiverBooker = user._id.toString() === booking.user?.toString()
@@ -178,7 +178,7 @@ export const sendBookingsNotification = async (
 
     case '10min_reminder':
       message = messages.bookingSchedule.reminder
-      description = `Your ${sessionTypeFormatted} session with ${otherPartyName} starts at ${slot?.time || 'N/A'}`
+      description = `Your ${sessionTypeFormatted} session with ${otherPartyName} starts at ${booking.localTime || slot?.time || 'N/A'} (${booking.timezone || 'UTC'})`
       break
 
     case 'dms_closing':
