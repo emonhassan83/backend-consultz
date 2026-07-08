@@ -130,7 +130,9 @@ const createBookings = async (payload: TBookings, userId: string) => {
     // 5. Assign payload values
     payload.user = new mongoose.Types.ObjectId(userData._id)
     payload.slot = new mongoose.Types.ObjectId(slotTime._id)
-    payload.timezone = consult.timeZone || 'UTC'
+    // Keep the timezone associated with localDate/localTime when the client
+    // supplies it. Fall back to the consultant's slot timezone for old clients.
+    payload.timezone = payload.timezone || consult.timeZone || 'UTC'
     payload.status = BOOKING_STATUS.pending
     payload.isExpertVatRegistered = !!(
       consult.isVatRegistered && consult.vatRegistrationNumber

@@ -153,10 +153,10 @@ export const initializeCronJobs = () => {
     { timezone: CRON_TIMEZONE },
   )
 
-  // 8. Pending booking reminder — runs every 10 minutes
-  // Sends reminder notifications to experts if a booking request remains pending
+  // 8. Pending booking reminder — checks every minute
+  // Each pending booking is reminded at most once every 10 minutes.
   cron.schedule(
-    '*/10 * * * *',
+    '* * * * *',
     async () => {
       if (pendingBookingReminderJobRunning) return
       pendingBookingReminderJobRunning = true

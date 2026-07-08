@@ -1,6 +1,7 @@
 // jobs/autoMarkNotResponded.job.ts
 import dayjs from 'dayjs'
 import timezone from 'dayjs/plugin/timezone'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
 import utc from 'dayjs/plugin/utc'
 import mongoose from 'mongoose'
 import Stripe from 'stripe'
@@ -17,6 +18,7 @@ import { TBookingSlots } from '../modules/bookingSlots/bookingSlots.interface'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
+dayjs.extend(customParseFormat)
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2026-06-24.dahlia',
@@ -57,19 +59,26 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
 
       // ✅ booking.timezone use করে booking start time বের করো
       const bookingTimezone = booking.timezone || 'UTC'
+      const hasValidLocalDateTime = Boolean(
+        booking.localDate &&
+        booking.localTime &&
+        dayjs(`${booking.localDate} ${booking.localTime}`, 'YYYY-MM-DD HH:mm', true).isValid(),
+      )
+      const bookingDate = hasValidLocalDateTime ? booking.localDate : slot.date
+      const bookingTime = hasValidLocalDateTime ? booking.localTime : slot.time
 
       let bookingStartLocal: dayjs.Dayjs
 
       try {
         // booking এর local timezone এ start time parse করো
         bookingStartLocal = dayjs.tz(
-          `${slot.date} ${slot.time}`,
+          `${bookingDate} ${bookingTime}`,
           'YYYY-MM-DD HH:mm',
           bookingTimezone,
         )
       } catch {
         console.warn(`Invalid timezone "${bookingTimezone}" for booking ${booking._id} — falling back to UTC`)
-        bookingStartLocal = dayjs.utc(`${slot.date} ${slot.time}`, 'YYYY-MM-DD HH:mm')
+        bookingStartLocal = dayjs.utc(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm')
       }
 
       // ✅ UTC এ convert করে compare — timezone-safe

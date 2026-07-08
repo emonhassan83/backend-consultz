@@ -1,6 +1,7 @@
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { Booking } from '../modules/booking/booking.models'
 import { BOOKING_STATUS } from '../modules/booking/booking.constants'
 import { sendBookingsNotification } from '../modules/booking/booking.utils'
@@ -8,6 +9,7 @@ import { TUser } from '../modules/user/user.interface'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
+dayjs.extend(customParseFormat)
 
 export const pendingBookingReminderJob = async (): Promise<void> => {
   console.log('Pending Booking Reminder Job Started')
@@ -20,6 +22,11 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
     status: BOOKING_STATUS.pending,
     isDeleted: false,
     createdAt: { $lte: tenMinutesAgo },
+    $or: [
+      { lastPendingReminderSentAt: { $exists: false } },
+      { lastPendingReminderSentAt: null },
+      { lastPendingReminderSentAt: { $lte: tenMinutesAgo } },
+    ],
   })
     .populate('slot')
     .populate('consult')
@@ -36,14 +43,21 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
 
     // Determine booking slot start time in UTC
     const bookingTimezone = booking.timezone || 'UTC'
+    const hasValidLocalDateTime = Boolean(
+      booking.localDate &&
+      booking.localTime &&
+      dayjs(`${booking.localDate} ${booking.localTime}`, 'YYYY-MM-DD HH:mm', true).isValid(),
+    )
+    const bookingDate = hasValidLocalDateTime ? booking.localDate : slot.date
+    const bookingTime = hasValidLocalDateTime ? booking.localTime : slot.time
     let bookingStartUtc: dayjs.Dayjs
 
     try {
       bookingStartUtc = dayjs
-        .tz(`${slot.date} ${slot.time}`, 'YYYY-MM-DD HH:mm', bookingTimezone)
+        .tz(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm', bookingTimezone)
         .utc()
     } catch {
-      bookingStartUtc = dayjs.utc(`${slot.date} ${slot.time}`, 'YYYY-MM-DD HH:mm')
+      bookingStartUtc = dayjs.utc(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm')
     }
 
     // If the slot start time has already passed, the booking is expired/cannot be accepted anymore
@@ -62,6 +76,10 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
           expert as TUser,
           slot,
           { requesterName: booker?.firstName || 'your client' },
+        )
+        await Booking.updateOne(
+          { _id: booking._id, status: BOOKING_STATUS.pending },
+          { lastPendingReminderSentAt: new Date() },
         )
         console.log(`Pending reminder notification sent to expert ${expert._id} for booking ${booking._id}`)
       } catch (err) {

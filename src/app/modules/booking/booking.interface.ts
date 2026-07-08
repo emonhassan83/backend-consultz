@@ -29,6 +29,7 @@ export interface TBookings {
   respondedAt?: Date
   is10MinReminderSent?: boolean
   isJoinCallReminderSent?: boolean
+  lastPendingReminderSentAt?: Date | null
   createdAt?: Date
   updatedAt?: Date
 }

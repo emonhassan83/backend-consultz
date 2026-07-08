@@ -1,6 +1,7 @@
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { Booking } from '../modules/booking/booking.models'
 import { User } from '../modules/user/user.model'
 import {
@@ -14,6 +15,7 @@ import { TUser } from '../modules/user/user.interface'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
+dayjs.extend(customParseFormat)
 
 export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise<void> => {
   // Current time in UTC — each booking's timezone will be used for comparison
@@ -69,17 +71,24 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
 
     // Use the booking's own timezone to determine the session start time
     const bookingTimezone = booking.timezone || 'UTC'
+    const hasValidLocalDateTime = Boolean(
+      booking.localDate &&
+      booking.localTime &&
+      dayjs(`${booking.localDate} ${booking.localTime}`, 'YYYY-MM-DD HH:mm', true).isValid(),
+    )
+    const bookingDate = hasValidLocalDateTime ? booking.localDate : slot.date
+    const bookingTime = hasValidLocalDateTime ? booking.localTime : slot.time
 
     let bookingStartUtc: dayjs.Dayjs
 
     try {
       // Parse slot date+time in booking's local timezone, then convert to UTC
       bookingStartUtc = dayjs
-        .tz(`${slot.date} ${slot.time}`, 'YYYY-MM-DD HH:mm', bookingTimezone)
+        .tz(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm', bookingTimezone)
         .utc()
     } catch {
       // Fallback to UTC parsing if timezone is invalid
-      bookingStartUtc = dayjs.utc(`${slot.date} ${slot.time}`, 'YYYY-MM-DD HH:mm')
+      bookingStartUtc = dayjs.utc(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm')
     }
 
     // How many minutes until session starts (from now in UTC)

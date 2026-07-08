@@ -102,6 +102,10 @@ const bookingsSchema = new Schema<TBookings>(
       type: Boolean,
       default: false,
     },
+    lastPendingReminderSentAt: {
+      type: Date,
+      default: null,
+    },
     isDeleted: { type: Boolean, default: false },
   },
   {

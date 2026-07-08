@@ -21,6 +21,8 @@ const createValidationSchema = z.object({
       .number()
       .nonnegative({ message: 'Price must be zero or a positive number' }),
     timezone: z.string().min(1, { message: 'Timezone is required' }).optional(),
+    localDate: z.string().min(1, { message: 'Local date is required' }).optional(),
+    localTime: z.string().min(1, { message: 'Local time is required' }).optional(),
     mainQuestion: z.string().min(1, { message: 'Main question is required' }),
     challengeQuestion: z
       .string()
