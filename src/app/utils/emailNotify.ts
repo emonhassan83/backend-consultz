@@ -79,12 +79,13 @@ export const sendSessionCompletedToConsultant = async (
   booking: TBookings,
   user: TUser,
   payment: any,
+  holdDays?: number,
 ) => {
   if (!consult?.email) return
   await emailSender(
     consult.email,
     'Session Completed – Payment Processing',
-    sessionCompletedToConsultantTemplate(consult, booking, user, payment),
+    sessionCompletedToConsultantTemplate(consult, booking, user, payment, holdDays),
   ).catch((err) => console.error(`Session completed email failed (consult ${consult._id}):`, err))
 }
 

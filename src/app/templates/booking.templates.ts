@@ -164,13 +164,29 @@ export const sessionCompletedToConsultantTemplate = (
   booking: TBookings,
   user: TUser,
   payment: any,
+  holdDays = 7,
 ): string => {
   const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
 
   const isPaymentObject = typeof payment === 'object' && payment !== null
+  const formatMoney = (amount?: number) => `£${Number(amount || 0).toFixed(2)}`
+  const formatPercent = (percentage?: number) => `${Number(percentage || 0).toFixed(2)}%`
+
+  const consultationFee = isPaymentObject ? payment.consultationFee : booking.price
+  const consultantVat = isPaymentObject ? payment.consultantVat : 0
+  const clientPaid = isPaymentObject ? payment.amount : booking.price
+  const platformCommission = isPaymentObject ? payment.platformCommission : 0
+  const platformVat = isPaymentObject ? payment.platformVat : 0
+  const platformTotal = isPaymentObject ? payment.platformTotal : 0
   const consultAmount = isPaymentObject ? payment.consultAmount : payment
   const expertVatOwed = isPaymentObject ? payment.expertVatOwed : 0
   const expertNet = isPaymentObject ? payment.expertNet : consultAmount
+  const expertVatPercentage =
+    consultationFee > 0 ? (consultantVat / consultationFee) * 100 : 0
+  const platformCommissionPercentage =
+    consultationFee > 0 ? (platformCommission / consultationFee) * 100 : 0
+  const platformVatPercentage =
+    platformCommission > 0 ? (platformVat / platformCommission) * 100 : 0
 
   const rows = [
     { label: 'Session', value: sessionInfo },
@@ -186,10 +202,40 @@ export const sessionCompletedToConsultantTemplate = (
     { label: 'Status', value: 'Payment Processing' }
   )
 
+  rows.length = 0
+  rows.push(
+    { label: 'Session', value: sessionInfo },
+    { label: 'Client Paid', value: formatMoney(clientPaid) },
+    { label: 'Consultation Fee', value: formatMoney(consultationFee) },
+  )
+
+  if (isPaymentObject && payment.isExpertVatRegistered) {
+    rows.push({
+      label: `Expert VAT (${formatPercent(expertVatPercentage)})`,
+      value: formatMoney(consultantVat),
+    })
+  }
+
+  rows.push(
+    {
+      label: `Platform Commission (${formatPercent(platformCommissionPercentage)})`,
+      value: formatMoney(platformCommission),
+    },
+    {
+      label: `Platform VAT (${formatPercent(platformVatPercentage)})`,
+      value: formatMoney(platformVat),
+    },
+    { label: 'Total Platform Deduction', value: formatMoney(platformTotal) },
+    { label: 'Amount Scheduled for Transfer', value: formatMoney(consultAmount) },
+    { label: 'Expert VAT to Account For', value: formatMoney(expertVatOwed) },
+    { label: 'Net Earnings After VAT', value: formatMoney(expertNet) },
+    { label: 'Status', value: 'Payment Processing' },
+  )
+
   const body = `
     ${para(`Your session with <strong>${user.firstName} ${user.lastName}</strong> has been successfully completed.`)}
     ${infoBlock(rows)}
-    ${noticeBlock('Your payment is being processed and will be transferred to your connected account soon.')}
+    ${noticeBlock(`Your payment will remain on hold for <strong>${holdDays} day${holdDays === 1 ? '' : 's'}</strong> after session completion. Once the hold period ends, the transfer amount will be sent to your connected Stripe account automatically. If your Stripe account is not connected, the withdrawal will stay on hold until you connect it.`)}
     ${para('Thank you for your service on Consultz.')}
   `
 

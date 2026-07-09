@@ -17,6 +17,7 @@ import {
 import QueryBuilder from '../../builder/QueryBuilder'
 import { BookingSlots } from '../bookingSlots/bookingSlots.model'
 import { Payment } from '../payment/payment.model'
+import { Contents } from '../contents/contents.models'
 import Stripe from 'stripe'
 import config from '../../config'
 import {
@@ -1133,12 +1134,17 @@ const completedBooking = async (
       }
 
       if (consultant.emailNotify?.booking) {
+        const paymentHoldDaysContent = await Contents.findOne({ key: 'paymentHoldDays' })
+          .session(session)
+          .lean()
+        const holdDays = paymentHoldDaysContent?.value || 7
         // ✅ consultAmount pass করুন
         await sendSessionCompletedToConsultant(
           consultant,
           updatedBooking,
           booker as TUser,
           paymentRecord,
+          holdDays,
         )
       }
     }

@@ -141,6 +141,7 @@ export const sessionCompleteCheckJob = async (): Promise<void> => {
           booking as any,
           booker as any,
           payment,
+          holdDays,
         ).catch((err) =>
           console.error(`Email failed (booking ${booking._id}):`, err),
         )
