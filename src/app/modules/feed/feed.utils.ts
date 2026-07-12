@@ -207,3 +207,70 @@ export const sendFeedNotificationToUser = async (
 
   await sendNotification([user.fcmToken], notifyPayload);
 };
+
+// file upload utils
+export const getFileExtension = (file: Express.Multer.File) => {
+  const extensionFromName = file.originalname?.split('.').pop()?.toLowerCase()
+  if (extensionFromName && extensionFromName !== file.originalname) {
+    return extensionFromName
+  }
+
+  const extensionByMimeType: Record<string, string> = {
+    'image/avif': 'avif',
+    'image/bmp': 'bmp',
+    'image/heic': 'heic',
+    'image/heif': 'heif',
+    'image/gif': 'gif',
+    'image/jp2': 'jp2',
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/pjpeg': 'jpg',
+    'image/png': 'png',
+    'image/svg+xml': 'svg',
+    'image/tiff': 'tiff',
+    'image/vnd.microsoft.icon': 'ico',
+    'image/webp': 'webp',
+    'video/3gpp': '3gp',
+    'video/3gpp2': '3g2',
+    'video/avi': 'avi',
+    'video/divx': 'divx',
+    'video/h261': 'h261',
+    'video/h263': 'h263',
+    'video/h264': 'h264',
+    'video/h265': 'h265',
+    'video/iso.segment': 'm4s',
+    'video/jpeg': 'jpgv',
+    'video/mj2': 'mj2',
+    'video/mp4': 'mp4',
+    'video/mpeg': 'mpeg',
+    'video/ogg': 'ogv',
+    'video/quicktime': 'mov',
+    'video/vnd.avi': 'avi',
+    'video/vnd.dlna.mpeg-tts': 'ts',
+    'video/vnd.mpegurl': 'mxu',
+    'video/vnd.ms-playready.media.pyv': 'pyv',
+    'video/vnd.uvvu.mp4': 'uvu',
+    'video/vnd.vivo': 'viv',
+    'video/webm': 'webm',
+    'video/x-f4v': 'f4v',
+    'video/x-flv': 'flv',
+    'video/x-m4v': 'm4v',
+    'video/x-matroska': 'mkv',
+    'video/x-ms-asf': 'asf',
+    'video/x-ms-vob': 'vob',
+    'video/x-ms-wm': 'wm',
+    'video/x-ms-wmv': 'wmv',
+    'video/x-msvideo': 'avi',
+    'video/x-sgi-movie': 'movie',
+  }
+
+  return extensionByMimeType[file.mimetype.toLowerCase()]
+}
+
+export const generateFeedFilePath = (file: Express.Multer.File) => {
+  const contentType = file.mimetype.split('/')[0]
+  const randomId = Math.floor(100000 + Math.random() * 900000)
+  const extension = getFileExtension(file)
+
+  return `${contentType}s/${randomId}${extension ? `.${extension}` : ''}`
+}

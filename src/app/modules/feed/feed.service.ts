@@ -8,6 +8,7 @@ import { ContentMetaService } from '../contentMeta/contentMeta.service'
 import { uploadToS3 } from '../../utils/s3'
 import {
   enrichFeedWithUserInfo,
+  generateFeedFilePath,
   getReportedStatusBatch,
   getReportsForFeed,
   notifyFollowersOnNewPost,
@@ -42,9 +43,7 @@ const createFeedIntoDB = async (
         );
       }
 
-      const contentType = mimeType.split('/')[0];
-      const randomId = Math.floor(100000 + Math.random() * 900000);
-      const filePath = `${contentType}s/${randomId}`;
+      const filePath = generateFeedFilePath(file);
 
       const url = (await uploadToS3({ file, fileName: filePath })) as string;
       uploadedUrls.push(url);
@@ -264,9 +263,7 @@ const updateFeedFromDB = async (
         )
       }
 
-      const contentType = mimeType.split('/')[0] // 'image' or 'video'
-      const randomId = Math.floor(100000 + Math.random() * 900000)
-      const filePath = `${contentType}s/${randomId}`
+      const filePath = generateFeedFilePath(file)
 
       const url = (await uploadToS3({ file, fileName: filePath })) as string
       uploadedUrls.push(url)
