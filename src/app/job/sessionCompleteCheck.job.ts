@@ -8,7 +8,7 @@ import { Payment } from '../modules/payment/payment.model'
 import { Withdraw } from '../modules/withdraw/withdraw.model'
 import { User } from '../modules/user/user.model'
 import { Contents } from '../modules/contents/contents.models'
-import { BOOKING_STATUS } from '../modules/booking/booking.constants'
+import { BOOKING_STATUS, PAYMENT_STATUS } from '../modules/booking/booking.constants'
 import { WITHDRAW_STATUS } from '../modules/withdraw/withdraw.constant'
 import { sendWithdrawNotify } from '../modules/withdraw/withdraw.utils'
 import { sendSessionCompletedToConsultant } from '../utils/emailNotify'
@@ -21,6 +21,7 @@ export const sessionCompleteCheckJob = async (): Promise<void> => {
 
   const runningBookings = await Booking.find({
     status: BOOKING_STATUS.running,
+    paymentStatus: PAYMENT_STATUS.paid,
     isDeleted: false,
     sessionStartedAt: { $exists: true, $ne: null },
   }).lean()
@@ -54,6 +55,7 @@ export const sessionCompleteCheckJob = async (): Promise<void> => {
       const liveBooking = await Booking.findOne({
         _id: booking._id,
         status: BOOKING_STATUS.running,
+        paymentStatus: PAYMENT_STATUS.paid,
       }).session(session)
 
       if (!liveBooking) {

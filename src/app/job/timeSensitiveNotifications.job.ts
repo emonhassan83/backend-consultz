@@ -3,6 +3,7 @@ import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { Booking } from '../modules/booking/booking.models'
+import { BOOKING_STATUS, PAYMENT_STATUS } from '../modules/booking/booking.constants'
 import { User } from '../modules/user/user.model'
 import {
   sendBookingsNotification,
@@ -25,7 +26,8 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
   // each booking's timezone, especially around midnight and date boundaries.
   const todayBookings = (await Booking.find({
     ...(bookingId ? { _id: bookingId } : {}),
-    status: 'confirmed',
+    status: BOOKING_STATUS.confirmed,
+    paymentStatus: PAYMENT_STATUS.paid,
     isDeleted: false,
     $or: [
       { is10MinReminderSent: { $ne: true } },

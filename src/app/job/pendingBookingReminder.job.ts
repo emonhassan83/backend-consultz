@@ -3,7 +3,7 @@ import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { Booking } from '../modules/booking/booking.models'
-import { BOOKING_STATUS } from '../modules/booking/booking.constants'
+import { BOOKING_STATUS, PAYMENT_STATUS } from '../modules/booking/booking.constants'
 import { sendBookingsNotification } from '../modules/booking/booking.utils'
 import { TUser } from '../modules/user/user.interface'
 
@@ -20,6 +20,7 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
   // Find all pending bookings created at least 10 minutes ago
   const pendingBookings = await Booking.find({
     status: BOOKING_STATUS.pending,
+    paymentStatus: PAYMENT_STATUS.paid,
     isDeleted: false,
     createdAt: { $lte: tenMinutesAgo },
     $or: [

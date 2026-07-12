@@ -2,7 +2,7 @@ import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import { User } from '../modules/user/user.model'
 import { Booking } from '../modules/booking/booking.models'
-import { BOOKING_STATUS } from '../modules/booking/booking.constants'
+import { BOOKING_STATUS, PAYMENT_STATUS } from '../modules/booking/booking.constants'
 import { USER_ROLE, USER_STATUS } from '../modules/user/user.constant'
 import { sendNotification } from '../utils/sentNotification'
 import { modeType } from '../modules/notification/notification.interface'
@@ -34,6 +34,7 @@ export const expertReliabilityRewardJob = async (): Promise<void> => {
     const noShowCount = await Booking.countDocuments({
       consult: expert._id,
       status: BOOKING_STATUS.not_responded,
+      paymentStatus: PAYMENT_STATUS.paid,
       updatedAt: { $gte: thirtyDaysAgo },
       isDeleted: false,
     })

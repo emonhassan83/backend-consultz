@@ -37,6 +37,7 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
 
     const oldBookings = await Booking.find({
       status: { $in: [BOOKING_STATUS.confirmed, BOOKING_STATUS.pending] },
+      paymentStatus: PAYMENT_STATUS.paid,
       isDeleted: false,
     })
       .populate('slot')
@@ -102,6 +103,7 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
         {
           _id: booking._id,
           status: booking.status,
+          paymentStatus: PAYMENT_STATUS.paid,
           slot: slot._id,
           updatedAt: booking.updatedAt,
         },

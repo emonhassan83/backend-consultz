@@ -4,7 +4,7 @@ import timezone from 'dayjs/plugin/timezone'
 import { Booking } from '../modules/booking/booking.models'
 import { Reviews } from '../modules/review/review.models'
 import { notifyUserToLeaveReview } from '../modules/review/review.utils'
-import { BOOKING_STATUS } from '../modules/booking/booking.constants'
+import { BOOKING_STATUS, PAYMENT_STATUS } from '../modules/booking/booking.constants'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -19,6 +19,7 @@ export const dailyReviewReminderJob = async (): Promise<void> => {
   // Find completed bookings within the reminder window
   const completedBookings = await Booking.find({
     status: BOOKING_STATUS.completed,
+    paymentStatus: PAYMENT_STATUS.paid,
     updatedAt: { $gte: fortyEightHoursAgo, $lte: twentyFourHoursAgo },
     isDeleted: false,
   })

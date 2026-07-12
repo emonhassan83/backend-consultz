@@ -3,7 +3,7 @@ import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
 import { User } from '../modules/user/user.model'
 import { Booking } from '../modules/booking/booking.models'
-import { BOOKING_STATUS } from '../modules/booking/booking.constants'
+import { BOOKING_STATUS, PAYMENT_STATUS } from '../modules/booking/booking.constants'
 import { USER_ROLE, USER_STATUS } from '../modules/user/user.constant'
 import { sendNotification } from '../utils/sentNotification'
 import { modeType } from '../modules/notification/notification.interface'
@@ -27,6 +27,7 @@ export const expertResponseTimeRewardJob = async (): Promise<void> => {
     const bookingRequests = await Booking.find({
       consult: expert._id,
       createdAt: { $gte: sevenDaysAgo },
+      paymentStatus: PAYMENT_STATUS.paid,
       isDeleted: false,
       // Check all non-pending statuses — these were responded to
       status: { $ne: BOOKING_STATUS.pending },
