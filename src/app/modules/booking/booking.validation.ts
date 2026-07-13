@@ -54,7 +54,7 @@ const completedValidationSchema = z.object({
 
 const declineValidationSchema = z.object({
   body: z.object({
-    reason: z.number({
+    reason: z.string({
       message: 'Reason is required!',
     }),
   }),
