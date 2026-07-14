@@ -25,6 +25,13 @@ router.patch(
 )
 
 router.patch(
+  '/use-referral-code',
+  auth(USER_ROLE.expert, USER_ROLE.consult),
+  zodValidationRequest(UserValidation.useReferralCodeValidationSchema),
+  UserControllers.useReferralCode,
+)
+
+router.patch(
   '/change-status',
   auth(USER_ROLE.admin),
   zodValidationRequest(UserValidation.changeStatusValidationSchema),

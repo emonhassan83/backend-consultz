@@ -136,6 +136,7 @@ const createValidationSchema = z.object({
       .string({ message: 'Phone number is required!' })
       .min(6, { message: 'Contact number must be at least 6 digits long' })
       .max(15, { message: 'Contact number must be at most 15 digits long' }),
+    referralCode: z.string().trim().min(1).optional(),
   }),
 })
 
@@ -250,6 +251,15 @@ const changeStatusValidationSchema = z.object({
 })
 
 // ✅ VAT Info Validation Schema
+const useReferralCodeValidationSchema = z.object({
+  body: z.object({
+    referralCode: z
+      .string({ message: 'Referral code is required!' })
+      .trim()
+      .min(1, { message: 'Referral code is required!' }),
+  }),
+})
+
 const updateVatInfoValidationSchema = z.object({
   body: z.object({
     country: z
@@ -271,6 +281,7 @@ export const UserValidation = {
   createValidationSchema,
   updateValidationSchema,
   changeStatusValidationSchema,
+  useReferralCodeValidationSchema,
   updateNotifySettingsValidation,
   updateVatInfoValidationSchema,
 }

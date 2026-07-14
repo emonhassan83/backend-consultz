@@ -169,6 +169,21 @@ const rescheduleBooking = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
+const requestScheduleChange = catchAsync(async (req: Request, res: Response) => {
+  const result = await bookingsService.requestScheduleChange(
+    req.params.id as string,
+    req.body,
+    req.user._id,
+  )
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Schedule change request sent successfully',
+    data: result,
+  })
+})
+
 const deleteBookings = catchAsync(async (req: Request, res: Response) => {
   const result = await bookingsService.deleteBookings(req.params.id as string)
   sendResponse(res, {
@@ -194,4 +209,5 @@ export const bookingsController = {
   cancelBooking,
   completedBooking,
   rescheduleBooking,
+  requestScheduleChange,
 }

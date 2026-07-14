@@ -23,6 +23,7 @@ import config from '../../config'
 import {
   sendCancellationEmail,
   sendRescheduleEmail,
+  sendScheduleChangeRequestEmail,
   sendSessionCompletedToConsultant,
 } from '../../utils/emailNotify'
 import { sendNotification } from '../../utils/sentNotification'
@@ -148,48 +149,11 @@ const createBookings = async (payload: TBookings, userId: string) => {
 
     payload.dmCloseTime = dmCloseTime
 
-    // 6. Check if this is the user's VERY FIRST booking
-    const previousBookingsCount = await Booking.countDocuments(
-      {
-        user: userId,
-        isDeleted: false,
-      },
-      { session },
-    )
-
-    const isFirstBooking = previousBookingsCount === 0
-
-    // 7. Create the booking
+    // 6. Create the booking
     const [createdBooking] = await Booking.create([payload], { session })
     if (!createdBooking) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Failed to create booking')
     }
-
-    // 8. Award 300 points ONLY if this is the first booking ever
-    if (isFirstBooking) {
-      const pointsToAdd = 300
-      userData.points = (userData.points || 0) + pointsToAdd
-
-      // Update user's points
-      await User.findByIdAndUpdate(
-        userId,
-        { points: userData.points },
-        { session },
-      )
-
-      // Send push notification (if enabled)
-      if (userData.fcmToken && userData.pushNotify?.points) {
-        await sendNotification([userData.fcmToken], {
-          receiver: consult._id,
-          message: 'First Consultation Booked!',
-          description:
-            'Congratulations! You have earned 300 points for booking your first consultation. 🎉 Keep exploring!',
-          reference: createdBooking._id as string,
-          modelType: modeType.Achievement,
-        })
-      }
-    }
-
     await session.commitTransaction()
 
     return createdBooking
@@ -1342,6 +1306,50 @@ const rescheduleBooking = async (
   }
 }
 
+const requestScheduleChange = async (
+  id: string,
+  payload: { reason?: string },
+  currentUserId: string,
+) => {
+  const booking = await Booking.findOne({
+    _id: id,
+    consult: currentUserId,
+    paymentStatus: PAYMENT_STATUS.paid,
+    status: { $in: [BOOKING_STATUS.pending, BOOKING_STATUS.confirmed] },
+    isDeleted: false,
+  }).populate('user consult slot')
+
+  if (!booking) {
+    throw new AppError(
+      httpStatus.NOT_FOUND,
+      'Paid active booking not found for this consultant',
+    )
+  }
+
+  const user = booking.user as unknown as TUser
+  const consultant = booking.consult as unknown as TUser
+  const slot = booking.slot as any
+
+  if (user?.fcmToken && user.pushNotify?.bookingAndSchedule) {
+    await sendBookingsNotification(
+      'schedule_change_request',
+      booking,
+      user,
+      consultant,
+      slot,
+    )
+  }
+
+  await sendScheduleChangeRequestEmail(
+    user,
+    consultant,
+    booking,
+    payload.reason,
+  )
+
+  return booking
+}
+
 const deleteBookings = async (id: string) => {
   const booking = await Booking.findById(id)
   if (!booking || booking.isDeleted) {
@@ -1373,4 +1381,6 @@ export const bookingsService = {
   declineBooking,
   completedBooking,
   rescheduleBooking,
+  requestScheduleChange,
 }
+

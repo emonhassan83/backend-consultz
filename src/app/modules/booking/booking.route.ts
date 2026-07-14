@@ -47,6 +47,13 @@ router.patch(
   bookingsController.rescheduleBooking,
 )
 
+router.patch(
+  '/request-schedule-change/:id',
+  auth(USER_ROLE.expert),
+  zodValidationRequest(BookingsValidation.requestScheduleChangeValidationSchema),
+  bookingsController.requestScheduleChange,
+)
+
 router.delete(
   '/:id',
   auth(USER_ROLE.consult, USER_ROLE.expert),

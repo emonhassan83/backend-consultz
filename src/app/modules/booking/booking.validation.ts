@@ -41,6 +41,12 @@ const rescheduleValidationSchema = z.object({
   }),
 })
 
+const requestScheduleChangeValidationSchema = z.object({
+  body: z.object({
+    reason: z.string().trim().max(500).optional(),
+  }),
+})
+
 const completedValidationSchema = z.object({
   body: z.object({
     recordDuration: z.number({
@@ -63,6 +69,7 @@ const declineValidationSchema = z.object({
 export const BookingsValidation = {
   createValidationSchema,
   rescheduleValidationSchema,
+  requestScheduleChangeValidationSchema,
   completedValidationSchema,
   declineValidationSchema,
 }

@@ -212,6 +212,20 @@ const changeUserNotify = catchAsync(async (req, res) => {
   })
 })
 
+const useReferralCode = catchAsync(async (req, res) => {
+  const result = await UserService.applyReferralCodeToUser(
+    req.user._id,
+    req.body.referralCode,
+  )
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Referral code applied successfully!',
+    data: result,
+  })
+})
+
 const updateMyProfile = catchAsync(async (req, res) => {
   if (req.files) {
     const { image, cover } = req.files as UploadedFiles
@@ -283,6 +297,7 @@ export const UserControllers = {
   getUserById,
   getMyProfile,
   changeUserStatus,
+  useReferralCode,
   updateMyProfile,
   changeUserNotify,
   deleteMyProfile,

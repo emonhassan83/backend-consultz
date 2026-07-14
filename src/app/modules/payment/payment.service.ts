@@ -21,6 +21,8 @@ import { Chat } from '../chat/chat.models'
 import { getVatRateForCountry } from '../../utils/vatRate'
 import { CHAT_STATUS } from '../chat/chat.constants'
 import { TUser } from '../user/user.interface'
+import { sendNotification } from '../../utils/sentNotification'
+import { modeType } from '../notification/notification.interface'
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2026-06-24.dahlia',
@@ -189,6 +191,15 @@ const confirmPayment = async (payload: {
       throw new AppError(httpStatus.NOT_FOUND, 'Payment not found')
     }
 
+    const previousPaidBookingsCount = await Booking.countDocuments({
+      user: userId,
+      paymentStatus: PAYMENT_STATUS.paid,
+      isDeleted: false,
+      _id: { $ne: bookingId },
+    }).session(session)
+
+    const shouldAwardFirstPaidBookingBonus = previousPaidBookingsCount === 0
+
     /* ========= 3. Update Booking ========= */
     const booking = await Booking.findByIdAndUpdate(
       bookingId,
@@ -201,6 +212,14 @@ const confirmPayment = async (payload: {
 
     if (!booking) {
       throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
+    }
+
+    if (shouldAwardFirstPaidBookingBonus) {
+      await User.findByIdAndUpdate(
+        userId,
+        { $inc: { points: 300 } },
+        { session },
+      )
     }
 
     /* ========= 4. Mark Slot as Booked ========= */
@@ -234,7 +253,7 @@ const confirmPayment = async (payload: {
     /* ========= 6. Notifications ========= */
     const [consult, user] = await Promise.all([
       User.findById(booking.consult).select('fcmToken emailNotify firstName lastName email country isVatRegistered vatRegistrationNumber'),
-      User.findById(userId).select('emailNotify firstName lastName email')
+      User.findById(userId).select('fcmToken pushNotify emailNotify firstName lastName email')
     ])
 
     if (consult?.fcmToken) {
@@ -256,6 +275,21 @@ const confirmPayment = async (payload: {
     // user got notification when they are paid
     if (user?.emailNotify?.payment) {
       await sendPaymentSuccessToUser(user, booking, consult as TUser, payment)
+    }
+
+    if (
+      shouldAwardFirstPaidBookingBonus &&
+      user?.fcmToken &&
+      user.pushNotify?.points
+    ) {
+      await sendNotification([user.fcmToken], {
+        receiver: user._id,
+        message: 'First Consultation Booked!',
+        description:
+          'Congratulations! You have earned 300 points for booking your first consultation. Keep exploring!',
+        reference: booking._id as string,
+        modelType: modeType.Achievement,
+      })
     }
 
     return {

@@ -18,6 +18,10 @@ dayjs.extend(utc)
 dayjs.extend(timezone)
 dayjs.extend(customParseFormat)
 
+const TEN_MIN_REMINDER_TRIGGER_MINUTES = 8
+const JOIN_CALL_TRIGGER_MINUTES = -1
+const JOIN_CALL_GRACE_MINUTES = -5
+
 export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise<void> => {
   // Current time in UTC — each booking's timezone will be used for comparison
   const nowUtc = dayjs.utc()
@@ -99,7 +103,18 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
     const sessionInfo = `${booking.localDate} • ${booking.localTime} (${bookingTimezone})`
 
     // ── 10-minute reminder ────────────────────────────────────────────────────
-    if (timeToStartMinutes <= 10 && timeToStartMinutes >= 0 && !booking.is10MinReminderSent) {
+    if (
+      timeToStartMinutes <= TEN_MIN_REMINDER_TRIGGER_MINUTES &&
+      timeToStartMinutes >= 0 &&
+      !booking.is10MinReminderSent
+    ) {
+      const claimResult = await Booking.updateOne(
+        { _id: booking._id, is10MinReminderSent: { $ne: true } },
+        { $set: { is10MinReminderSent: true } },
+      )
+
+      if (claimResult.modifiedCount < 1) continue
+
       tenMinReminderSentBookingIds.push(booking._id.toString())
       if (user.fcmToken && user.pushNotify?.scheduleRemainder) {
         notificationsToSend.push({
@@ -160,7 +175,18 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
     }
 
     // ── Join call reminder (0–1 min before start or up to 3 min after) ──────
-    if (timeToStartMinutes <= 1 && timeToStartMinutes >= -3 && !booking.isJoinCallReminderSent) {
+    if (
+      timeToStartMinutes <= JOIN_CALL_TRIGGER_MINUTES &&
+      timeToStartMinutes >= JOIN_CALL_GRACE_MINUTES &&
+      !booking.isJoinCallReminderSent
+    ) {
+      const claimResult = await Booking.updateOne(
+        { _id: booking._id, isJoinCallReminderSent: { $ne: true } },
+        { $set: { isJoinCallReminderSent: true } },
+      )
+
+      if (claimResult.modifiedCount < 1) continue
+
       joinCallReminderSentBookingIds.push(booking._id.toString())
       if (user.fcmToken && user.pushNotify?.scheduleRemainder) {
         notificationsToSend.push({
@@ -263,14 +289,28 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
   if (successfulTenMinIds.length > 0) {
     await Booking.updateMany(
       { _id: { $in: successfulTenMinIds } },
-      { is10MinReminderSent: true }
+      { $set: { is10MinReminderSent: true } }
     )
   }
 
   if (successfulJoinCallIds.length > 0) {
     await Booking.updateMany(
       { _id: { $in: successfulJoinCallIds } },
-      { isJoinCallReminderSent: true }
+      { $set: { isJoinCallReminderSent: true } }
+    )
+  }
+
+  if (failedTenMinBookingIds.size > 0) {
+    await Booking.updateMany(
+      { _id: { $in: [...failedTenMinBookingIds] } },
+      { $set: { is10MinReminderSent: false } },
+    )
+  }
+
+  if (failedJoinCallBookingIds.size > 0) {
+    await Booking.updateMany(
+      { _id: { $in: [...failedJoinCallBookingIds] } },
+      { $set: { isJoinCallReminderSent: false } },
     )
   }
 

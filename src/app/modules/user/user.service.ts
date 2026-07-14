@@ -33,10 +33,76 @@ import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 dayjs.extend(utc)
 
+const applyReferralCodeToUser = async (userId: string, referralCode: string) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
+
+  try {
+    const user = await User.findById(userId).session(session)
+    if (!user || user.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+    }
+
+    if (user.referredBy) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Referral code already used')
+    }
+
+    const referrer = await User.findOne({ referralCode }).session(session)
+    if (!referrer) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid referral code')
+    }
+
+    if (referrer._id.toString() === user._id.toString()) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Cannot use your own referral code',
+      )
+    }
+
+    user.referredBy = referrer._id
+    user.points = (user.points || 0) + 500
+    referrer.points = (referrer.points || 0) + 500
+
+    await Promise.all([
+      user.save({ session }),
+      referrer.save({ session }),
+    ])
+
+    await session.commitTransaction()
+
+    return {
+      _id: user._id,
+      referredBy: user.referredBy,
+      points: user.points,
+      referrer: {
+        _id: referrer._id,
+        firstName: referrer.firstName,
+        lastName: referrer.lastName,
+      },
+    }
+  } catch (error) {
+    await session.abortTransaction()
+    throw error
+  } finally {
+    session.endSession()
+  }
+}
+
 const registerUserIntoDB = async (
   payload: TUser & { referralCode?: string },
 ) => {
   const { email, password, referralCode, ...rest } = payload
+  const userPayload = { ...rest, email, password }
+  const applyReferralAndReturnUser = async (userId: string) => {
+    if (!referralCode) return null
+
+    await applyReferralCodeToUser(userId, referralCode)
+    const updatedUser = await User.findById(userId)
+    if (!updatedUser) {
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+    }
+    return updatedUser
+  }
 
   if (payload.role === USER_ROLE.admin) {
     throw new AppError(
@@ -49,20 +115,26 @@ const registerUserIntoDB = async (
   if (existingUser) {
     // Soft deleted user — recreate
     if (existingUser.isDeleted) {
-      existingUser.set({ ...payload, isDeleted: false })
+      existingUser.set({ ...userPayload, isDeleted: false })
       const user = await existingUser.save()
+      const updatedUser = await applyReferralAndReturnUser(user._id.toString())
+      if (updatedUser) return updatedUser
       return user
     }
 
     // Unverified user — update fields and re-save
     if (!existingUser.verification?.status) {
-      existingUser.set({ ...payload })
+      existingUser.set({ ...userPayload })
       const user = await existingUser.save()
+      const updatedUser = await applyReferralAndReturnUser(user._id.toString())
+      if (updatedUser) return updatedUser
       return user
     }
     if (!existingUser.isPhoneOtpVerified) {
-      existingUser.set({ ...payload })
+      existingUser.set({ ...userPayload })
       const user = await existingUser.save()
+      const updatedUser = await applyReferralAndReturnUser(user._id.toString())
+      if (updatedUser) return updatedUser
       return user
     }
 
@@ -77,40 +149,22 @@ const registerUserIntoDB = async (
     throw new AppError(httpStatus.BAD_REQUEST, 'Password is required')
   }
 
+  if (referralCode) {
+    const referrer = await User.findOne({ referralCode }).select('_id')
+    if (!referrer) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid referral code')
+    }
+  }
+
   const finalPayload = {
-    ...rest,
-    email,
-    password,
+    ...userPayload,
     status: USER_STATUS.active,
   }
 
   const newUser = await User.create(finalPayload)
 
-  // Referral logic: if exist
-  let referredBy = null
-  if (referralCode) {
-    const referrer = await User.findOne({ referralCode })
-    if (referrer && referrer._id.toString() !== newUser._id.toString()) {
-      // Self-referral block
-      referredBy = referrer._id
-      newUser.referredBy = referredBy
-      await newUser.save()
-
-      // Points add
-      referrer.points += 500 // referrer gets 500 points
-      await referrer.save()
-
-      newUser.points += 500 //new user gets 500 bonus
-      await newUser.save()
-    } else if (referrer) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'Cannot use your own referral code',
-      )
-    } else {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid referral code')
-    }
-  }
+  const updatedUser = await applyReferralAndReturnUser(newUser._id.toString())
+  if (updatedUser) return updatedUser
 
   return newUser
 }
@@ -1316,6 +1370,7 @@ const updateVatInfoFromDB = async (userId: string, payload: {
 
 export const UserService = {
   registerUserIntoDB,
+  applyReferralCodeToUser,
   getAllUsersFromDB,
   getInvestmentExperts,
   getInterestExpertsFromDB,

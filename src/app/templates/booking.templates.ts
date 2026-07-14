@@ -257,6 +257,27 @@ export const bookingRescheduledToConsultantTemplate = (
   return baseLayout('Booking Rescheduled', consult.firstName, body)
 }
 
+export const scheduleChangeRequestToUserTemplate = (
+  user: TUser,
+  consult: TUser,
+  booking: TBookings,
+  reason?: string,
+): string => {
+  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+
+  const body = `
+    ${para(`<strong>${consult.firstName} ${consult.lastName}</strong> has requested a schedule change for your booking.`)}
+    ${infoBlock([
+      { label: 'Current Date & Time', value: sessionInfo },
+      { label: 'Session Type', value: booking.sessionType },
+      ...(reason ? [{ label: 'Reason', value: reason }] : []),
+    ])}
+    ${noticeBlock('Please open the app and reschedule this booking to a time that works for you.')}
+  `
+
+  return baseLayout('Schedule Change Requested', user.firstName, body)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 7. Session reminder (10 min / join now)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -332,15 +353,15 @@ export const notRespondedToConsultantTemplate = (
   const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
 
   const body = `
-    ${para(`Your confirmed booking with <strong>${user.firstName} ${user.lastName}</strong> was not completed.`)}
+    ${para(`Your booking request with <strong>${user.firstName} ${user.lastName}</strong> was closed because no response was received in time.`)}
     ${infoBlock([
       { label: 'Session', value: sessionInfo },
-      { label: 'Status', value: 'Not Responded' },
+      { label: 'Status', value: 'No Response Received' },
     ])}
-    ${noticeBlock('This booking has been automatically closed. Please ensure you attend your future sessions on time to maintain your reliability rating.', 'warning')}
+    ${noticeBlock('This booking request was automatically closed because no response was received in time.<br/><br/>Please ensure that you respond to future booking requests promptly (accept or decline) to maintain your reliability rating.', 'warning')}
   `
 
-  return baseLayout('Booking Not Responded', consult.firstName, body)
+  return baseLayout('Booking Request Closed', consult.firstName, body)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

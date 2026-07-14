@@ -79,6 +79,7 @@ export type TBookingNotifyAction =
   | 'cancellation'
   | 'not_responded'
   | 'reschedule'
+  | 'schedule_change_request'
   | 'morning_reminder'
   | 'completed'
   | '10min_reminder'
@@ -166,6 +167,11 @@ export const sendBookingsNotification = async (
       description = `${sessionTypeFormatted} session with ${otherPartyName} rescheduled to ${sessionInfo}`
       break
 
+    case 'schedule_change_request':
+      message = 'Schedule Change Requested'
+      description = `${expert.firstName} requested you to reschedule your ${sessionTypeFormatted} session on ${sessionInfo}`
+      break
+
     case 'morning_reminder':
       message = messages.booking.reminder
       description = `You have ${sessionTypeFormatted} session scheduled for today on ${sessionInfo}.`
@@ -187,7 +193,7 @@ export const sendBookingsNotification = async (
       break
 
     case 'join_call':
-      message = 'Call is Live!'
+      message = 'This Session is LIVE'
       description = `Your ${sessionTypeFormatted} session with ${otherPartyName} is live. Join the call immediately!`
       break
 

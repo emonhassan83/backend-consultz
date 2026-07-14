@@ -11,6 +11,7 @@ import {
   sessionCompletedToConsultantTemplate,
   bookingRescheduledToUserTemplate,
   bookingRescheduledToConsultantTemplate,
+  scheduleChangeRequestToUserTemplate,
   sessionReminderTemplate,
   notRespondedToUserTemplate,
   notRespondedToConsultantTemplate,
@@ -120,6 +121,23 @@ export const sendRescheduleEmail = async (
   await Promise.all(tasks)
 }
 
+export const sendScheduleChangeRequestEmail = async (
+  user: TUser,
+  consult: TUser,
+  booking: TBookings,
+  reason?: string,
+): Promise<void> => {
+  if (!user?.email || !user.emailNotify?.schedule) return
+
+  await emailSender(
+    user.email,
+    'Schedule Change Requested',
+    scheduleChangeRequestToUserTemplate(user, consult, booking, reason),
+  ).catch((err) =>
+    console.error(`Schedule change request email failed (user ${user._id}):`, err),
+  )
+}
+
 // 5. Session reminder
 export const createReminderEmailContent = (
   recipientName: string,
@@ -199,7 +217,7 @@ export const sendNotRespondedEmail = async (
     tasks.push(
       emailSender(
         consult.email,
-        'Booking Marked as Not Responded – Action Required',
+        'Booking Request Closed – No Response Received',
         notRespondedToConsultantTemplate(consult, user, booking),
       ).catch((err) => console.error(`Not responded email failed (consult ${consult._id}):`, err)),
     )
@@ -207,3 +225,4 @@ export const sendNotRespondedEmail = async (
 
   await Promise.all(tasks)
 }
+
