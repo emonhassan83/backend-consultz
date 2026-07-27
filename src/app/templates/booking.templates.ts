@@ -116,14 +116,20 @@ export const bookingCancelledToUserTemplate = (
   reason: string,
   cancelledByName: string,
   withRefund: boolean,
+  cancelledBy?: 'user' | 'consult',
 ): string => {
   const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
 
+  const cancellationText =
+    cancelledBy === 'user'
+      ? `You cancelled your booking with <strong>${consult.firstName} ${consult.lastName}</strong>.`
+      : `Your booking with <strong>${consult.firstName} ${consult.lastName}</strong> has been cancelled by the consultant, <strong>${cancelledByName}</strong>.`
+
   const body = `
-    ${para(`Your booking with <strong>${consult.firstName} ${consult.lastName}</strong> has been cancelled by <strong>${cancelledByName}</strong>.`)}
+    ${para(cancellationText)}
     ${infoBlock([
       { label: 'Session', value: sessionInfo },
-      { label: 'Reason', value: reason },
+      { label: 'Reason', value: reason || 'No reason provided' },
     ])}
     ${withRefund ? noticeBlock('A full refund has been initiated and will be reflected in your account shortly.', 'info') : ''}
     ${para('If this was unexpected, please contact our support team.')}
@@ -141,14 +147,20 @@ export const bookingCancelledToConsultantTemplate = (
   booking: TBookings,
   reason: string,
   cancelledByName: string,
+  cancelledBy?: 'user' | 'consult',
 ): string => {
   const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
 
+  const cancellationText =
+    cancelledBy === 'consult'
+      ? `You cancelled your booking with <strong>${user.firstName} ${user.lastName}</strong>.`
+      : `Your booking with <strong>${user.firstName} ${user.lastName}</strong> has been cancelled by the client, <strong>${cancelledByName}</strong>.`
+
   const body = `
-    ${para(`Your booking with <strong>${user.firstName} ${user.lastName}</strong> has been cancelled by <strong>${cancelledByName}</strong>.`)}
+    ${para(cancellationText)}
     ${infoBlock([
       { label: 'Session', value: sessionInfo },
-      { label: 'Reason', value: reason },
+      { label: 'Reason', value: reason || 'No reason provided' },
     ])}
     ${para('If you have any questions, please contact our support team.')}
   `

@@ -59,6 +59,7 @@ export const createFeedbackEmailTemplate = (
               <p style="margin:6px 0 0; color:#aaaaaa; font-size:13px;">
                 Submitted on ${payload.submissionDate || new Date().toLocaleDateString('en-GB')}
               </p>
+              ${payload.referenceId ? `<p style="margin:6px 0 0; color:#ffffff; font-size:13px;">Reference: <strong>${payload.referenceId}</strong></p>` : ''}
             </td>
           </tr>
 
@@ -92,6 +93,14 @@ export const createFeedbackEmailTemplate = (
               <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9f9f9; border:1px solid #eeeeee; border-radius:8px; margin-bottom:24px;">
                 <tr>
                   <td style="padding:16px;">
+                    ${
+                      payload.referenceId
+                        ? `
+                    <p style="margin:0 0 8px; font-size:11px; color:#999;">Reference Number</p>
+                    <p style="margin:0 0 16px; font-size:14px; color:#1a1a1a; font-weight:700;">${payload.referenceId}</p>
+                    `
+                        : ''
+                    }
                     <p style="margin:0 0 8px; font-size:11px; color:#999;">Feedback Type</p>
                     <span style="${chipStyle('#e07b39')}">${payload.feedbackType}</span>
 

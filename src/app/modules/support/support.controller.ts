@@ -10,7 +10,7 @@ const createSupport = catchAsync(async (req, res) => {
     statusCode: httpStatus.CREATED,
     success: true,
     message: result?.message,
-    data: null,
+    data: result,
   })
 })
 
@@ -31,7 +31,7 @@ const sentFeedbackEmail = catchAsync(async (req, res) => {
   sendResponse(res, {
     success: true,
     statusCode: 200,
-    message: 'Support retrieved successfully!',
+    message: result.message,
     data: result,
   })
 })

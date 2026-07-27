@@ -3,6 +3,7 @@ import { TAudience, TSupportStatus } from './support.constant'
 
 export type TSupport = {
   _id?: string
+  referenceId?: string
   author: Types.ObjectId | string
   audience: TAudience
   email: string
@@ -12,6 +13,7 @@ export type TSupport = {
 }
 
 export interface TFeedback {
+  referenceId?: string
   subject: string
   feedbackType: string
   priority: string

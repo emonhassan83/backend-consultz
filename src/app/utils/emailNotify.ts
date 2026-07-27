@@ -56,7 +56,7 @@ export const sendCancellationEmail = async (
       emailSender(
         user.email,
         'Booking Cancelled',
-        bookingCancelledToUserTemplate(user, consult, booking, reason, cancelledByName, cancelledBy === 'consult'),
+        bookingCancelledToUserTemplate(user, consult, booking, reason, cancelledByName, cancelledBy === 'consult', cancelledBy),
       ).catch((err) => console.error(`Cancellation email failed (user ${user._id}):`, err)),
     )
   }
@@ -66,7 +66,7 @@ export const sendCancellationEmail = async (
       emailSender(
         consult.email,
         'Booking Cancelled',
-        bookingCancelledToConsultantTemplate(consult, user, booking, reason, cancelledByName),
+        bookingCancelledToConsultantTemplate(consult, user, booking, reason, cancelledByName, cancelledBy),
       ).catch((err) => console.error(`Cancellation email failed (consult ${consult._id}):`, err)),
     )
   }

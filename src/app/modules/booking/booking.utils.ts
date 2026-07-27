@@ -99,6 +99,9 @@ const formatSessionType = (type: string) => {
   )
 }
 
+const getEntityId = (entity: any): string =>
+  (entity?._id || entity)?.toString()
+
 export const sendBookingsNotification = async (
   action: TBookingNotifyAction,
   booking: any,
@@ -117,7 +120,7 @@ export const sendBookingsNotification = async (
   const sessionInfo = `${booking.localDate || slot?.date || 'N/A'} at ${booking.localTime || slot?.time || 'N/A'} (${booking.timezone || 'UTC'})`
 
   // Determine who is the "other party" (the person the receiver is interacting with)
-  const isReceiverBooker = user._id.toString() === booking.user?.toString()
+  const isReceiverBooker = user._id.toString() === getEntityId(booking.user)
   const otherPartyName = extra?.otherPartyName || (isReceiverBooker
     ? expert?.firstName || 'your expert'
     : 'your client')

@@ -9,8 +9,16 @@ import { SUPPORT_STATUS } from './support.constant'
 import { Contents } from '../contents/contents.models'
 import { createFeedbackEmailTemplate } from '../../templates/feedbackEmail.templete'
 import { createSupportEmailTemplate } from '../../templates/supportEmail.template'
+import { createSupportAcknowledgementTemplate } from '../../templates/supportAcknowledgement.template'
 
-const FALLBACK_SUPPORT_EMAIL = 'investors@wealthdragons.co.uk'
+const FALLBACK_SUPPORT_EMAIL = 'info@consultz.com'
+const EXPECTED_RESPONSE_TIME = 'within 24–48 hours'
+
+const createReferenceId = (prefix: 'SUP' | 'FB') => {
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const random = Math.random().toString(36).slice(2, 8).toUpperCase()
+  return `${prefix}-${date}-${random}`
+}
 
 // ── helper: support email fetch ───────────────────────────────────────────────
 const getSupportEmail = async (): Promise<string> => {
@@ -32,6 +40,8 @@ export const sendSupportEmail = async (payload: TSupport, userId: string) => {
     getAuthor(userId),
     getSupportEmail(),
   ])
+  const referenceId = createReferenceId('SUP')
+  const submission = { ...payload, referenceId }
 
   const emailHtml = createSupportEmailTemplate(
     {
@@ -39,15 +49,37 @@ export const sendSupportEmail = async (payload: TSupport, userId: string) => {
       lastName:  author.lastName,
       email:     author.email,
     },
-    payload,
+    submission,
+  )
+
+  const acknowledgementHtml = createSupportAcknowledgementTemplate(
+    {
+      firstName: author.firstName,
+      lastName: author.lastName,
+      email: author.email,
+    },
+    {
+      referenceId,
+      type: 'support',
+      subject: payload.subject,
+      summary: payload.messages,
+      expectedResponseTime: EXPECTED_RESPONSE_TIME,
+    },
   )
 
   try {
-    await emailSender(
-      supportEmail,
-      `Support Request: ${payload.subject}`,
-      emailHtml
-    )
+    await Promise.all([
+      emailSender(
+        supportEmail,
+        `[${referenceId}] Support Request: ${payload.subject}`,
+        emailHtml,
+      ),
+      emailSender(
+        author.email,
+        `We received your support request — ${referenceId}`,
+        acknowledgementHtml,
+      ),
+    ])
     console.log(`✅ Support email sent to ${supportEmail}`)
   } catch (error: any) {
     console.error('Failed to send support email:', error)
@@ -56,6 +88,7 @@ export const sendSupportEmail = async (payload: TSupport, userId: string) => {
 
   return {
     success: true,
+    referenceId,
     message: 'Your support request has been sent successfully. We will get back to you soon.',
   }
 }
@@ -75,6 +108,8 @@ export const sendFeedbackEmail = async (payload: TFeedback, userId: string) => {
   if (!payload.submissionDate) {
     payload.submissionDate = new Date().toLocaleDateString('en-GB') // DD/MM/YYYY
   }
+  const referenceId = createReferenceId('FB')
+  const submission = { ...payload, referenceId }
 
   // 4. Build email HTML
   const emailHtml = createFeedbackEmailTemplate(
@@ -83,7 +118,35 @@ export const sendFeedbackEmail = async (payload: TFeedback, userId: string) => {
       lastName:  author.lastName,
       email:     author.email,
     },
-    payload,
+    submission,
+  )
+
+  const summary = [
+    `Feedback Type: ${payload.feedbackType}`,
+    `Priority: ${payload.priority}`,
+    payload.relatedPageOrFeature ? `Related Page or Feature: ${payload.relatedPageOrFeature}` : '',
+    '',
+    payload.description,
+    payload.expectedOutcome ? `\nExpected Outcome:\n${payload.expectedOutcome}` : '',
+    payload.additionalComments ? `\nAdditional Comments:\n${payload.additionalComments}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  const acknowledgementHtml = createSupportAcknowledgementTemplate(
+    {
+      firstName: author.firstName,
+      lastName: author.lastName,
+      email: author.email,
+    },
+    {
+      referenceId,
+      type: 'feedback',
+      subject: payload.subject,
+      summary,
+      expectedResponseTime: EXPECTED_RESPONSE_TIME,
+      submittedAt: payload.submissionDate,
+    },
   )
 
   // 5. Send
@@ -99,8 +162,20 @@ export const sendFeedbackEmail = async (payload: TFeedback, userId: string) => {
     throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to send support request')
   }
 
+  try {
+    await emailSender(
+      author.email,
+      `We received your feedback — ${referenceId}`,
+      acknowledgementHtml,
+    )
+  } catch (error: any) {
+    console.error('Failed to send feedback acknowledgement email:', error)
+    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to send feedback acknowledgement')
+  }
+
   return {
     success: true,
+    referenceId,
     message: 'Your feedback has been submitted successfully. We will review it shortly.',
   }
 }

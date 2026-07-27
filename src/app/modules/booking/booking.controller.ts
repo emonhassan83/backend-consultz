@@ -145,6 +145,7 @@ const cancelBooking = catchAsync(async (req: Request, res: Response) => {
   const result = await bookingsService.cancelBooking(
     req.params.id as string,
     req.user._id,
+    req.body?.reason,
   )
 
   sendResponse(res, {

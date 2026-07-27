@@ -9,6 +9,11 @@ const supportSchema = new Schema<TSupport>(
       ref: 'User',
       required: true,
     },
+    referenceId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
     audience: {
       type: String,
       enum: Object.values(AUDIENCE),

@@ -33,6 +33,9 @@ import isSameOrBefore from 'dayjs/plugin/isSameOrBefore'
 import { TUser } from '../user/user.interface'
 import { timeSensitiveNotificationsJob } from '../../job/timeSensitiveNotifications.job'
 
+const getEntityId = (entity: any): string =>
+  (entity?._id || entity)?.toString()
+
 dayjs.extend(isSameOrBefore)
 dayjs.extend(isoWeek)
 dayjs.extend(customParseFormat)
@@ -466,7 +469,11 @@ const getBookingsById = async (id: string, currentUserId: string) => {
   }
 }
 
-const cancelBooking = async (bookingId: string, currentUserId: string) => {
+const cancelBooking = async (
+  bookingId: string,
+  currentUserId: string,
+  reason = '',
+) => {
   const session = await mongoose.startSession()
   session.startTransaction()
 
@@ -507,7 +514,7 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
     }
 
     // Time checked
-    const slot = await BookingSlots.findById(booking.slot).session(session)
+    const slot = await BookingSlots.findById(getEntityId(booking.slot)).session(session)
     if (!slot) {
       throw new AppError(httpStatus.NOT_FOUND, 'Slot not found')
     }
@@ -531,7 +538,7 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
 
     // Free the slots
     await BookingSlots.findByIdAndUpdate(
-      booking.slot,
+      getEntityId(booking.slot),
       { isBooked: false },
       { session },
     )
@@ -590,12 +597,12 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
 
     // user and consult sent notify
     const [booker, expert] = await Promise.all([
-      User.findById(booking.user).session(session),
-      User.findById(booking.consult).session(session),
+      User.findById(getEntityId(booking.user)).session(session),
+      User.findById(getEntityId(booking.consult)).session(session),
     ])
 
     const cancelledBy =
-      currentUserId === booking.user.toString() ? 'booker' : 'consult'
+      currentUserId.toString() === getEntityId(booking.user) ? 'booker' : 'consult'
     if (booker && booker?.fcmToken && booker.pushNotify?.bookingAndSchedule) {
       await sendBookingsNotification(
         'cancellation',
@@ -622,13 +629,13 @@ const cancelBooking = async (bookingId: string, currentUserId: string) => {
 
     // Email notify to user and consult
     const cancelledByEmail =
-      currentUserId === booking.user.toString() ? 'user' : 'consult'
+      currentUserId.toString() === getEntityId(booking.user) ? 'user' : 'consult'
     if (booker && expert) {
       await sendCancellationEmail(
         booker,
         expert,
         cancelledBooking,
-        '',
+        reason,
         cancelledByEmail,
       )
     }
