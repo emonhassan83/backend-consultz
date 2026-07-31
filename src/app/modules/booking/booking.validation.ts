@@ -1,16 +1,15 @@
 import { z } from 'zod'
-import { Types } from 'mongoose'
 import { SESSION_TYPE } from './booking.constants'
-
-// reusable ObjectId validator
-const objectIdSchema = z.string().refine((val) => Types.ObjectId.isValid(val), {
-  message: 'Invalid ObjectId format',
-})
 
 const createValidationSchema = z.object({
   body: z.object({
-    consult: objectIdSchema,
-    slot: objectIdSchema,
+    consult: z.string().min(1, { message: 'Consultant ID is required' }),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, {
+      message: 'Date must be in YYYY-MM-DD format',
+    }),
+    startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, {
+      message: 'Start time must be in HH:mm format',
+    }),
     sessionType: z.enum(Object.values(SESSION_TYPE) as [string, ...string[]], {
       message: 'Session type is required',
     }),
@@ -20,9 +19,6 @@ const createValidationSchema = z.object({
     price: z
       .number()
       .nonnegative({ message: 'Price must be zero or a positive number' }),
-    timezone: z.string().min(1, { message: 'Timezone is required' }).optional(),
-    localDate: z.string().min(1, { message: 'Local date is required' }).optional(),
-    localTime: z.string().min(1, { message: 'Local time is required' }).optional(),
     mainQuestion: z.string().min(1, { message: 'Main question is required' }),
     challengeQuestion: z
       .string()
@@ -35,9 +31,12 @@ const createValidationSchema = z.object({
 
 const rescheduleValidationSchema = z.object({
   body: z.object({
-    slot: objectIdSchema,
-    localDate: z.string({ message: 'Local date required' }),
-    localTime: z.string({ message: 'Local time required' }),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, {
+      message: 'Date must be in YYYY-MM-DD format',
+    }),
+    startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, {
+      message: 'Start time must be in HH:mm format',
+    }),
   }),
 })
 

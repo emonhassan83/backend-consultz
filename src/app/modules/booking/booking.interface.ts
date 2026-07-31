@@ -5,11 +5,19 @@ export interface TBookings {
   _id?: ObjectId | string
   user: Types.ObjectId
   consult: Types.ObjectId
-  slot: Types.ObjectId
+  date?: string
+  startTime?: string
+  endTime?: string
+  bufferTime?: number
+  startAt?: Date
+  endAt?: Date
+  bufferEndAt?: Date
+  localStartTime?: string
+  localEndTime?: string
   sessionType: TSessionType
   sessionDuration: number
   price: number
-  timezone: string
+  timezone?: string
   mainQuestion: string
   challengeQuestion: string
   backgroundQuestion: string
@@ -22,7 +30,7 @@ export interface TBookings {
 
   // For local time calculation
   localDate: string
-  localTime: string
+  localTime?: string
   
   status: TBookingStatus
   isDeleted: boolean

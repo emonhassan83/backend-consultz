@@ -23,10 +23,16 @@ type TSessionDuration = {
   isOffered: boolean
 }
 
-type TBankAccount = {
-  bankName: string
-  number: number
-  sortCode: string
+export type TBookingBufferRule = {
+  duration: number
+  buffer: number
+}
+
+export type TBookingRules = {
+  minNotice: number
+  bookingHorizonDays: number
+  slotBufferStep: number
+  bufferRules: TBookingBufferRule[]
 }
 
 export interface TUser {
@@ -57,11 +63,11 @@ export interface TUser {
     certificate: string[]
     phd: string
   }
-  bankDetails: TBankAccount
   socialProfiles: TSocialProfile[]
   hourlyRate: number
   availability: TAvailability[]
   sessionDurations: TSessionDuration[]
+  bookingRules?: TBookingRules
   advisingStyles: string[]
   role: TUserRole
   registerWith: string

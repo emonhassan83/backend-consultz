@@ -36,12 +36,12 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
   console.log(`Found ${pendingBookings.length} pending bookings to check for reminders`)
 
   for (const booking of pendingBookings) {
-    const slot = booking.slot as any
+    const slot = (booking as any).slot
     const expert = booking.consult as any
     const booker = booking.user as any
 
-    if (!slot || !expert) {
-      console.warn(`Booking ${booking._id} is missing its slot or expert; reminder skipped.`)
+    if (!expert) {
+      console.warn(`Booking ${booking._id} is missing its expert; reminder skipped.`)
       continue
     }
 
@@ -52,16 +52,27 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
       booking.localTime &&
       dayjs(`${booking.localDate} ${booking.localTime}`, 'YYYY-MM-DD HH:mm', true).isValid(),
     )
-    const bookingDate = hasValidLocalDateTime ? booking.localDate : slot.date
-    const bookingTime = hasValidLocalDateTime ? booking.localTime : slot.time
+    const bookingDate = hasValidLocalDateTime
+      ? booking.localDate
+      : booking.date || slot?.date
+    const bookingTime = hasValidLocalDateTime
+      ? booking.localTime
+      : booking.localStartTime || slot?.time
     let bookingStartUtc: dayjs.Dayjs
 
-    try {
-      bookingStartUtc = dayjs
-        .tz(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm', bookingTimezone)
-        .utc()
-    } catch {
-      bookingStartUtc = dayjs.utc(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm')
+    if (booking.startAt) {
+      bookingStartUtc = dayjs.utc(booking.startAt)
+    } else if (bookingDate && bookingTime) {
+      try {
+        bookingStartUtc = dayjs
+          .tz(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm', bookingTimezone)
+          .utc()
+      } catch {
+        bookingStartUtc = dayjs.utc(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm')
+      }
+    } else {
+      console.warn(`Booking ${booking._id} has no start time; reminder skipped.`)
+      continue
     }
 
     // If the slot start time has already passed, the booking is expired/cannot be accepted anymore

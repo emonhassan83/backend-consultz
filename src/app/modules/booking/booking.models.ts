@@ -18,10 +18,33 @@ const bookingsSchema = new Schema<TBookings>(
       ref: 'User',
       required: true,
     },
-    slot: {
-      type: Schema.Types.ObjectId,
-      ref: 'BookingSlots',
-      required: true,
+    date: {
+      type: String,
+    },
+    startTime: {
+      type: String,
+    },
+    endTime: {
+      type: String,
+    },
+    bufferTime: {
+      type: Number,
+      default: 0,
+    },
+    startAt: {
+      type: Date,
+    },
+    endAt: {
+      type: Date,
+    },
+    bufferEndAt: {
+      type: Date,
+    },
+    localStartTime: {
+      type: String,
+    },
+    localEndTime: {
+      type: String,
     },
     sessionType: {
       type: String,

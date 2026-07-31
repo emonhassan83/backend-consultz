@@ -51,7 +51,12 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
     let updatedCount = 0
 
     for (const booking of oldBookings) {
-      const slot = booking.slot as any
+      let slot = (booking as any).slot
+      if (!slot && booking.localDate && booking.localTime) {
+        slot = { date: booking.localDate, time: booking.localTime }
+      } else if (!slot && booking.date && booking.localStartTime) {
+        slot = { date: booking.date, time: booking.localStartTime }
+      }
 
       if (!slot?.date || !slot?.time) {
         console.warn(`Booking ${booking._id} has no slot date/time — skipping`)
@@ -104,7 +109,7 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
           _id: booking._id,
           status: booking.status,
           paymentStatus: PAYMENT_STATUS.paid,
-          slot: slot._id,
+          ...(slot?._id ? { slot: slot._id } : {}),
           updatedAt: booking.updatedAt,
         },
         { status: BOOKING_STATUS.not_responded, respondedAt: new Date() },
@@ -118,11 +123,13 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
         continue
       }
 
-      await BookingSlots.findByIdAndUpdate(
-        slot._id,
-        { isBooked: false },
-        { session },
-      )
+      if (slot?._id) {
+        await BookingSlots.findByIdAndUpdate(
+          slot._id,
+          { isBooked: false },
+          { session },
+        )
+      }
 
       // ── Refund ────────────────────────────────────────────────────────────
       const payment = await Payment.findOne({
@@ -139,7 +146,7 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
         User.findById(booking.consult)
           .select('_id firstName lastName email fcmToken pushNotify emailNotify')
           .session(session),
-        BookingSlots.findById(booking.slot).session(session),
+        (booking as any).slot ? BookingSlots.findById((booking as any).slot).session(session) : null,
       ])
 
       // ✅ Session commit এর পরে push/email পাঠাবো

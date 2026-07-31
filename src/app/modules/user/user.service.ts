@@ -31,6 +31,10 @@ import { modeType } from '../notification/notification.interface'
 import { BookingSlots } from '../bookingSlots/bookingSlots.model'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
+import {
+  buildBufferRulesFromSlotBufferStep,
+  getDefaultBookingRules,
+} from '../booking/bookingRules.utils'
 dayjs.extend(utc)
 
 const applyReferralCodeToUser = async (userId: string, referralCode: string) => {
@@ -697,7 +701,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
   try {
     const user = await User.findById(viewedUserId)
       .select(
-        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability bankDetails advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education stripeAccountId isTopExpert pushNotify emailNotify isVatRegistered vatRegistrationNumber country status createdAt',
+        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education stripeAccountId isTopExpert pushNotify emailNotify isVatRegistered vatRegistrationNumber country status createdAt bookingRules',
       )
       .lean()
 
@@ -1098,6 +1102,31 @@ const updateUserInfoFromDB = async (
     }
 
     let finalPayload = { ...payload }
+
+    if (payload.bookingRules) {
+      const defaults = getDefaultBookingRules()
+      const currentRules = user.bookingRules || defaults
+      const incomingRules = payload.bookingRules as Partial<
+        typeof defaults
+      >
+      const slotBufferStep =
+        incomingRules.slotBufferStep ??
+        currentRules.slotBufferStep ??
+        defaults.slotBufferStep
+
+      finalPayload.bookingRules = {
+        minNotice:
+          incomingRules.minNotice ??
+          currentRules.minNotice ??
+          defaults.minNotice,
+        bookingHorizonDays:
+          incomingRules.bookingHorizonDays ??
+          currentRules.bookingHorizonDays ??
+          defaults.bookingHorizonDays,
+        slotBufferStep,
+        bufferRules: buildBufferRulesFromSlotBufferStep(slotBufferStep),
+      }
+    }
 
     // Step 1: Session durations logic
     if (payload.sessionDurations && payload.sessionDurations.length > 0) {

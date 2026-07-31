@@ -82,19 +82,29 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
       booking.localTime &&
       dayjs(`${booking.localDate} ${booking.localTime}`, 'YYYY-MM-DD HH:mm', true).isValid(),
     )
-    const bookingDate = hasValidLocalDateTime ? booking.localDate : slot.date
-    const bookingTime = hasValidLocalDateTime ? booking.localTime : slot.time
+    const bookingDate = hasValidLocalDateTime
+      ? booking.localDate
+      : booking.date || slot?.date
+    const bookingTime = hasValidLocalDateTime
+      ? booking.localTime
+      : booking.localStartTime || slot?.time
 
     let bookingStartUtc: dayjs.Dayjs
 
-    try {
-      // Parse slot date+time in booking's local timezone, then convert to UTC
-      bookingStartUtc = dayjs
-        .tz(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm', bookingTimezone)
-        .utc()
-    } catch {
-      // Fallback to UTC parsing if timezone is invalid
-      bookingStartUtc = dayjs.utc(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm')
+    if (booking.startAt) {
+      bookingStartUtc = dayjs.utc(booking.startAt)
+    } else if (bookingDate && bookingTime) {
+      try {
+        // Parse slot date+time in booking's local timezone, then convert to UTC
+        bookingStartUtc = dayjs
+          .tz(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm', bookingTimezone)
+          .utc()
+      } catch {
+        // Fallback to UTC parsing if timezone is invalid
+        bookingStartUtc = dayjs.utc(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm')
+      }
+    } else {
+      continue
     }
 
     // How many minutes until session starts (from now in UTC)

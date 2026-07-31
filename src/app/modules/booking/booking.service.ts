@@ -32,6 +32,14 @@ import { modeType } from '../notification/notification.interface'
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore'
 import { TUser } from '../user/user.interface'
 import { timeSensitiveNotificationsJob } from '../../job/timeSensitiveNotifications.job'
+import { USER_STATUS } from '../user/user.constant'
+import {
+  buildBookingInterval,
+  isMinNoticeSatisfied,
+  isWithinBookingHorizon,
+  parseLocalDateTimeToUtc,
+  resolveBookingRules,
+} from './bookingRules.utils'
 
 const getEntityId = (entity: any): string =>
   (entity?._id || entity)?.toString()
@@ -47,12 +55,80 @@ const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   typescript: true,
 })
 
+const ACTIVE_BOOKING_STATUSES = [
+  BOOKING_STATUS.pending,
+  BOOKING_STATUS.confirmed,
+  BOOKING_STATUS.running,
+  BOOKING_STATUS.completed,
+]
+
+const isIntervalOverlapping = (
+  startA: Date,
+  endA: Date,
+  startB: Date,
+  endB: Date,
+) => startA < endB && endA > startB
+
+const getOfferedSessionDuration = (expert: any, duration: number) => {
+  return expert.sessionDurations?.find(
+    (session: any) => session.duration === duration && session.isOffered,
+  )
+}
+
+const getSessionPrice = (expert: any, duration: number, fallbackPrice: number) => {
+  const offeredSession = getOfferedSessionDuration(expert, duration)
+
+  if (offeredSession?.offeredPrice > 0) {
+    return offeredSession.offeredPrice
+  }
+
+  if (expert.hourlyRate > 0) {
+    return Number(((expert.hourlyRate / 60) * duration).toFixed(2))
+  }
+
+  return fallbackPrice
+}
+
+const buildLegacyBookingInterval = ({
+  booking,
+  timezone,
+  rules,
+}: {
+  booking: any
+  timezone: string
+  rules: ReturnType<typeof resolveBookingRules>
+}) => {
+  if (booking.startAt && booking.bufferEndAt) {
+    return {
+      start: new Date(booking.startAt),
+      end: new Date(booking.bufferEndAt),
+    }
+  }
+
+  if (!booking.slot?.date || !booking.slot?.time) {
+    return null
+  }
+
+  const interval = buildBookingInterval({
+    date: booking.slot.date,
+    startTime: booking.slot.time,
+    duration: booking.sessionDuration,
+    timezone: booking.timezone || timezone,
+    rules,
+  })
+
+  return {
+    start: interval.startAt,
+    end: interval.bufferEndAt,
+  }
+}
+
 const createBookings = async (payload: TBookings, userId: string) => {
   const session = await mongoose.startSession()
   session.startTransaction()
 
   try {
-    const { consult: consultId, slot: slotId } = payload
+    const { consult: consultId } = payload
 
     // 1. User validation
     const userData = await User.findById(userId).session(session)
@@ -65,6 +141,148 @@ const createBookings = async (payload: TBookings, userId: string) => {
     if (!consult || consult.isDeleted) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Consultant not found!')
     }
+
+    if (consult.status !== USER_STATUS.active) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Consultant is not active!')
+    }
+
+    if (!getOfferedSessionDuration(consult, payload.sessionDuration)) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Selected session duration is not offered by this consultant.',
+      )
+    }
+
+    {
+      const timezoneValue = consult.timeZone || 'UTC'
+      const rules = resolveBookingRules(consult)
+      const interval = buildBookingInterval({
+        date: payload.date as string,
+        startTime: payload.startTime as string,
+        duration: payload.sessionDuration,
+        timezone: timezoneValue,
+        rules,
+      })
+
+      if (!isMinNoticeSatisfied(interval.startAt, rules)) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          `Booking must be made at least ${rules.minNotice} hours before the session start time.`,
+        )
+      }
+
+      if (!isWithinBookingHorizon(interval.startAt, rules)) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          `Booking cannot be made more than ${rules.bookingHorizonDays} days in advance.`,
+        )
+      }
+
+      const requestedDay = dayjs
+        .tz(payload.date as string, 'YYYY-MM-DD', timezoneValue)
+        .format('ddd')
+        .toLowerCase()
+      const dayAvailability = consult.availability?.find(
+        (availability: any) => availability.day === requestedDay,
+      )
+
+      const isInsideAvailability = dayAvailability?.slots?.some(
+        (slot: { from: string; to: string }) => {
+          const availabilityStart = parseLocalDateTimeToUtc(
+            payload.date as string,
+            slot.from,
+            timezoneValue,
+          )
+          const availabilityEnd = parseLocalDateTimeToUtc(
+            payload.date as string,
+            slot.to,
+            timezoneValue,
+          )
+
+          return (
+            interval.startAt >= availabilityStart &&
+            interval.bufferEndAt <= availabilityEnd
+          )
+        },
+      )
+
+      if (!isInsideAvailability) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Selected booking time is outside consultant availability.',
+        )
+      }
+
+      const existingBookings = await Booking.find({
+        consult: consult._id,
+        status: { $in: ACTIVE_BOOKING_STATUSES },
+        isDeleted: false,
+      })
+        .select('sessionDuration timezone startAt endAt bufferEndAt date localDate localTime localStartTime')
+        .session(session)
+
+      const hasOverlap = existingBookings.some((booking: any) => {
+        const existingInterval = buildLegacyBookingInterval({
+          booking,
+          timezone: timezoneValue,
+          rules,
+        })
+
+        if (!existingInterval) {
+          return false
+        }
+
+        return isIntervalOverlapping(
+          interval.startAt,
+          interval.bufferEndAt,
+          existingInterval.start,
+          existingInterval.end,
+        )
+      })
+
+      if (hasOverlap) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Selected booking time overlaps with an existing booking.',
+        )
+      }
+
+      payload.user = new mongoose.Types.ObjectId(userData._id)
+      payload.consult = new mongoose.Types.ObjectId(consult._id)
+      payload.timezone = timezoneValue
+      payload.status = BOOKING_STATUS.pending
+      payload.isExpertVatRegistered = !!(
+        consult.isVatRegistered && consult.vatRegistrationNumber
+      )
+      payload.price = getSessionPrice(
+        consult,
+        payload.sessionDuration,
+        payload.price,
+      )
+      payload.date = interval.date
+      payload.startTime = interval.startTime
+      payload.endTime = interval.endTime
+      payload.bufferTime = interval.bufferTime
+      payload.startAt = interval.startAt
+      payload.endAt = interval.endAt
+      payload.bufferEndAt = interval.bufferEndAt
+      payload.localDate = interval.localDate
+      payload.localTime = interval.localStartTime
+      payload.localStartTime = interval.localStartTime
+      payload.localEndTime = interval.localEndTime
+      payload.dmCloseTime = dayjs(interval.endAt).add(6, 'hour').toDate()
+
+      const [createdBooking] = await Booking.create([payload], { session })
+      if (!createdBooking) {
+        throw new AppError(httpStatus.BAD_REQUEST, 'Failed to create booking')
+      }
+
+      await session.commitTransaction()
+      return createdBooking
+    }
+
+    throw new AppError(httpStatus.BAD_REQUEST, 'Legacy slot booking payload is no longer supported.')
+    /*
 
     // 3. Slot validation
     const slotTime = await BookingSlots.findOne({
@@ -160,6 +378,7 @@ const createBookings = async (payload: TBookings, userId: string) => {
     await session.commitTransaction()
 
     return createdBooking
+    */
   } catch (error) {
     await session.abortTransaction()
     throw error instanceof AppError
@@ -209,7 +428,9 @@ const getBookingCalender = async (
     .select('slot')
     .lean()
 
-  const slotIds = bookings.map((b) => b.slot.toString())
+  const slotIds = bookings
+    .filter((b) => (b as any).slot)
+    .map((b) => (b as any).slot.toString())
 
   // 2. এই মাসের স্লটগুলো নেওয়া
   const slots = await BookingSlots.find({
@@ -514,7 +735,7 @@ const cancelBooking = async (
     }
 
     // Time checked
-    const slot = await BookingSlots.findById(getEntityId(booking.slot)).session(session)
+    const slot = await BookingSlots.findById(getEntityId((booking as any).slot)).session(session)
     if (!slot) {
       throw new AppError(httpStatus.NOT_FOUND, 'Slot not found')
     }
@@ -538,7 +759,7 @@ const cancelBooking = async (
 
     // Free the slots
     await BookingSlots.findByIdAndUpdate(
-      getEntityId(booking.slot),
+      getEntityId((booking as any).slot),
       { isBooked: false },
       { session },
     )
@@ -791,7 +1012,7 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
         updatedBooking,
         user,
         updatedBooking.consult as any,
-        updatedBooking.slot as any,
+        (updatedBooking as any).slot,
       )
     }
 
@@ -863,7 +1084,7 @@ const declineBooking = async (
 
     // 3. Free the slot
     await BookingSlots.findByIdAndUpdate(
-      booking.slot,
+      (booking as any).slot,
       { isBooked: false },
       { session },
     )
@@ -913,7 +1134,7 @@ const declineBooking = async (
     const [booker, expert, slot] = await Promise.all([
       User.findById(booking.user).session(session),
       User.findById(booking.consult).session(session),
-      BookingSlots.findById(booking.slot).session(session),
+      BookingSlots.findById((booking as any).slot).session(session),
     ])
 
     // 7. Push notification to booker
@@ -1100,7 +1321,7 @@ const completedBooking = async (
           updatedBooking,
           consultant,
           consultant as TUser,
-          updatedBooking.slot as any,
+          (updatedBooking as any).slot,
         )
       }
 
@@ -1237,7 +1458,7 @@ const rescheduleBooking = async (
     }
 
     // 7. Free up the old slot
-    const oldSlotId = (booking.slot as any)._id || booking.slot
+    const oldSlotId = ((booking as any).slot as any)?._id || (booking as any).slot
     const oldSlot = await BookingSlots.findById(oldSlotId).session(session)
     if (oldSlot) {
       oldSlot.isBooked = false
@@ -1335,7 +1556,7 @@ const requestScheduleChange = async (
 
   const user = booking.user as unknown as TUser
   const consultant = booking.consult as unknown as TUser
-  const slot = booking.slot as any
+  const slot = (booking as any).slot
 
   if (user?.fcmToken && user.pushNotify?.bookingAndSchedule) {
     await sendBookingsNotification(

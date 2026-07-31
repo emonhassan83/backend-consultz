@@ -222,12 +222,14 @@ const confirmPayment = async (payload: {
       )
     }
 
-    /* ========= 4. Mark Slot as Booked ========= */
-    await BookingSlots.findByIdAndUpdate(
-      booking.slot,
-      { isBooked: true },
-      { session },
-    )
+    /* ========= 4. Mark Slot as Booked (old fixed-slot bookings only) ========= */
+    if ((booking as any).slot) {
+      await BookingSlots.findByIdAndUpdate(
+        (booking as any).slot,
+        { isBooked: true },
+        { session },
+      )
+    }
 
     /* ========= 5. Create Chat ========= */
     const existingChat = await Chat.findOne({
@@ -262,7 +264,7 @@ const confirmPayment = async (payload: {
         booking,
         consult,
         consult as unknown as TUser,
-        booking.slot as any,
+        (booking as any).slot,
         { requesterName: user?.firstName || 'a client' },
       )
     }

@@ -109,13 +109,33 @@ const SessionDurationSchema = z
     }
   })
 
-const BankAccountSchema = z.object({
-  bankName: z.string().optional(),
-  number: z.number().optional(),
-  sortCode: z.string().optional(),
+// ✅ Create User Validation
+const BookingBufferRuleSchema = z.object({
+  duration: z
+    .number({ message: 'Booking rule duration is required!' })
+    .positive({ message: 'Booking rule duration must be greater than 0' }),
+  buffer: z
+    .number({ message: 'Booking rule buffer is required!' })
+    .min(0, { message: 'Booking rule buffer cannot be negative' }),
 })
 
-// ✅ Create User Validation
+const BookingRulesSchema = z.object({
+  minNotice: z
+    .number()
+    .min(0, { message: 'Minimum notice cannot be negative' })
+    .optional(),
+  bookingHorizonDays: z
+    .number()
+    .min(1, { message: 'Booking horizon must be at least 1 day' })
+    .optional(),
+  slotBufferStep: z
+    .number()
+    .int({ message: 'Slot buffer step must be a whole number' })
+    .min(0, { message: 'Slot buffer step cannot be negative' })
+    .optional(),
+  bufferRules: z.array(BookingBufferRuleSchema).optional(),
+})
+
 const createValidationSchema = z.object({
   body: z.object({
     firstName: z.string({ message: 'First name is required!' }),
@@ -179,9 +199,9 @@ const updateValidationSchema = z.object({
       )
       .optional(),
     sessionDurations: z.array(SessionDurationSchema).optional(),
+    bookingRules: BookingRulesSchema.optional(),
     advisingStyles: z.array(z.string()).optional(),
     hourlyRate: z.number().optional(),
-    bankDetails: BankAccountSchema.optional(),
   }),
 })
 

@@ -48,12 +48,36 @@ const SessionDurationSchema = new Schema(
   { _id: false },
 )
 
-// 🏦 Bank Account
-const BankAccountSchema = new Schema(
+// Booking Rules
+const DEFAULT_BOOKING_BUFFER_RULES = [
+  { duration: 15, buffer: 5 },
+  { duration: 30, buffer: 10 },
+  { duration: 60, buffer: 20 },
+]
+
+const buildBookingBufferRules = (slotBufferStep = 5) =>
+  [15, 30, 60].map((duration) => ({
+    duration,
+    buffer: slotBufferStep * (duration / 15),
+  }))
+
+const BookingBufferRuleSchema = new Schema(
   {
-    bankName: { type: String, default: '' },
-    number: { type: Number, default: null },
-    sortCode: { type: String, default: '' },
+    duration: { type: Number, required: true, min: 1 },
+    buffer: { type: Number, required: true, min: 0 },
+  },
+  { _id: false },
+)
+
+const BookingRulesSchema = new Schema(
+  {
+    minNotice: { type: Number, default: 2, min: 0 },
+    bookingHorizonDays: { type: Number, default: 60, min: 1 },
+    slotBufferStep: { type: Number, default: 5, min: 0 },
+    bufferRules: {
+      type: [BookingBufferRuleSchema],
+      default: () => DEFAULT_BOOKING_BUFFER_RULES,
+    },
   },
   { _id: false },
 )
@@ -122,8 +146,15 @@ const userSchema = new Schema<TUser, UserModel>(
     },
     socialProfiles: { type: [SocialProfileSchema], default: [] },
     sessionDurations: { type: [SessionDurationSchema], default: [] },
-
-    bankDetails: { type: BankAccountSchema, default: {} },
+    bookingRules: {
+      type: BookingRulesSchema,
+      default: () => ({
+        minNotice: 2,
+        bookingHorizonDays: 60,
+        slotBufferStep: 5,
+        bufferRules: buildBookingBufferRules(5),
+      }),
+    },
     hourlyRate: { type: Number, default: 0 },
 
     role: {
@@ -207,6 +238,15 @@ const userSchema = new Schema<TUser, UserModel>(
 // TTL index
 userSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 })
 userSchema.index({ referralCode: 1 })
+
+userSchema.pre('validate', function () {
+  if (!this.bookingRules) {
+    return
+  }
+
+  const slotBufferStep = this.bookingRules.slotBufferStep ?? 5
+  this.bookingRules.bufferRules = buildBookingBufferRules(slotBufferStep)
+})
 
 // ====================== AVAILABILITY CHANGE DETECTION ======================
 

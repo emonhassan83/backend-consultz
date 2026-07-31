@@ -35,8 +35,20 @@ const getABookingSlots = catchAsync(async (req, res) => {
   })
 })
 
+const getDynamicBookingSlots = catchAsync(async (req, res) => {
+  const result = await BookingSlotsService.getDynamicSlotsFromDB(req.query)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Dynamic booking slots retrieved successfully!',
+    data: result,
+  })
+})
+
 export const BookingSlotsControllers = {
   createBookingSlot,
   getAllBookingSlots,
-  getABookingSlots
+  getABookingSlots,
+  getDynamicBookingSlots,
 }
