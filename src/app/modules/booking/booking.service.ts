@@ -106,7 +106,25 @@ const buildLegacyBookingInterval = ({
   }
 
   if (!booking.slot?.date || !booking.slot?.time) {
-    return null
+    const bookingDate = booking.localDate || booking.date
+    const bookingTime = booking.localStartTime || booking.localTime
+
+    if (!bookingDate || !bookingTime) {
+      return null
+    }
+
+    const interval = buildBookingInterval({
+      date: bookingDate,
+      startTime: bookingTime,
+      duration: booking.sessionDuration,
+      timezone: booking.timezone || timezone,
+      rules,
+    })
+
+    return {
+      start: interval.startAt,
+      end: interval.bufferEndAt,
+    }
   }
 
   const interval = buildBookingInterval({
@@ -1439,9 +1457,11 @@ const completedBooking = async (
 const rescheduleBooking = async (
   id: string,
   payload: {
-    slot: string
-    localDate: string
-    localTime: string
+    slot?: string
+    date?: string
+    startTime?: string
+    localDate?: string
+    localTime?: string
   },
   currentUserId: string, // added for ownership check (recommended)
 ) => {
@@ -1479,6 +1499,176 @@ const rescheduleBooking = async (
         httpStatus.BAD_REQUEST,
         `A ${booking.status} booking cannot be rescheduled`,
       )
+    }
+
+    if (payload.date && payload.startTime) {
+      const consultant = booking.consult as any
+      const timezoneValue = consultant.timeZone || booking.timezone || 'UTC'
+      const rules = resolveBookingRules(consultant)
+      const interval = buildBookingInterval({
+        date: payload.date,
+        startTime: payload.startTime,
+        duration: booking.sessionDuration,
+        timezone: timezoneValue,
+        rules,
+      })
+
+      if (!getOfferedSessionDuration(consultant, booking.sessionDuration)) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Selected session duration is not offered by this consultant.',
+        )
+      }
+
+      if (!isMinNoticeSatisfied(interval.startAt, rules)) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          `Reschedule must be made at least ${rules.minNotice} hours before the new session start time.`,
+        )
+      }
+
+      if (!isWithinBookingHorizon(interval.startAt, rules)) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          `Reschedule cannot be made more than ${rules.bookingHorizonDays} days in advance.`,
+        )
+      }
+
+      const requestedDay = dayjs
+        .tz(payload.date, 'YYYY-MM-DD', timezoneValue)
+        .format('ddd')
+        .toLowerCase()
+      const dayAvailability = consultant.availability?.find(
+        (availability: any) => availability.day === requestedDay,
+      )
+
+      const isInsideAvailability = dayAvailability?.slots?.some(
+        (slot: { from: string; to: string }) => {
+          const availabilityStart = parseLocalDateTimeToUtc(
+            payload.date as string,
+            slot.from,
+            timezoneValue,
+          )
+          const availabilityEnd = parseLocalDateTimeToUtc(
+            payload.date as string,
+            slot.to,
+            timezoneValue,
+          )
+
+          return (
+            interval.startAt >= availabilityStart &&
+            interval.bufferEndAt <= availabilityEnd
+          )
+        },
+      )
+
+      if (!isInsideAvailability) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Selected reschedule time is outside consultant availability.',
+        )
+      }
+
+      const existingBookings = await Booking.find({
+        _id: { $ne: booking._id },
+        consult: consultant._id,
+        status: { $in: ACTIVE_BOOKING_STATUSES },
+        isDeleted: false,
+      })
+        .select('sessionDuration timezone startAt endAt bufferEndAt date localDate localTime localStartTime')
+        .session(session)
+
+      const hasOverlap = existingBookings.some((existingBooking: any) => {
+        const existingInterval = buildLegacyBookingInterval({
+          booking: existingBooking,
+          timezone: timezoneValue,
+          rules,
+        })
+
+        if (!existingInterval) {
+          return false
+        }
+
+        return isIntervalOverlapping(
+          interval.startAt,
+          interval.bufferEndAt,
+          existingInterval.start,
+          existingInterval.end,
+        )
+      })
+
+      if (hasOverlap) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Selected reschedule time overlaps with an existing booking.',
+        )
+      }
+
+      const updatedBooking = await Booking.findOneAndUpdate(
+        {
+          _id: booking._id,
+          status: booking.status,
+          updatedAt: booking.updatedAt,
+        },
+        {
+          $set: {
+            timezone: timezoneValue,
+            date: interval.date,
+            startTime: interval.startTime,
+            endTime: interval.endTime,
+            bufferTime: interval.bufferTime,
+            startAt: interval.startAt,
+            endAt: interval.endAt,
+            bufferEndAt: interval.bufferEndAt,
+            localDate: interval.localDate,
+            localTime: interval.localStartTime,
+            localStartTime: interval.localStartTime,
+            localEndTime: interval.localEndTime,
+            is10MinReminderSent: false,
+            isJoinCallReminderSent: false,
+            lastPendingReminderSentAt: null,
+          },
+        },
+        { new: true, session },
+      )
+
+      if (!updatedBooking) {
+        throw new AppError(
+          httpStatus.CONFLICT,
+          'Booking schedule changed concurrently. Please try again.',
+        )
+      }
+
+      const [user, expert] = await Promise.all([
+        User.findById(booking.user).session(session),
+        User.findById(booking.consult).session(session),
+      ])
+
+      if (user?.fcmToken && user.pushNotify?.bookingAndSchedule) {
+        await sendBookingsNotification('reschedule', updatedBooking, user, expert as TUser, null as any)
+      }
+
+      if (expert?.fcmToken && expert.pushNotify?.bookingAndSchedule) {
+        await sendBookingsNotification(
+          'reschedule',
+          updatedBooking,
+          expert,
+          expert as TUser,
+          null as any,
+          { otherPartyName: user?.firstName || 'your client' },
+        )
+      }
+
+      if (user && expert) {
+        await sendRescheduleEmail(user, expert, updatedBooking)
+      }
+
+      await session.commitTransaction()
+      return updatedBooking
+    }
+
+    if (!payload.slot) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Slot is required for legacy reschedule.')
     }
 
     // 4. Find the new slot

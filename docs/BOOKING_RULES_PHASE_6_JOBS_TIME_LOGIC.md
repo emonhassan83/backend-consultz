@@ -113,3 +113,9 @@ for old bookings without `endAt`.
 - Payment confirmation.
 - Dynamic reschedule.
 - Socket call-start/running transition.
+
+Phase 7 dynamic reschedule implementation is documented in:
+
+```text
+docs/BOOKING_RULES_PHASE_7_RESCHEDULE.md
+```
