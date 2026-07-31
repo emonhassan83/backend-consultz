@@ -82,6 +82,15 @@ const noticeBlock = (text: string, type: 'info' | 'warning' | 'success' = 'info'
 const para = (text: string) =>
   `<p style="margin:0 0 14px; font-size:14px; color:#444444; line-height:1.7;">${text}</p>`
 
+const getBookingSessionTime = (booking: TBookings) => {
+  const startTime = booking.localStartTime || booking.localTime || booking.startTime || 'N/A'
+  const endTime = booking.localEndTime ? ` - ${booking.localEndTime}` : ''
+  return `${startTime}${endTime}`
+}
+
+const getBookingSessionInfo = (booking: TBookings) =>
+  `${booking.localDate || booking.date || 'N/A'} • ${getBookingSessionTime(booking)} (${booking.timezone || 'UTC'})`
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. New booking request → consultant
 // ─────────────────────────────────────────────────────────────────────────────
@@ -90,7 +99,7 @@ export const newBookingToConsultantTemplate = (
   booking: TBookings,
   user: TUser,
 ): string => {
-  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+  const sessionInfo = getBookingSessionInfo(booking)
 
   const body = `
     ${para('You have received a new booking request. Please review the details below and respond from your dashboard.')}
@@ -118,7 +127,7 @@ export const bookingCancelledToUserTemplate = (
   withRefund: boolean,
   cancelledBy?: 'user' | 'consult',
 ): string => {
-  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+  const sessionInfo = getBookingSessionInfo(booking)
 
   const cancellationText =
     cancelledBy === 'user'
@@ -149,7 +158,7 @@ export const bookingCancelledToConsultantTemplate = (
   cancelledByName: string,
   cancelledBy?: 'user' | 'consult',
 ): string => {
-  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+  const sessionInfo = getBookingSessionInfo(booking)
 
   const cancellationText =
     cancelledBy === 'consult'
@@ -178,7 +187,7 @@ export const sessionCompletedToConsultantTemplate = (
   payment: any,
   holdDays = 7,
 ): string => {
-  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+  const sessionInfo = getBookingSessionInfo(booking)
 
   const isPaymentObject = typeof payment === 'object' && payment !== null
   const formatMoney = (amount?: number) => `£${Number(amount || 0).toFixed(2)}`
@@ -233,7 +242,7 @@ export const bookingRescheduledToUserTemplate = (
   consult: TUser,
   booking: TBookings,
 ): string => {
-  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+  const sessionInfo = getBookingSessionInfo(booking)
 
   const body = `
     ${para(`Your booking with <strong>${consult.firstName} ${consult.lastName}</strong> has been rescheduled.`)}
@@ -255,7 +264,7 @@ export const bookingRescheduledToConsultantTemplate = (
   user: TUser,
   booking: TBookings,
 ): string => {
-  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+  const sessionInfo = getBookingSessionInfo(booking)
 
   const body = `
     ${para(`Your booking with <strong>${user.firstName} ${user.lastName}</strong> has been rescheduled.`)}
@@ -275,7 +284,7 @@ export const scheduleChangeRequestToUserTemplate = (
   booking: TBookings,
   reason?: string,
 ): string => {
-  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+  const sessionInfo = getBookingSessionInfo(booking)
 
   const body = `
     ${para(`<strong>${consult.firstName} ${consult.lastName}</strong> has requested a schedule change for your booking.`)}
@@ -322,7 +331,7 @@ export const notRespondedToUserTemplate = (
   booking: TBookings,
   refundProcessed: boolean,
 ): string => {
-  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+  const sessionInfo = getBookingSessionInfo(booking)
 
   const body = `
     ${para(`We're sorry to inform you that your confirmed booking with <strong>${consult.firstName} ${consult.lastName}</strong> has been automatically cancelled because the consultant did not respond within the required time.`)}
@@ -362,7 +371,7 @@ export const notRespondedToConsultantTemplate = (
   user: TUser,
   booking: TBookings,
 ): string => {
-  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+  const sessionInfo = getBookingSessionInfo(booking)
 
   const body = `
     ${para(`Your booking request with <strong>${user.firstName} ${user.lastName}</strong> was closed because no response was received in time.`)}
@@ -385,7 +394,7 @@ export const paymentSuccessToUserTemplate = (
   expert: TUser,
   payment?: any,
 ): string => {
-  const sessionInfo = `${booking.localDate} • ${booking.localTime} (${booking.timezone})`
+  const sessionInfo = getBookingSessionInfo(booking)
 
   const isPaymentObject = typeof payment === 'object' && payment !== null
   const subtotal = isPaymentObject ? payment.consultationFee : booking.price
@@ -419,3 +428,4 @@ export const paymentSuccessToUserTemplate = (
 
   return baseLayout('Payment Successful', user.firstName, body)
 }
+

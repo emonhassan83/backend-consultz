@@ -102,6 +102,12 @@ const formatSessionType = (type: string) => {
 const getEntityId = (entity: any): string =>
   (entity?._id || entity)?.toString()
 
+const getBookingStartTime = (booking: any, slot?: Partial<TBookingSlots>) =>
+  booking.localStartTime || booking.localTime || slot?.time || 'N/A'
+
+const getBookingSessionInfo = (booking: any, slot?: Partial<TBookingSlots>) =>
+  `${booking.localDate || slot?.date || booking.date || 'N/A'} at ${getBookingStartTime(booking, slot)} (${booking.timezone || 'UTC'})`
+
 export const sendBookingsNotification = async (
   action: TBookingNotifyAction,
   booking: any,
@@ -117,7 +123,7 @@ export const sendBookingsNotification = async (
   if (!user?.fcmToken) return
 
   const sessionTypeFormatted = formatSessionType(booking.sessionType)
-  const sessionInfo = `${booking.localDate || slot?.date || 'N/A'} at ${booking.localTime || slot?.time || 'N/A'} (${booking.timezone || 'UTC'})`
+  const sessionInfo = getBookingSessionInfo(booking, slot)
 
   // Determine who is the "other party" (the person the receiver is interacting with)
   const isReceiverBooker = user._id.toString() === getEntityId(booking.user)
@@ -187,7 +193,7 @@ export const sendBookingsNotification = async (
 
     case '10min_reminder':
       message = messages.bookingSchedule.reminder
-      description = `Your ${sessionTypeFormatted} session with ${otherPartyName} starts at ${booking.localTime || slot?.time || 'N/A'} (${booking.timezone || 'UTC'})`
+      description = `Your ${sessionTypeFormatted} session with ${otherPartyName} starts at ${getBookingStartTime(booking, slot)} (${booking.timezone || 'UTC'})`
       break
 
     case 'dms_closing':

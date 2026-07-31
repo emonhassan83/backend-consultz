@@ -107,3 +107,9 @@ Some old read/list flows are still slot-oriented and should be migrated in a lat
 - date-based booking list grouping;
 - reschedule flow;
 - any UI response that still expects populated `slot.date/time`.
+
+Phase 4 payment confirmation implementation is documented in:
+
+```text
+docs/BOOKING_RULES_PHASE_4_PAYMENT_CONFIRMATION.md
+```

@@ -208,11 +208,17 @@ const confirmPayment = async (payload: {
         status: BOOKING_STATUS.pending,
       },
       { returnDocument: 'after', session },
-    ).populate('slot')
+    )
 
     if (!booking) {
       throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
     }
+
+    const legacyBookingRaw = await Booking.collection.findOne(
+      { _id: booking._id as any },
+      { session },
+    )
+    const legacySlotId = legacyBookingRaw?.slot
 
     if (shouldAwardFirstPaidBookingBonus) {
       await User.findByIdAndUpdate(
@@ -223,9 +229,9 @@ const confirmPayment = async (payload: {
     }
 
     /* ========= 4. Mark Slot as Booked (old fixed-slot bookings only) ========= */
-    if ((booking as any).slot) {
+    if (legacySlotId) {
       await BookingSlots.findByIdAndUpdate(
-        (booking as any).slot,
+        legacySlotId,
         { isBooked: true },
         { session },
       )
@@ -259,12 +265,16 @@ const confirmPayment = async (payload: {
     ])
 
     if (consult?.fcmToken) {
+      const legacySlot = legacySlotId
+        ? await BookingSlots.findById(legacySlotId).select('date time').lean()
+        : null
+
       await sendBookingsNotification(
         'pending',
         booking,
         consult,
         consult as unknown as TUser,
-        (booking as any).slot,
+        legacySlot as any,
         { requesterName: user?.firstName || 'a client' },
       )
     }
