@@ -6,6 +6,7 @@ import { Booking } from '../modules/booking/booking.models'
 import { BOOKING_STATUS, PAYMENT_STATUS } from '../modules/booking/booking.constants'
 import { sendBookingsNotification } from '../modules/booking/booking.utils'
 import { TUser } from '../modules/user/user.interface'
+import { resolveBookingStartUtc } from './bookingJobTime.utils'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -45,32 +46,8 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
       continue
     }
 
-    // Determine booking slot start time in UTC
-    const bookingTimezone = booking.timezone || 'UTC'
-    const hasValidLocalDateTime = Boolean(
-      booking.localDate &&
-      booking.localTime &&
-      dayjs(`${booking.localDate} ${booking.localTime}`, 'YYYY-MM-DD HH:mm', true).isValid(),
-    )
-    const bookingDate = hasValidLocalDateTime
-      ? booking.localDate
-      : booking.date || slot?.date
-    const bookingTime = hasValidLocalDateTime
-      ? booking.localTime
-      : booking.localStartTime || slot?.time
-    let bookingStartUtc: dayjs.Dayjs
-
-    if (booking.startAt) {
-      bookingStartUtc = dayjs.utc(booking.startAt)
-    } else if (bookingDate && bookingTime) {
-      try {
-        bookingStartUtc = dayjs
-          .tz(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm', bookingTimezone)
-          .utc()
-      } catch {
-        bookingStartUtc = dayjs.utc(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm')
-      }
-    } else {
+    const bookingStartUtc = resolveBookingStartUtc(booking, slot)
+    if (!bookingStartUtc) {
       console.warn(`Booking ${booking._id} has no start time; reminder skipped.`)
       continue
     }

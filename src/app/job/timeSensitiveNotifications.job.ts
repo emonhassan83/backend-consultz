@@ -13,6 +13,10 @@ import { createReminderEmailContent } from '../utils/emailNotify'
 import emailSender from '../utils/emailSender'
 import { TBookings } from '../modules/booking/booking.interface'
 import { TUser } from '../modules/user/user.interface'
+import {
+  getBookingSessionInfoForJob,
+  resolveBookingStartUtc,
+} from './bookingJobTime.utils'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -75,42 +79,15 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
 
     if (!user || !consult) continue
 
-    // Use the booking's own timezone to determine the session start time
-    const bookingTimezone = booking.timezone || 'UTC'
-    const hasValidLocalDateTime = Boolean(
-      booking.localDate &&
-      booking.localTime &&
-      dayjs(`${booking.localDate} ${booking.localTime}`, 'YYYY-MM-DD HH:mm', true).isValid(),
-    )
-    const bookingDate = hasValidLocalDateTime
-      ? booking.localDate
-      : booking.date || slot?.date
-    const bookingTime = hasValidLocalDateTime
-      ? booking.localTime
-      : booking.localStartTime || slot?.time
-
-    let bookingStartUtc: dayjs.Dayjs
-
-    if (booking.startAt) {
-      bookingStartUtc = dayjs.utc(booking.startAt)
-    } else if (bookingDate && bookingTime) {
-      try {
-        // Parse slot date+time in booking's local timezone, then convert to UTC
-        bookingStartUtc = dayjs
-          .tz(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm', bookingTimezone)
-          .utc()
-      } catch {
-        // Fallback to UTC parsing if timezone is invalid
-        bookingStartUtc = dayjs.utc(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm')
-      }
-    } else {
+    const bookingStartUtc = resolveBookingStartUtc(booking, slot)
+    if (!bookingStartUtc) {
       continue
     }
 
     // How many minutes until session starts (from now in UTC)
     const timeToStartMinutes = bookingStartUtc.diff(nowUtc, 'minute')
 
-    const sessionInfo = `${booking.localDate} • ${booking.localTime} (${bookingTimezone})`
+    const sessionInfo = getBookingSessionInfoForJob(booking, slot)
 
     // ── 10-minute reminder ────────────────────────────────────────────────────
     if (

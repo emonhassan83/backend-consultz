@@ -105,8 +105,13 @@ const getEntityId = (entity: any): string =>
 const getBookingStartTime = (booking: any, slot?: Partial<TBookingSlots>) =>
   booking.localStartTime || booking.localTime || slot?.time || 'N/A'
 
+const getBookingTimeRange = (booking: any, slot?: Partial<TBookingSlots>) => {
+  const startTime = getBookingStartTime(booking, slot)
+  return booking.localEndTime ? `${startTime} - ${booking.localEndTime}` : startTime
+}
+
 const getBookingSessionInfo = (booking: any, slot?: Partial<TBookingSlots>) =>
-  `${booking.localDate || slot?.date || booking.date || 'N/A'} at ${getBookingStartTime(booking, slot)} (${booking.timezone || 'UTC'})`
+  `${booking.localDate || booking.date || slot?.date || 'N/A'} at ${getBookingTimeRange(booking, slot)} (${booking.timezone || 'UTC'})`
 
 export const sendBookingsNotification = async (
   action: TBookingNotifyAction,
@@ -193,7 +198,7 @@ export const sendBookingsNotification = async (
 
     case '10min_reminder':
       message = messages.bookingSchedule.reminder
-      description = `Your ${sessionTypeFormatted} session with ${otherPartyName} starts at ${getBookingStartTime(booking, slot)} (${booking.timezone || 'UTC'})`
+      description = `Your ${sessionTypeFormatted} session with ${otherPartyName} starts at ${getBookingTimeRange(booking, slot)} (${booking.timezone || 'UTC'})`
       break
 
     case 'dms_closing':

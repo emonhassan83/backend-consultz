@@ -20,10 +20,20 @@ export const dailyReviewReminderJob = async (): Promise<void> => {
   const completedBookings = await Booking.find({
     status: BOOKING_STATUS.completed,
     paymentStatus: PAYMENT_STATUS.paid,
-    updatedAt: { $gte: fortyEightHoursAgo, $lte: twentyFourHoursAgo },
+    $or: [
+      { endAt: { $gte: fortyEightHoursAgo, $lte: twentyFourHoursAgo } },
+      {
+        endAt: { $exists: false },
+        updatedAt: { $gte: fortyEightHoursAgo, $lte: twentyFourHoursAgo },
+      },
+      {
+        endAt: null,
+        updatedAt: { $gte: fortyEightHoursAgo, $lte: twentyFourHoursAgo },
+      },
+    ],
     isDeleted: false,
   })
-    .select('user consult timezone localDate localTime')
+    .select('user consult timezone localDate localTime localStartTime localEndTime startAt endAt updatedAt')
     .lean()
 
   console.log(`Found ${completedBookings.length} eligible bookings for review reminder`)
@@ -34,7 +44,7 @@ export const dailyReviewReminderJob = async (): Promise<void> => {
     const bookingTimezone = (booking as any).timezone || 'UTC'
 
     // Use the booking's own timezone to log the completion time for clarity
-    const completedAtLocal = dayjs.utc((booking as any).updatedAt)
+    const completedAtLocal = dayjs.utc((booking as any).endAt || (booking as any).updatedAt)
       .tz(bookingTimezone)
       .format('YYYY-MM-DD HH:mm z')
 

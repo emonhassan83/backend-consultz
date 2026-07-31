@@ -123,6 +123,54 @@ const buildLegacyBookingInterval = ({
   }
 }
 
+const getBookingDisplayFields = (booking: any, slot?: any) => ({
+  displayDate: booking.localDate || booking.date || slot?.date || null,
+  displayStartTime:
+    booking.localStartTime ||
+    booking.localTime ||
+    slot?.time ||
+    booking.startTime ||
+    null,
+  displayEndTime: booking.localEndTime || booking.endTime || null,
+  displayTimezone: booking.timezone || 'UTC',
+})
+
+const attachBookingDisplayFields = (booking: any, slot?: any) => ({
+  ...booking,
+  ...getBookingDisplayFields(booking, slot),
+})
+
+const getLegacySlotMapForBookings = async (bookingIds: string[]) => {
+  if (!bookingIds.length) return new Map<string, any>()
+
+  const rawBookings = await Booking.collection
+    .find({ _id: { $in: bookingIds.map((id) => new mongoose.Types.ObjectId(id)) } })
+    .project({ _id: 1, slot: 1 })
+    .toArray()
+
+  const slotIds = rawBookings
+    .map((booking) => booking.slot)
+    .filter(Boolean)
+
+  if (!slotIds.length) return new Map<string, any>()
+
+  const slots = await BookingSlots.find({ _id: { $in: slotIds } })
+    .select('date time')
+    .lean()
+
+  const slotById = new Map(slots.map((slot: any) => [slot._id.toString(), slot]))
+  const slotByBookingId = new Map<string, any>()
+
+  rawBookings.forEach((booking) => {
+    if (booking.slot) {
+      const slot = slotById.get(booking.slot.toString())
+      if (slot) slotByBookingId.set(booking._id.toString(), slot)
+    }
+  })
+
+  return slotByBookingId
+}
+
 const createBookings = async (payload: TBookings, userId: string) => {
   const session = await mongoose.startSession()
   session.startTransaction()
@@ -425,7 +473,7 @@ const getBookingCalender = async (
       ],
     },
   })
-    .select('slot')
+    .select('date localDate')
     .lean()
 
   const slotIds = bookings
@@ -442,6 +490,27 @@ const getBookingCalender = async (
 
   // 3. Date wise isBooked map তৈরি
   const bookedDates = new Set<string>()
+  bookings.forEach((booking: any) => {
+    const bookingDate = booking.localDate || booking.date
+    if (
+      bookingDate &&
+      bookingDate >= startOfMonth &&
+      bookingDate <= endOfMonth
+    ) {
+      bookedDates.add(bookingDate)
+    }
+  })
+
+  const slotByBookingId = await getLegacySlotMapForBookings(
+    bookings.map((booking: any) => booking._id.toString()),
+  )
+
+  bookings.forEach((booking: any) => {
+    const slotDate = slotByBookingId.get(booking._id.toString())?.date
+    if (slotDate && slotDate >= startOfMonth && slotDate <= endOfMonth) {
+      bookedDates.add(slotDate)
+    }
+  })
   slots.forEach((slot) => {
     if (slot.isBooked === true) {
       bookedDates.add(slot.date)
@@ -486,10 +555,9 @@ const getAllBookings = async (
       .populate([
         { path: 'user', select: 'firstName lastName photoUrl' },
         { path: 'consult', select: 'firstName lastName photoUrl' },
-        { path: 'slot', select: 'date time' },
       ])
       .select(
-        'user consult slot sessionType sessionDuration price timezone status createdAt mainQuestion',
+        'user consult sessionType sessionDuration price timezone status createdAt mainQuestion date localDate localTime localStartTime localEndTime startTime endTime',
       ) as any,
     restQuery,
   )
@@ -507,6 +575,7 @@ const getAllBookings = async (
 
   // ✅ Batch payment details
   const payments = await Payment.find({ booking: { $in: bookingIds } }).lean()
+  const slotByBookingId = await getLegacySlotMapForBookings(bookingIds)
   const paymentMap = new Map()
   payments.forEach((p: any) => {
     paymentMap.set(p.booking.toString(), p)
@@ -515,7 +584,10 @@ const getAllBookings = async (
   const enriched = data.map((booking: any) => {
     const payment = paymentMap.get(booking._id.toString())
     return {
-      ...booking.toObject(),
+      ...attachBookingDisplayFields(
+        booking.toObject(),
+        slotByBookingId.get(booking._id.toString()),
+      ),
       unreadMessageCount: unreadMap.get(booking._id.toString()) ?? 0,
       totalPay: payment?.amount || 0,
       vat: payment?.consultantVat || 0,
@@ -572,39 +644,37 @@ const getAllBookingsByDate = async (
   }).select('_id')
 
   const slotIds = matchingSlots.map((s) => s._id)
-
-  if (slotIds.length === 0) {
-    if (targetDates.length === 1) {
-      return {
-        data: {
-          date: dayjs(targetDates[0]).format('DD-MM-YYYY'),
-          bookingList: [],
-        },
-      }
-    }
-    return {
-      data: targetDates.map((d) => ({
-        date: dayjs(d).format('DD-MM-YYYY'),
-        bookingList: [],
-      })),
-    }
-  }
+  const legacyBookingIds = slotIds.length
+    ? (
+      await Booking.collection
+        .find({ slot: { $in: slotIds } })
+        .project({ _id: 1 })
+        .toArray()
+    ).map((booking) => booking._id)
+    : []
 
   const bookingFilter: Record<string, any> = {
     isDeleted: false,
     paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
-    slot: { $in: slotIds },
     $or: [{ user: userId }, { consult: userId }],
+    $and: [
+      {
+        $or: [
+          { localDate: { $in: targetDates } },
+          { date: { $in: targetDates } },
+          { _id: { $in: legacyBookingIds } },
+        ],
+      },
+    ],
   }
 
   const bookings: any[] = await Booking.find(bookingFilter)
     .populate([
       { path: 'user', select: 'firstName lastName photoUrl' },
       { path: 'consult', select: 'firstName lastName photoUrl' },
-      { path: 'slot', select: 'date time' },
     ])
     .select(
-      'user consult slot sessionType sessionDuration price timezone status createdAt',
+      'user consult sessionType sessionDuration price timezone status createdAt date localDate localTime localStartTime localEndTime startTime endTime',
     )
     .sort({ createdAt: -1 })
 
@@ -614,6 +684,7 @@ const getAllBookingsByDate = async (
 
   // ✅ Batch payment details
   const payments = await Payment.find({ booking: { $in: bookingIds } }).lean()
+  const slotByBookingId = await getLegacySlotMapForBookings(bookingIds)
   const paymentMap = new Map()
   payments.forEach((p: any) => {
     paymentMap.set(p.booking.toString(), p)
@@ -622,7 +693,10 @@ const getAllBookingsByDate = async (
   const enrichBooking = (booking: any) => {
     const payment = paymentMap.get(booking._id.toString())
     return {
-      ...booking.toObject(),
+      ...attachBookingDisplayFields(
+        booking.toObject(),
+        slotByBookingId.get(booking._id.toString()),
+      ),
       unreadMessageCount: unreadMap.get(booking._id.toString()) ?? 0,
       totalPay: payment?.amount || 0,
       vat: payment?.consultantVat || 0,
@@ -644,9 +718,10 @@ const getAllBookingsByDate = async (
   }
 
   for (const booking of bookings) {
-    const slotDate = booking?.slot?.date
-    if (slotDate && groupedByDate[slotDate] !== undefined) {
-      groupedByDate[slotDate].push(enrichBooking(booking))
+    const enrichedBooking = enrichBooking(booking)
+    const bookingDate = enrichedBooking.displayDate
+    if (bookingDate && groupedByDate[bookingDate] !== undefined) {
+      groupedByDate[bookingDate].push(enrichedBooking)
     }
   }
 
@@ -668,7 +743,6 @@ const getBookingsById = async (id: string, currentUserId: string) => {
   }).populate([
     { path: 'user', select: 'firstName lastName photoUrl' },
     { path: 'consult', select: 'firstName lastName photoUrl' },
-    { path: 'slot', select: 'date time' },
   ])
   if (!result) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Bookings not found!')
@@ -681,9 +755,15 @@ const getBookingsById = async (id: string, currentUserId: string) => {
   )
 
   const payment = await Payment.findOne({ booking: result._id.toString() }).lean()
+  const slotByBookingId = await getLegacySlotMapForBookings([
+    result._id.toString(),
+  ])
 
   return {
-    ...result.toObject(),
+    ...attachBookingDisplayFields(
+      result.toObject(),
+      slotByBookingId.get(result._id.toString()),
+    ),
     unreadMessageCount,
     totalPay: payment?.amount || 0,
     vat: payment?.consultantVat || 0,

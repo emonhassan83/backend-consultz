@@ -72,3 +72,9 @@ instead of relying on old fixed slot data.
 - Booking create validation.
 - Dynamic slot generation.
 - Old booking list/calendar migration.
+
+Phase 5 booking response/list/calendar implementation is documented in:
+
+```text
+docs/BOOKING_RULES_PHASE_5_BOOKING_RESPONSES.md
+```

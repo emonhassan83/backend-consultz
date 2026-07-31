@@ -15,6 +15,10 @@ import { sendNotRespondedEmail } from '../utils/emailNotify'
 import config from '../config'
 import { TUser } from '../modules/user/user.interface'
 import { TBookingSlots } from '../modules/bookingSlots/bookingSlots.interface'
+import {
+  resolveBookingEndUtc,
+  resolveBookingStartUtc,
+} from './bookingJobTime.utils'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -90,13 +94,17 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
       // ✅ UTC এ convert করে compare — timezone-safe
       const bookingStartUtc = bookingStartLocal.utc()
       const minutesSinceStart = nowUtc.diff(bookingStartUtc, 'minute', true)
+      const bookingEndUtc = resolveBookingEndUtc(booking, slot)
+      const minutesSinceEnd = bookingEndUtc
+        ? nowUtc.diff(bookingEndUtc, 'minute', true)
+        : minutesSinceStart - booking.sessionDuration
 
       console.log(
         `Booking ${booking._id} | tz: ${bookingTimezone} | start: ${bookingStartLocal.format()} | minutes since start: ${minutesSinceStart.toFixed(2)}`,
       )
 
       if (booking.status === BOOKING_STATUS.confirmed) {
-        if (minutesSinceStart < booking.sessionDuration) continue
+        if (minutesSinceEnd < 0) continue
       } else if (booking.status === BOOKING_STATUS.pending) {
         // Give the expert a short grace period at the scheduled start before
         // expiring an unaccepted request and refunding the consultee.
