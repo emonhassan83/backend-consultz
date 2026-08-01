@@ -376,18 +376,20 @@ const createBookings = async (payload: TBookings, userId: string) => {
         )
       }
 
-      const frontendLocalDate = payload.localDate || interval.localDate
+      const frontendLocalDate = payload.localDate
       const frontendLocalStartTime =
-        payload.localStartTime || payload.localTime || interval.localStartTime
-      const frontendLocalEndTime = dayjs(
-        `${frontendLocalDate} ${frontendLocalStartTime}`,
-        'YYYY-MM-DD HH:mm',
-        true,
-      ).isValid()
+        payload.localStartTime || payload.localTime
+      const frontendLocalEndTime = frontendLocalDate &&
+        frontendLocalStartTime &&
+        dayjs(
+          `${frontendLocalDate} ${frontendLocalStartTime}`,
+          'YYYY-MM-DD HH:mm',
+          true,
+        ).isValid()
         ? dayjs(`${frontendLocalDate} ${frontendLocalStartTime}`, 'YYYY-MM-DD HH:mm')
           .add(payload.sessionDuration, 'minute')
           .format('HH:mm')
-        : interval.localEndTime
+        : undefined
 
       payload.user = new mongoose.Types.ObjectId(userData._id)
       payload.consult = new mongoose.Types.ObjectId(consult._id)
@@ -404,9 +406,18 @@ const createBookings = async (payload: TBookings, userId: string) => {
       payload.startAt = interval.startAt
       payload.endAt = interval.endAt
       payload.bufferEndAt = interval.bufferEndAt
-      payload.localDate = frontendLocalDate
-      payload.localStartTime = frontendLocalStartTime
-      payload.localEndTime = frontendLocalEndTime
+
+      if (frontendLocalDate && frontendLocalStartTime) {
+        payload.localDate = frontendLocalDate
+        payload.localStartTime = frontendLocalStartTime
+        payload.localEndTime = frontendLocalEndTime
+      } else {
+        const expertLocalStart = dayjs(interval.startAt).tz(timezoneValue)
+        const expertLocalEnd = dayjs(interval.endAt).tz(timezoneValue)
+        payload.localDate = expertLocalStart.format('YYYY-MM-DD')
+        payload.localStartTime = expertLocalStart.format('HH:mm')
+        payload.localEndTime = expertLocalEnd.format('HH:mm')
+      }
 
       const [createdBooking] = await Booking.create([payload], { session })
       if (!createdBooking) {
