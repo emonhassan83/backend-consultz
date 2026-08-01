@@ -1281,9 +1281,11 @@ const updateUserInfoFromDB = async (
     }
 
     const profileSetupProgress = calculateProfileSetupProgress(updatedUser)
+    const safeUpdatedUser = updatedUser.toObject()
+    delete (safeUpdatedUser as any).password
 
     return {
-      ...updatedUser.toObject(),
+      ...safeUpdatedUser,
       profileSetupProgress,
     }
   } catch (error) {

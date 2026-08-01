@@ -1,7 +1,7 @@
 import httpStatus from 'http-status'
 import { Contents } from './contents.models'
 import AppError from '../../errors/AppError'
-import { GENERAL_KEYS } from './contents.constants'
+import { DEFAULT_GENERAL_CONTENTS, GENERAL_KEYS } from './contents.constants'
 
 // Get single content by key
 const getContent = async (key: string) => {
@@ -26,7 +26,17 @@ const getGeneralContents = async () => {
   // Get from database
   const contents = await Contents.find({ key: { $in: GENERAL_KEYS } }).select('-__v').lean()
 
-  return contents
+  const contentByKey = new Map(contents.map((content) => [content.key, content]))
+
+  return GENERAL_KEYS.map((key) => {
+    const existingContent = contentByKey.get(key)
+    if (existingContent) return existingContent
+
+    return {
+      key,
+      value: DEFAULT_GENERAL_CONTENTS[key] ?? null,
+    }
+  })
 }
 
 // Create or update single content

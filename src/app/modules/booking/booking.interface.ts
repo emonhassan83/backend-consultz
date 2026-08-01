@@ -26,10 +26,10 @@ export interface TBookings {
   paymentStatus: TPaymentStatus
   recordDuration: number
   recordFile: string
-  dmCloseTime: Date
+  dmCloseTime?: Date
 
   // For local time calculation
-  localDate: string
+  localDate?: string
   localTime?: string
   
   status: TBookingStatus

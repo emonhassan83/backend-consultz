@@ -36,7 +36,7 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
   session.startTransaction()
 
   try {
-    // ✅ Server এর current UTC time — booking এর timezone দিয়ে আলাদাভাবে check হবে
+    // âœ… Server à¦à¦° current UTC time â€” booking à¦à¦° timezone à¦¦à¦¿à¦¯à¦¼à§‡ à¦†à¦²à¦¾à¦¦à¦¾à¦­à¦¾à¦¬à§‡ check à¦¹à¦¬à§‡
     const nowUtc = dayjs.utc()
 
     const oldBookings = await Booking.find({
@@ -49,50 +49,33 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
 
     console.log(`Found ${oldBookings.length} bookings to check`)
 
-    // ✅ postCommitTasks — session commit এর পরে email/push পাঠাবো
+    // âœ… postCommitTasks â€” session commit à¦à¦° à¦ªà¦°à§‡ email/push à¦ªà¦¾à¦ à¦¾à¦¬à§‹
     const postCommitTasks: (() => Promise<void>)[] = []
 
     let updatedCount = 0
 
     for (const booking of oldBookings) {
       let slot = (booking as any).slot
-      if (!slot && booking.localDate && booking.localTime) {
-        slot = { date: booking.localDate, time: booking.localTime }
-      } else if (!slot && booking.date && booking.localStartTime) {
-        slot = { date: booking.date, time: booking.localStartTime }
+      if (!slot && booking.localDate && (booking.localStartTime || booking.localTime)) {
+        slot = {
+          date: booking.localDate,
+          time: booking.localStartTime || booking.localTime,
+        }
+      } else if (!slot && booking.date && (booking.localStartTime || booking.startTime)) {
+        slot = {
+          date: booking.date,
+          time: booking.localStartTime || booking.startTime,
+        }
       }
 
-      if (!slot?.date || !slot?.time) {
-        console.warn(`Booking ${booking._id} has no slot date/time — skipping`)
+      const bookingTimezone = booking.timezone || 'UTC'
+      const bookingStartUtc = resolveBookingStartUtc(booking, slot)
+
+      if (!bookingStartUtc) {
+        console.warn(`Booking ${booking._id} has no resolvable start time — skipping`)
         continue
       }
 
-      // ✅ booking.timezone use করে booking start time বের করো
-      const bookingTimezone = booking.timezone || 'UTC'
-      const hasValidLocalDateTime = Boolean(
-        booking.localDate &&
-        booking.localTime &&
-        dayjs(`${booking.localDate} ${booking.localTime}`, 'YYYY-MM-DD HH:mm', true).isValid(),
-      )
-      const bookingDate = hasValidLocalDateTime ? booking.localDate : slot.date
-      const bookingTime = hasValidLocalDateTime ? booking.localTime : slot.time
-
-      let bookingStartLocal: dayjs.Dayjs
-
-      try {
-        // booking এর local timezone এ start time parse করো
-        bookingStartLocal = dayjs.tz(
-          `${bookingDate} ${bookingTime}`,
-          'YYYY-MM-DD HH:mm',
-          bookingTimezone,
-        )
-      } catch {
-        console.warn(`Invalid timezone "${bookingTimezone}" for booking ${booking._id} — falling back to UTC`)
-        bookingStartLocal = dayjs.utc(`${bookingDate} ${bookingTime}`, 'YYYY-MM-DD HH:mm')
-      }
-
-      // ✅ UTC এ convert করে compare — timezone-safe
-      const bookingStartUtc = bookingStartLocal.utc()
       const minutesSinceStart = nowUtc.diff(bookingStartUtc, 'minute', true)
       const bookingEndUtc = resolveBookingEndUtc(booking, slot)
       const minutesSinceEnd = bookingEndUtc
@@ -100,7 +83,7 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
         : minutesSinceStart - booking.sessionDuration
 
       console.log(
-        `Booking ${booking._id} | tz: ${bookingTimezone} | start: ${bookingStartLocal.format()} | minutes since start: ${minutesSinceStart.toFixed(2)}`,
+        `Booking ${booking._id} | tz: ${bookingTimezone} | start: ${bookingStartUtc.tz(bookingTimezone).format()} | minutes since start: ${minutesSinceStart.toFixed(2)}`,
       )
 
       if (booking.status === BOOKING_STATUS.confirmed) {
@@ -111,7 +94,7 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
         if (minutesSinceStart < 5) continue
       }
 
-      // ── Mark as not_responded ──────────────────────────────────────────────
+      // â”€â”€ Mark as not_responded â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const markedBooking = await Booking.findOneAndUpdate(
         {
           _id: booking._id,
@@ -139,14 +122,14 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
         )
       }
 
-      // ── Refund ────────────────────────────────────────────────────────────
+      // â”€â”€ Refund â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const payment = await Payment.findOne({
         booking: booking._id as any,
         isPaid: true,
         isDeleted: false,
       }).session(session)
 
-      // ── Fetch user data for notifications ─────────────────────────────────
+      // â”€â”€ Fetch user data for notifications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const [booker, expert, slotInfo] = await Promise.all([
         User.findById(booking.user)
           .select('_id firstName lastName email fcmToken pushNotify emailNotify')
@@ -157,7 +140,7 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
         (booking as any).slot ? BookingSlots.findById((booking as any).slot).session(session) : null,
       ])
 
-      // ✅ Session commit এর পরে push/email পাঠাবো
+      // âœ… Session commit à¦à¦° à¦ªà¦°à§‡ push/email à¦ªà¦¾à¦ à¦¾à¦¬à§‹
       const capturedBooking = booking
       const capturedPayment = payment
 
@@ -215,14 +198,14 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
 
       updatedCount++
       console.log(
-        `Marked booking ${booking._id} as not_responded | tz: ${bookingTimezone} | start: ${bookingStartLocal.format('YYYY-MM-DD HH:mm z')}`,
+        `Marked booking ${booking._id} as not_responded | tz: ${bookingTimezone} | start: ${bookingStartUtc.tz(bookingTimezone).format('YYYY-MM-DD HH:mm z')}`,
       )
     }
 
     await session.commitTransaction()
-    console.log(`Auto-mark Not Responded Job Completed — ${updatedCount} bookings updated`)
+    console.log(`Auto-mark Not Responded Job Completed â€” ${updatedCount} bookings updated`)
 
-    // ✅ Session commit এর পরে push/email পাঠাও
+    // âœ… Session commit à¦à¦° à¦ªà¦°à§‡ push/email à¦ªà¦¾à¦ à¦¾à¦“
     await Promise.allSettled(postCommitTasks.map((task) => task()))
   } catch (error) {
     await session.abortTransaction()
@@ -231,3 +214,4 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
     session.endSession()
   }
 }
+

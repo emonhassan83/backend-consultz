@@ -6,7 +6,7 @@ import { User } from '../modules/user/user.model'
 const adminUser = {
   firstName: 'vincent',
   lastName: 'wong',
-  email: 'vincentnetworkpropertybuyers@gmail.com',
+  email: 'info@consultz.com',
   password: config.admin_pass as string,
   role: USER_ROLE.admin,
   contractNumber: '+876543345678',

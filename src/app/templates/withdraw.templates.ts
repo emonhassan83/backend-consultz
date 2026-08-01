@@ -75,7 +75,9 @@ export const withdrawCompletedTemplate = (
   booking: TBookings,
   user: TUser,
 ): string => {
-  const sessionInfo = `${booking.localDate} â€¢ ${booking.localTime} (${booking.timezone})`
+  const sessionStartTime = booking.localStartTime || booking.localTime || booking.startTime || 'N/A'
+  const sessionEndTime = booking.localEndTime ? ` - ${booking.localEndTime}` : ''
+  const sessionInfo = `${booking.localDate || booking.date || 'N/A'} • ${sessionStartTime}${sessionEndTime} (${booking.timezone || 'UTC'})`
 
   const body = `
     ${para('Your withdrawal request has been successfully processed.')}

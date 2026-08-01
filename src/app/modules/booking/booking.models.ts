@@ -40,12 +40,6 @@ const bookingsSchema = new Schema<TBookings>(
     bufferEndAt: {
       type: Date,
     },
-    localStartTime: {
-      type: String,
-    },
-    localEndTime: {
-      type: String,
-    },
     sessionType: {
       type: String,
       enum: Object.values(SESSION_TYPE),
@@ -108,6 +102,12 @@ const bookingsSchema = new Schema<TBookings>(
     localTime: {
       type: String,
     },
+    localStartTime: {
+      type: String,
+    },
+    localEndTime: {
+      type: String,
+    },
     
     status: {
       type: String,
@@ -133,6 +133,22 @@ const bookingsSchema = new Schema<TBookings>(
   },
   {
     timestamps: true,
+    toJSON: {
+      transform: (_doc, ret) => {
+        delete (ret as any).sessionStartedAt
+        delete (ret as any).dmCloseTime
+        delete (ret as any).localTime
+        return ret
+      },
+    },
+    toObject: {
+      transform: (_doc, ret) => {
+        delete (ret as any).sessionStartedAt
+        delete (ret as any).dmCloseTime
+        delete (ret as any).localTime
+        return ret
+      },
+    },
   },
 )
 

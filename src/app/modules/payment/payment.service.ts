@@ -176,6 +176,11 @@ const confirmPayment = async (payload: {
   const session = await mongoose.startSession()
   session.startTransaction()
 
+  let confirmedPayment: any
+  let confirmedBooking: any
+  let legacySlotId: any
+  let shouldAwardFirstPaidBookingBonus = false
+
   try {
     /* ========= 2. Update Payment ========= */
     const payment = await Payment.findOneAndUpdate(
@@ -198,7 +203,7 @@ const confirmPayment = async (payload: {
       _id: { $ne: bookingId },
     }).session(session)
 
-    const shouldAwardFirstPaidBookingBonus = previousPaidBookingsCount === 0
+    shouldAwardFirstPaidBookingBonus = previousPaidBookingsCount === 0
 
     /* ========= 3. Update Booking ========= */
     const booking = await Booking.findByIdAndUpdate(
@@ -218,7 +223,7 @@ const confirmPayment = async (payload: {
       { _id: booking._id as any },
       { session },
     )
-    const legacySlotId = legacyBookingRaw?.slot
+    legacySlotId = legacyBookingRaw?.slot
 
     if (shouldAwardFirstPaidBookingBonus) {
       await User.findByIdAndUpdate(
@@ -257,10 +262,19 @@ const confirmPayment = async (payload: {
     }
 
     await session.commitTransaction()
+    confirmedPayment = payment
+    confirmedBooking = booking
+  } catch (error) {
+    await session.abortTransaction()
+    throw error
+  } finally {
+    session.endSession()
+  }
 
-    /* ========= 6. Notifications ========= */
+  /* ========= 6. Notifications ========= */
+  try {
     const [consult, user] = await Promise.all([
-      User.findById(booking.consult).select('fcmToken emailNotify firstName lastName email country isVatRegistered vatRegistrationNumber'),
+      User.findById(confirmedBooking.consult).select('fcmToken emailNotify firstName lastName email country isVatRegistered vatRegistrationNumber'),
       User.findById(userId).select('fcmToken pushNotify emailNotify firstName lastName email')
     ])
 
@@ -271,7 +285,7 @@ const confirmPayment = async (payload: {
 
       await sendBookingsNotification(
         'pending',
-        booking,
+        confirmedBooking,
         consult,
         consult as unknown as TUser,
         legacySlot as any,
@@ -281,12 +295,12 @@ const confirmPayment = async (payload: {
 
     // sent expert to new booking request add
     if (consult?.emailNotify?.booking) {
-      await sendNewBookingToConsultant(consult, booking, user as TUser)
+      await sendNewBookingToConsultant(consult, confirmedBooking, user as TUser)
     }
 
     // user got notification when they are paid
     if (user?.emailNotify?.payment) {
-      await sendPaymentSuccessToUser(user, booking, consult as TUser, payment)
+      await sendPaymentSuccessToUser(user, confirmedBooking, consult as TUser, confirmedPayment)
     }
 
     if (
@@ -299,20 +313,20 @@ const confirmPayment = async (payload: {
         message: 'First Consultation Booked!',
         description:
           'Congratulations! You have earned 300 points for booking your first consultation. Keep exploring!',
-        reference: booking._id as string,
+        reference: confirmedBooking._id as string,
         modelType: modeType.Achievement,
       })
     }
+  } catch (notificationError: any) {
+    console.error(
+      'Payment confirmed, but post-payment notification failed:',
+      notificationError?.message || notificationError,
+    )
+  }
 
-    return {
-      payment,
-      booking,
-    }
-  } catch (error) {
-    await session.abortTransaction()
-    throw error
-  } finally {
-    session.endSession()
+  return {
+    payment: confirmedPayment,
+    booking: confirmedBooking,
   }
 }
 

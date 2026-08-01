@@ -8,7 +8,7 @@ import timezonePlugin from 'dayjs/plugin/timezone'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { generateHourlySlots } from './bookingSlots.utils'
 import { Booking } from '../booking/booking.models'
-import { BOOKING_STATUS } from '../booking/booking.constants'
+import { BOOKING_STATUS, PAYMENT_STATUS } from '../booking/booking.constants'
 import {
   buildBookingInterval,
   getBufferForDuration,
@@ -25,6 +25,7 @@ dayjs.extend(customParseFormat)
 type TInterval = {
   start: Date
   end: Date
+  sessionEnd?: Date
 }
 
 const BLOCKING_BOOKING_STATUSES = [
@@ -71,6 +72,37 @@ const subtractBlockedIntervals = (
 
 const formatInTimezone = (date: Date, timezone: string) =>
   dayjs(date).tz(timezone).format('HH:mm')
+
+const getLegacySlotMapForBookings = async (bookingIds: string[]) => {
+  if (!bookingIds.length) return new Map<string, any>()
+
+  const rawBookings = await Booking.collection
+    .find({ _id: { $in: bookingIds.map((id) => id as any) } })
+    .project({ _id: 1, slot: 1 })
+    .toArray()
+
+  const slotIds = rawBookings
+    .map((booking) => booking.slot)
+    .filter(Boolean)
+
+  if (!slotIds.length) return new Map<string, any>()
+
+  const slots = await BookingSlots.find({ _id: { $in: slotIds } })
+    .select('date time')
+    .lean()
+
+  const slotById = new Map(slots.map((slot: any) => [slot._id.toString(), slot]))
+  const slotByBookingId = new Map<string, any>()
+
+  rawBookings.forEach((booking) => {
+    if (booking.slot) {
+      const slot = slotById.get(booking.slot.toString())
+      if (slot) slotByBookingId.set(booking._id.toString(), slot)
+    }
+  })
+
+  return slotByBookingId
+}
 
 const insertIntoDB = async (
   payload: { author: string },
@@ -256,32 +288,41 @@ const getDynamicSlotsFromDB = async (query: Record<string, unknown>) => {
   const existingBookings = await Booking.find({
     consult: expertId,
     status: { $in: BLOCKING_BOOKING_STATUSES },
+    paymentStatus: PAYMENT_STATUS.paid,
     isDeleted: false,
   })
-    .populate('slot', 'date time')
-    .select('slot sessionDuration timezone status startAt endAt bufferEndAt')
+    .select('sessionDuration timezone status startAt endAt bufferEndAt date localDate localTime localStartTime')
     .lean()
+
+  const legacySlotByBookingId = await getLegacySlotMapForBookings(
+    existingBookings.map((booking: any) => booking._id.toString()),
+  )
 
   const blockedIntervals = existingBookings
     .map((booking: any): TInterval | null => {
+      const legacySlot = legacySlotByBookingId.get(booking._id.toString())
+
       if (booking.startAt && booking.bufferEndAt) {
         return {
           start: new Date(booking.startAt),
           end: new Date(booking.bufferEndAt),
+          sessionEnd: booking.endAt
+            ? new Date(booking.endAt)
+            : dayjs(booking.startAt).add(booking.sessionDuration, 'minute').toDate(),
         }
       }
 
-      if (!booking.slot?.date || !booking.slot?.time) {
+      if (!legacySlot?.date || !legacySlot?.time) {
         return null
       }
 
-      if (booking.slot.date !== date) {
+      if (legacySlot.date !== date) {
         return null
       }
 
       const interval = buildBookingInterval({
-        date: booking.slot.date,
-        startTime: booking.slot.time,
+        date: legacySlot.date,
+        startTime: legacySlot.time,
         duration: booking.sessionDuration,
         timezone,
         rules,
@@ -290,6 +331,7 @@ const getDynamicSlotsFromDB = async (query: Record<string, unknown>) => {
       return {
         start: interval.startAt,
         end: interval.bufferEndAt,
+        sessionEnd: interval.endAt,
       }
     })
     .filter((interval: TInterval | null): interval is TInterval => {
@@ -306,7 +348,21 @@ const getDynamicSlotsFromDB = async (query: Record<string, unknown>) => {
     endTime: string
     bufferEndTime: string
     available: boolean
+    unavailableReason: string
   }[] = []
+  let generatedSlotCount = 0
+  let skippedByMinNotice = 0
+  let skippedByBookingHorizon = 0
+
+  blockedIntervals.forEach((interval) => {
+    slots.push({
+      startTime: formatInTimezone(interval.start, timezone),
+      endTime: formatInTimezone(interval.sessionEnd || interval.end, timezone),
+      bufferEndTime: formatInTimezone(interval.end, timezone),
+      available: false,
+      unavailableReason: 'booked',
+    })
+  })
 
   freeGaps.forEach((gap) => {
     let cursor = gap.start
@@ -319,32 +375,64 @@ const getDynamicSlotsFromDB = async (query: Record<string, unknown>) => {
         break
       }
 
-      if (
-        isMinNoticeSatisfied(cursor, rules) &&
-        isWithinBookingHorizon(cursor, rules)
-      ) {
-        slots.push({
-          startTime: formatInTimezone(cursor, timezone),
-          endTime: formatInTimezone(sessionEnd, timezone),
-          bufferEndTime: formatInTimezone(bufferEnd, timezone),
-          available: true,
-        })
+      generatedSlotCount++
+      const minNoticeSatisfied = isMinNoticeSatisfied(cursor, rules)
+      const withinBookingHorizon = isWithinBookingHorizon(cursor, rules)
+
+      if (!minNoticeSatisfied) {
+        skippedByMinNotice++
       }
+
+      if (!withinBookingHorizon) {
+        skippedByBookingHorizon++
+      }
+
+      slots.push({
+        startTime: formatInTimezone(cursor, timezone),
+        endTime: formatInTimezone(sessionEnd, timezone),
+        bufferEndTime: formatInTimezone(bufferEnd, timezone),
+        available: minNoticeSatisfied && withinBookingHorizon,
+        unavailableReason: !minNoticeSatisfied
+          ? 'min_notice'
+          : !withinBookingHorizon
+            ? 'booking_horizon'
+            : '',
+      })
 
       cursor = bufferEnd
     }
   })
+
+  slots.sort((a, b) => a.startTime.localeCompare(b.startTime))
+
+  const availableSlotCount = slots.filter((slot) => slot.available).length
 
   return {
     expertId,
     date,
     duration: sessionDuration,
     timezone,
-    slotBufferStep: rules.slotBufferStep,
-    bufferTime,
-    slots,
+      slotBufferStep: rules.slotBufferStep,
+      bufferTime,
+      emptyReason:
+        availableSlotCount === 0
+          ? generatedSlotCount === 0
+            ? 'No slots fit inside the available free gaps for this duration and buffer.'
+            : skippedByMinNotice === generatedSlotCount
+              ? `All slots are inside the ${rules.minNotice}-hour minimum notice window.`
+              : skippedByBookingHorizon === generatedSlotCount
+                ? `All slots are outside the ${rules.bookingHorizonDays}-day booking horizon.`
+                : 'No slots passed the booking rules for this date.'
+          : undefined,
+      skippedSlots: {
+        generated: generatedSlotCount,
+        minNotice: skippedByMinNotice,
+        bookingHorizon: skippedByBookingHorizon,
+        booked: blockedIntervals.length,
+      },
+      slots,
+    }
   }
-}
 
 export const BookingSlotsService = {
   insertIntoDB,

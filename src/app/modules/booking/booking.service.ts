@@ -75,18 +75,15 @@ const getOfferedSessionDuration = (expert: any, duration: number) => {
   )
 }
 
-const getSessionPrice = (expert: any, duration: number, fallbackPrice: number) => {
-  const offeredSession = getOfferedSessionDuration(expert, duration)
-
-  if (offeredSession?.offeredPrice > 0) {
-    return offeredSession.offeredPrice
+const getSessionPrice = (expert: any, duration: number) => {
+  if (typeof expert.hourlyRate !== 'number' || expert.hourlyRate <= 0) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Consultant hourly rate is not configured.',
+    )
   }
 
-  if (expert.hourlyRate > 0) {
-    return Number(((expert.hourlyRate / 60) * duration).toFixed(2))
-  }
-
-  return fallbackPrice
+  return Number(((expert.hourlyRate / 60) * duration).toFixed(2))
 }
 
 const buildLegacyBookingInterval = ({
@@ -157,6 +154,71 @@ const attachBookingDisplayFields = (booking: any, slot?: any) => ({
   ...booking,
   ...getBookingDisplayFields(booking, slot),
 })
+
+const getGeneralNumberSetting = async (
+  key: string,
+  defaultValue: number,
+): Promise<number> => {
+  const content = await Contents.findOne({ key }).select('value').lean()
+  const value = Number(content?.value)
+  return Number.isFinite(value) && value >= 0 ? value : defaultValue
+}
+
+const resolveBookingStartDate = (booking: any): Date | null => {
+  if (booking.startAt) {
+    return new Date(booking.startAt)
+  }
+
+  const bookingDate = booking.localDate || booking.date || booking.slot?.date
+  const bookingTime =
+    booking.localStartTime ||
+    booking.localTime ||
+    booking.startTime ||
+    booking.slot?.time
+
+  if (!bookingDate || !bookingTime) {
+    return null
+  }
+
+  const parsedStart = dayjs.tz(
+    `${bookingDate} ${bookingTime}`,
+    'YYYY-MM-DD HH:mm',
+    booking.timezone || 'UTC',
+  )
+
+  return parsedStart.isValid() ? parsedStart.utc().toDate() : null
+}
+
+const ensureActionBeforePolicyWindow = async ({
+  booking,
+  settingKey,
+  defaultMinutes = 60,
+  actionLabel,
+}: {
+  booking: any
+  settingKey: 'reschedulingTime' | 'cancellationTime'
+  defaultMinutes?: number
+  actionLabel: string
+}) => {
+  const policyMinutes = await getGeneralNumberSetting(settingKey, defaultMinutes)
+  const startAt = resolveBookingStartDate(booking)
+
+  if (!startAt) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `Cannot validate ${actionLabel} policy because booking start time is missing.`,
+    )
+  }
+
+  const deadline = dayjs(startAt).subtract(policyMinutes, 'minute')
+
+  if (dayjs().isAfter(deadline)) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `${actionLabel} is not allowed within ${policyMinutes} minutes of the scheduled time.`,
+    )
+  }
+}
 
 const getLegacySlotMapForBookings = async (bookingIds: string[]) => {
   if (!bookingIds.length) return new Map<string, any>()
@@ -282,6 +344,7 @@ const createBookings = async (payload: TBookings, userId: string) => {
       const existingBookings = await Booking.find({
         consult: consult._id,
         status: { $in: ACTIVE_BOOKING_STATUSES },
+        paymentStatus: PAYMENT_STATUS.paid,
         isDeleted: false,
       })
         .select('sessionDuration timezone startAt endAt bufferEndAt date localDate localTime localStartTime')
@@ -313,6 +376,19 @@ const createBookings = async (payload: TBookings, userId: string) => {
         )
       }
 
+      const frontendLocalDate = payload.localDate || interval.localDate
+      const frontendLocalStartTime =
+        payload.localStartTime || payload.localTime || interval.localStartTime
+      const frontendLocalEndTime = dayjs(
+        `${frontendLocalDate} ${frontendLocalStartTime}`,
+        'YYYY-MM-DD HH:mm',
+        true,
+      ).isValid()
+        ? dayjs(`${frontendLocalDate} ${frontendLocalStartTime}`, 'YYYY-MM-DD HH:mm')
+          .add(payload.sessionDuration, 'minute')
+          .format('HH:mm')
+        : interval.localEndTime
+
       payload.user = new mongoose.Types.ObjectId(userData._id)
       payload.consult = new mongoose.Types.ObjectId(consult._id)
       payload.timezone = timezoneValue
@@ -320,11 +396,7 @@ const createBookings = async (payload: TBookings, userId: string) => {
       payload.isExpertVatRegistered = !!(
         consult.isVatRegistered && consult.vatRegistrationNumber
       )
-      payload.price = getSessionPrice(
-        consult,
-        payload.sessionDuration,
-        payload.price,
-      )
+      payload.price = getSessionPrice(consult, payload.sessionDuration)
       payload.date = interval.date
       payload.startTime = interval.startTime
       payload.endTime = interval.endTime
@@ -332,11 +404,9 @@ const createBookings = async (payload: TBookings, userId: string) => {
       payload.startAt = interval.startAt
       payload.endAt = interval.endAt
       payload.bufferEndAt = interval.bufferEndAt
-      payload.localDate = interval.localDate
-      payload.localTime = interval.localStartTime
-      payload.localStartTime = interval.localStartTime
-      payload.localEndTime = interval.localEndTime
-      payload.dmCloseTime = dayjs(interval.endAt).add(6, 'hour').toDate()
+      payload.localDate = frontendLocalDate
+      payload.localStartTime = frontendLocalStartTime
+      payload.localEndTime = frontendLocalEndTime
 
       const [createdBooking] = await Booking.create([payload], { session })
       if (!createdBooking) {
@@ -803,7 +873,7 @@ const cancelBooking = async (
       isDeleted: false,
       $or: [{ user: currentUserId }, { consult: currentUserId }],
     })
-      .populate('slot user consult')
+      .populate('user consult')
       .session(session)
     if (!booking) {
       throw new AppError(
@@ -832,42 +902,30 @@ const cancelBooking = async (
       )
     }
 
-    // Time checked
-    const slot = await BookingSlots.findById(getEntityId((booking as any).slot)).session(session)
-    if (!slot) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Slot not found')
-    }
+    await ensureActionBeforePolicyWindow({
+      booking,
+      settingKey: 'cancellationTime',
+      actionLabel: 'Cancellation',
+    })
 
-    const slotDateTimeStr = `${slot.date} ${slot.time}`
-    const slotDateTime = dayjs(slotDateTimeStr, 'YYYY-MM-DD HH:mm')
+    const legacySlotId = (booking as any).slot
+      ? getEntityId((booking as any).slot)
+      : null
 
-    if (!slotDateTime.isValid()) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid slot date/time')
-    }
-
-    const now = dayjs()
-    const hoursLeft = slotDateTime.diff(now, 'hour')
-
-    if (hoursLeft < 2) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'Cancellation not allowed within 2 hours of the scheduled time',
+    if (legacySlotId) {
+      await BookingSlots.findByIdAndUpdate(
+        legacySlotId,
+        { isBooked: false },
+        { session },
       )
     }
-
-    // Free the slots
-    await BookingSlots.findByIdAndUpdate(
-      getEntityId((booking as any).slot),
-      { isBooked: false },
-      { session },
-    )
 
     // Booking status canceled
     const cancelledBooking = await Booking.findByIdAndUpdate(
       bookingId,
       { status: BOOKING_STATUS.cancelled },
       { returnDocument: 'after', session },
-    ).populate('user consult slot')
+    ).populate('user consult')
     if (!cancelledBooking) {
       throw new AppError(
         httpStatus.INTERNAL_SERVER_ERROR,
@@ -928,7 +986,7 @@ const cancelBooking = async (
         cancelledBooking,
         booker,
         expert as TUser,
-        slot,
+        null as any,
         { cancelledBy },
       )
     }
@@ -938,7 +996,7 @@ const cancelBooking = async (
         cancelledBooking,
         expert,
         expert as TUser,
-        slot,
+        null as any,
         {
           cancelledBy,
           otherPartyName: booker?.firstName || 'your client',
@@ -986,7 +1044,7 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
       consult: currentUserId,
       isDeleted: false,
     })
-      .populate('user consult slot')
+      .populate('user consult')
       .session(session)
 
     if (!booking) {
@@ -1023,7 +1081,7 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
       bookingId,
       { status: BOOKING_STATUS.confirmed, respondedAt: new Date() },
       { returnDocument: 'after', session },
-    ).populate('user consult slot')
+    ).populate('user consult')
 
     if (!updatedBooking) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Failed to confirm booking')
@@ -1110,7 +1168,7 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
         updatedBooking,
         user,
         updatedBooking.consult as any,
-        (updatedBooking as any).slot,
+        null as any,
       )
     }
 
@@ -1148,7 +1206,7 @@ const declineBooking = async (
       consult: currentUserId,
       isDeleted: false,
     })
-      .populate('user consult slot')
+      .populate('user consult')
       .session(session)
 
     if (!booking) {
@@ -1180,19 +1238,24 @@ const declineBooking = async (
       )
     }
 
-    // 3. Free the slot
-    await BookingSlots.findByIdAndUpdate(
-      (booking as any).slot,
-      { isBooked: false },
-      { session },
-    )
+    const legacySlotId = (booking as any).slot
+      ? getEntityId((booking as any).slot)
+      : null
+
+    if (legacySlotId) {
+      await BookingSlots.findByIdAndUpdate(
+        legacySlotId,
+        { isBooked: false },
+        { session },
+      )
+    }
 
     // 4. Mark booking as declined
     const updatedBooking = await Booking.findByIdAndUpdate(
       bookingId,
       { status: BOOKING_STATUS.declined },
       { returnDocument: 'after', session },
-    ).populate('user consult slot')
+    ).populate('user consult')
 
     if (!updatedBooking) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Failed to decline booking')
@@ -1229,29 +1292,28 @@ const declineBooking = async (
     }
 
     // 6. Fetch user and consult for notifications
-    const [booker, expert, slot] = await Promise.all([
+    const [booker, expert] = await Promise.all([
       User.findById(booking.user).session(session),
       User.findById(booking.consult).session(session),
-      BookingSlots.findById((booking as any).slot).session(session),
     ])
 
     // 7. Push notification to booker
     if (booker && booker.fcmToken && booker.pushNotify?.bookingAndSchedule) {
-      await sendBookingsNotification('declined', updatedBooking, booker, expert as TUser, slot as any, {
+      await sendBookingsNotification('declined', updatedBooking, booker, expert as TUser, null as any, {
         cancelledBy: 'booker',
       })
     }
 
     // 8. Push notification to expert (optional — self declined)
     if (expert && expert.fcmToken && expert.pushNotify?.bookingAndSchedule) {
-      await sendBookingsNotification('declined', updatedBooking, expert, expert as TUser, slot as any, {
+      await sendBookingsNotification('declined', updatedBooking, expert, expert as TUser, null as any, {
         cancelledBy: 'consult',
         otherPartyName: booker?.firstName || 'your client',
       })
     }
 
     // 9. Email notification
-    if (booker && expert && slot) {
+    if (booker && expert) {
       await sendCancellationEmail(
         booker,
         expert,
@@ -1295,7 +1357,7 @@ const completedBooking = async (
       isDeleted: false,
       $or: [{ user: currentUserId }, { consult: currentUserId }],
     })
-      .populate('user consult slot')
+      .populate('user consult')
       .session(session)
 
     if (!booking) {
@@ -1336,7 +1398,7 @@ const completedBooking = async (
         $set: { status: BOOKING_STATUS.completed, recordDuration, recordFile },
       },
       { returnDocument: 'after', session },
-    ).populate('user consult slot')
+    ).populate('user consult')
 
     if (!updatedBooking) {
       throw new AppError(
@@ -1419,7 +1481,7 @@ const completedBooking = async (
           updatedBooking,
           consultant,
           consultant as TUser,
-          (updatedBooking as any).slot,
+          null as any,
         )
       }
 
@@ -1457,11 +1519,8 @@ const completedBooking = async (
 const rescheduleBooking = async (
   id: string,
   payload: {
-    slot?: string
-    date?: string
-    startTime?: string
-    localDate?: string
-    localTime?: string
+    date: string
+    startTime: string
   },
   currentUserId: string, // added for ownership check (recommended)
 ) => {
@@ -1471,7 +1530,7 @@ const rescheduleBooking = async (
   try {
     // 1. Find the booking
     const booking = await Booking.findById(id)
-      .populate('user consult slot localDate localTime')
+      .populate('user consult')
       .session(session)
     if (!booking || booking.isDeleted) {
       throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
@@ -1501,7 +1560,13 @@ const rescheduleBooking = async (
       )
     }
 
-    if (payload.date && payload.startTime) {
+    await ensureActionBeforePolicyWindow({
+      booking,
+      settingKey: 'reschedulingTime',
+      actionLabel: 'Rescheduling',
+    })
+
+    {
       const consultant = booking.consult as any
       const timezoneValue = consultant.timeZone || booking.timezone || 'UTC'
       const rules = resolveBookingRules(consultant)
@@ -1573,6 +1638,7 @@ const rescheduleBooking = async (
         _id: { $ne: booking._id },
         consult: consultant._id,
         status: { $in: ACTIVE_BOOKING_STATUSES },
+        paymentStatus: PAYMENT_STATUS.paid,
         isDeleted: false,
       })
         .select('sessionDuration timezone startAt endAt bufferEndAt date localDate localTime localStartTime')
@@ -1621,7 +1687,6 @@ const rescheduleBooking = async (
             endAt: interval.endAt,
             bufferEndAt: interval.bufferEndAt,
             localDate: interval.localDate,
-            localTime: interval.localStartTime,
             localStartTime: interval.localStartTime,
             localEndTime: interval.localEndTime,
             is10MinReminderSent: false,
@@ -1666,136 +1731,6 @@ const rescheduleBooking = async (
       await session.commitTransaction()
       return updatedBooking
     }
-
-    if (!payload.slot) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Slot is required for legacy reschedule.')
-    }
-
-    // 4. Find the new slot
-    const newSlot = await BookingSlots.findById(payload.slot).session(session)
-    if (!newSlot) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'New slot not found')
-    }
-
-    if (newSlot.author.toString() !== booking.consult._id.toString()) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'The new slot does not belong to this consultant',
-      )
-    }
-
-    // 5. New slot must not be already booked
-    if (newSlot.isBooked) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'New slot is already booked')
-    }
-
-    // 6. Validate new slot date & time (must be in future + buffer)
-    const bookingTimezone = booking.timezone || 'UTC'
-    const hasValidLocalDateTime = dayjs(
-      `${payload.localDate} ${payload.localTime}`,
-      'YYYY-MM-DD HH:mm',
-      true,
-    ).isValid()
-    const rescheduledDate = hasValidLocalDateTime ? payload.localDate : newSlot.date
-    const rescheduledTime = hasValidLocalDateTime ? payload.localTime : newSlot.time
-
-    let slotDateTime: dayjs.Dayjs
-    try {
-      slotDateTime = dayjs.tz(
-        `${rescheduledDate} ${rescheduledTime}`,
-        'YYYY-MM-DD HH:mm',
-        bookingTimezone,
-      )
-    } catch {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid booking timezone')
-    }
-
-    if (!slotDateTime.isValid()) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'Invalid slot date/time format',
-      )
-    }
-
-    const now = dayjs.utc()
-    const minBufferMinutes = 60 // Minimum advance time required (adjustable)
-
-    if (slotDateTime.utc().isBefore(now.add(minBufferMinutes, 'minute'))) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        `New slot must be at least ${minBufferMinutes} minutes in the future. Slot time: ${slotDateTime.format('YYYY-MM-DD HH:mm')}`,
-      )
-    }
-
-    // 7. Free up the old slot
-    const oldSlotId = ((booking as any).slot as any)?._id || (booking as any).slot
-    const oldSlot = await BookingSlots.findById(oldSlotId).session(session)
-    if (oldSlot) {
-      oldSlot.isBooked = false
-      await oldSlot.save({ session })
-    }
-
-    // 8. Atomically assign the new schedule and reset schedule-specific flags.
-    const updatedBooking = await Booking.findOneAndUpdate(
-      {
-        _id: booking._id,
-        status: booking.status,
-        slot: oldSlotId,
-      },
-      {
-        $set: {
-          slot: newSlot._id,
-          localDate: rescheduledDate,
-          localTime: rescheduledTime,
-          is10MinReminderSent: false,
-          isJoinCallReminderSent: false,
-          lastPendingReminderSentAt: null,
-        },
-      },
-      { new: true, session },
-    )
-
-    if (!updatedBooking) {
-      throw new AppError(
-        httpStatus.CONFLICT,
-        'Booking schedule changed concurrently. Please try again.',
-      )
-    }
-
-    // 9. Mark new slot as booked
-    newSlot.isBooked = true
-    await newSlot.save({ session })
-
-    // 10. user and consult sent notify
-    const [user, consultant] = await Promise.all([
-      User.findById(booking.user).session(session),
-      User.findById(booking.consult).session(session),
-    ])
-
-    // 11. Send notification (reschedule)
-    if (user && user?.fcmToken && user.pushNotify?.bookingAndSchedule)
-      await sendBookingsNotification('reschedule', updatedBooking, user, consultant as TUser, newSlot)
-    if (
-      consultant &&
-      consultant?.fcmToken &&
-      consultant.pushNotify?.bookingAndSchedule
-    )
-      await sendBookingsNotification(
-        'reschedule',
-        updatedBooking,
-        consultant,
-        consultant as TUser,
-        newSlot,
-        { otherPartyName: user?.firstName || 'your client' },
-      )
-
-    // sent reschedule email
-    if (user && consultant) {
-      await sendRescheduleEmail(user, consultant, updatedBooking)
-    }
-
-    await session.commitTransaction()
-    return updatedBooking
   } catch (error) {
     await session.abortTransaction()
     throw error
@@ -1815,7 +1750,7 @@ const requestScheduleChange = async (
     paymentStatus: PAYMENT_STATUS.paid,
     status: { $in: [BOOKING_STATUS.pending, BOOKING_STATUS.confirmed] },
     isDeleted: false,
-  }).populate('user consult slot')
+  }).populate('user consult')
 
   if (!booking) {
     throw new AppError(
@@ -1826,7 +1761,12 @@ const requestScheduleChange = async (
 
   const user = booking.user as unknown as TUser
   const consultant = booking.consult as unknown as TUser
-  const slot = (booking as any).slot
+
+  await ensureActionBeforePolicyWindow({
+    booking,
+    settingKey: 'reschedulingTime',
+    actionLabel: 'Schedule change request',
+  })
 
   if (user?.fcmToken && user.pushNotify?.bookingAndSchedule) {
     await sendBookingsNotification(
@@ -1834,7 +1774,7 @@ const requestScheduleChange = async (
       booking,
       user,
       consultant,
-      slot,
+      null as any,
     )
   }
 

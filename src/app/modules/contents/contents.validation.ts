@@ -33,6 +33,8 @@ const updateGeneralsZodSchema = z.object({
       platformFeePercentage: z.number().optional(),
       supportContract: z.string().optional(),
       supportEmail: z.string().email({ message: 'Invalid email' }).optional(),
+      reschedulingTime: z.number().min(0).optional(),
+      cancellationTime: z.number().min(0).optional(),
 
       // Trams and condition
       tramsAndCondition: z.string().optional(),

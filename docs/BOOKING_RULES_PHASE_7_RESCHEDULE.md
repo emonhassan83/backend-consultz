@@ -101,3 +101,9 @@ localStartTime/localEndTime -> localTime -> old slot.time
 - Refund logic.
 - Booking status lifecycle.
 - Old slot fallback internals beyond keeping compatibility.
+
+Phase 8 fixed-slot deprecation and testing coverage is documented in:
+
+```text
+docs/BOOKING_RULES_PHASE_8_DEPRECATION_AND_TESTING.md
+```
