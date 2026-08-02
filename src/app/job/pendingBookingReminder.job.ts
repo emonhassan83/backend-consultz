@@ -36,7 +36,6 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
   console.log(`Found ${pendingBookings.length} pending bookings to check for reminders`)
 
   for (const booking of pendingBookings) {
-    const slot = null
     const expert = booking.consult as any
     const booker = booking.user as any
 
@@ -45,15 +44,15 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
       continue
     }
 
-    const bookingStartUtc = resolveBookingStartUtc(booking, slot)
+    const bookingStartUtc = resolveBookingStartUtc(booking)
     if (!bookingStartUtc) {
       console.warn(`Booking ${booking._id} has no start time; reminder skipped.`)
       continue
     }
 
-    // If the slot start time has already passed, the booking is expired/cannot be accepted anymore
+    // If the booking start time has already passed, the booking is expired/cannot be accepted anymore
     if (bookingStartUtc.isBefore(nowUtc)) {
-      console.log(`Booking ${booking._id} slot has already passed/expired, skipping reminder.`)
+      console.log(`Booking ${booking._id} start time has already passed/expired, skipping reminder.`)
       continue
     }
 
@@ -65,7 +64,6 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
           booking,
           expert as TUser,
           expert as TUser,
-          null as any,
           { requesterName: booker?.firstName || 'your client' },
         )
 

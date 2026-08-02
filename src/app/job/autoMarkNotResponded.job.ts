@@ -27,7 +27,18 @@ const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   typescript: true,
 })
 
-export const autoMarkNotRespondedJob = async (): Promise<void> => {
+const isTransientMongoNetworkError = (error: any): boolean => {
+  const labels = error?.errorLabels || []
+  return (
+    error?.errorLabelSet?.has?.('TransientTransactionError') ||
+    labels.includes?.('TransientTransactionError') ||
+    error?.code === 'ECONNRESET' ||
+    error?.cause?.code === 'ECONNRESET' ||
+    error?.message?.includes?.('ECONNRESET')
+  )
+}
+
+const runAutoMarkNotRespondedJobOnce = async (): Promise<void> => {
   console.log('Auto-mark Not Responded Job Started')
 
   const session = await mongoose.startSession()
@@ -51,21 +62,8 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
     let updatedCount = 0
 
     for (const booking of oldBookings) {
-      let slot = null
-      if (booking.localDate && (booking.localStartTime || booking.localTime)) {
-        slot = {
-          date: booking.localDate,
-          time: booking.localStartTime || booking.localTime,
-        }
-      } else if (booking.date && (booking.localStartTime || booking.startTime)) {
-        slot = {
-          date: booking.date,
-          time: booking.localStartTime || booking.startTime,
-        }
-      }
-
       const bookingTimezone = booking.timezone || 'UTC'
-      const bookingStartUtc = resolveBookingStartUtc(booking, slot)
+      const bookingStartUtc = resolveBookingStartUtc(booking)
 
       if (!bookingStartUtc) {
         console.warn(`Booking ${booking._id} has no resolvable start time — skipping`)
@@ -73,7 +71,7 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
       }
 
       const minutesSinceStart = nowUtc.diff(bookingStartUtc, 'minute', true)
-      const bookingEndUtc = resolveBookingEndUtc(booking, slot)
+      const bookingEndUtc = resolveBookingEndUtc(booking)
       const minutesSinceEnd = bookingEndUtc
         ? nowUtc.diff(bookingEndUtc, 'minute', true)
         : minutesSinceStart - booking.sessionDuration
@@ -159,13 +157,13 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
         }
 
         if (booker?.fcmToken && booker.pushNotify?.bookingAndSchedule) {
-          await sendBookingsNotification('not_responded', capturedBooking, booker as TUser, expert as TUser, null as any).catch(
+          await sendBookingsNotification('not_responded', capturedBooking, booker as TUser, expert as TUser).catch(
             (err) => console.error(`Push failed (booker ${booker._id}):`, err),
           )
         }
 
         if (expert?.fcmToken && expert.pushNotify?.bookingAndSchedule) {
-          await sendBookingsNotification('not_responded', capturedBooking, expert as TUser, expert as TUser, null as any, {
+          await sendBookingsNotification('not_responded', capturedBooking, expert as TUser, expert as TUser, {
             otherPartyName: booker?.firstName || 'your client',
           }).catch(
             (err) => console.error(`Push failed (expert ${expert._id}):`, err),
@@ -194,10 +192,36 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
     // âœ… Session commit à¦à¦° à¦ªà¦°à§‡ push/email à¦ªà¦¾à¦ à¦¾à¦“
     await Promise.allSettled(postCommitTasks.map((task) => task()))
   } catch (error) {
-    await session.abortTransaction()
-    console.error('Auto-mark Not Responded Job Failed:', error)
+    if (session.inTransaction()) {
+      await session.abortTransaction().catch((abortError) =>
+        console.error('Auto-mark Not Responded abort failed:', abortError),
+      )
+    }
+    throw error
   } finally {
     session.endSession()
+  }
+}
+
+export const autoMarkNotRespondedJob = async (): Promise<void> => {
+  const maxAttempts = 2
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await runAutoMarkNotRespondedJobOnce()
+      return
+    } catch (error) {
+      if (attempt < maxAttempts && isTransientMongoNetworkError(error)) {
+        console.warn(
+          `Auto-mark Not Responded Job transient Mongo error; retrying attempt ${attempt + 1}/${maxAttempts}`,
+          error,
+        )
+        continue
+      }
+
+      console.error('Auto-mark Not Responded Job Failed:', error)
+      return
+    }
   }
 }
 

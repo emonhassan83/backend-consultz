@@ -30,7 +30,7 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
   // Current time in UTC — each booking's timezone will be used for comparison
   const nowUtc = dayjs.utc()
 
-  // Avoid a UTC-date slot pre-filter: slot date/time must be interpreted using
+  // Avoid a UTC-date pre-filter: booking date/time must be interpreted using
   // each booking's timezone, especially around midnight and date boundaries.
   const todayBookings = (await Booking.find({
     ...(bookingId ? { _id: bookingId } : {}),
@@ -60,7 +60,6 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
     fcmToken: string
     action: string
     booking: TBookings
-    slot: any
     reminderType: 'ten_min' | 'join_call'
   }[] = []
 
@@ -71,13 +70,12 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
   const failedJoinCallBookingIds = new Set<string>()
 
   for (const booking of todayBookings) {
-    const slot = null
     const user = userMap.get(booking.user.toString())
     const consult = userMap.get(booking.consult.toString())
 
     if (!user || !consult) continue
 
-    const bookingStartUtc = resolveBookingStartUtc(booking, slot)
+    const bookingStartUtc = resolveBookingStartUtc(booking)
     if (!bookingStartUtc) {
       continue
     }
@@ -85,7 +83,7 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
     // How many minutes until session starts (from now in UTC)
     const timeToStartMinutes = bookingStartUtc.diff(nowUtc, 'minute')
 
-    const sessionInfo = getBookingSessionInfoForJob(booking, slot)
+    const sessionInfo = getBookingSessionInfoForJob(booking)
 
     // ── 10-minute reminder ────────────────────────────────────────────────────
     if (
@@ -107,7 +105,6 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
           fcmToken: user.fcmToken,
           action: '10min_reminder',
           booking,
-          slot,
           reminderType: 'ten_min',
         })
       }
@@ -117,7 +114,6 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
           fcmToken: consult.fcmToken,
           action: '10min_reminder',
           booking,
-          slot,
           reminderType: 'ten_min',
         })
       }
@@ -179,7 +175,6 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
           fcmToken: user.fcmToken,
           action: 'join_call',
           booking,
-          slot,
           reminderType: 'join_call',
         })
       }
@@ -189,7 +184,6 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
           fcmToken: consult.fcmToken,
           action: 'join_call',
           booking,
-          slot,
           reminderType: 'join_call',
         })
       }
@@ -246,7 +240,6 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
           n.booking,
           userMap.get(n.userId) as TUser,
           userMap.get(n.booking.consult.toString()) as TUser,
-          n.slot,
           {
             otherPartyName:
               n.userId === n.booking.user.toString()

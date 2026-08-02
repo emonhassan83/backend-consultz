@@ -8,7 +8,10 @@ import mongoose from 'mongoose'
 import httpStatus from 'http-status'
 import AppError from '../../../errors/AppError'
 import { Booking } from '../../../modules/booking/booking.models'
-import { BOOKING_STATUS } from '../../../modules/booking/booking.constants'
+import {
+  BOOKING_STATUS,
+  PAYMENT_STATUS,
+} from '../../../modules/booking/booking.constants'
 import {
   generate32BitUid,
   generateAgoraToken,
@@ -46,7 +49,8 @@ const callStart = eventHandler<TCallStartPayload>(
 
       const booking = await Booking.findOne({
         _id: bookingId,
-        status: { $in: [BOOKING_STATUS.confirmed, BOOKING_STATUS.running, BOOKING_STATUS.completed] },
+        status: { $in: [BOOKING_STATUS.confirmed, BOOKING_STATUS.running] },
+        paymentStatus: PAYMENT_STATUS.paid,
         isDeleted: false,
         $or: [{ user: callerId }, { consult: callerId }],
       }).session(session)

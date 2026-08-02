@@ -12,7 +12,6 @@ import {
 } from './user.constant'
 import { generateCryptoString } from '../../utils/generateCryptoString'
 import { generateReferralCode } from '../../utils/generateReferralCode'
-import { regenerateSlotsForExpert } from './user.service'
 
 // 🎓 Education
 const EducationSchema = new Schema(
@@ -81,9 +80,6 @@ const BookingRulesSchema = new Schema(
   },
   { _id: false },
 )
-
-// ✅ Module-level Map to survive between pre and post hooks
-const availabilityChangeMap = new Map<string, string>()
 
 // ===== User Schema =====
 const userSchema = new Schema<TUser, UserModel>(
@@ -248,8 +244,6 @@ userSchema.pre('validate', function () {
   this.bookingRules.bufferRules = buildBookingBufferRules(slotBufferStep)
 })
 
-// ====================== AVAILABILITY CHANGE DETECTION ======================
-
 userSchema.pre('save', async function () {
   // Hash password if modified
   if (this.isModified('password')) {
@@ -258,52 +252,6 @@ userSchema.pre('save', async function () {
       Number(config.bcrypt_salt_rounds),
     )
   }
-
-  // ✅ Store old availability in module-level Map before save
-  if (this.isModified('availability') && !this.isNew) {
-    const oldDoc = (await this.model('User')
-      .findById(this._id)
-      .select('availability')
-      .lean()) as TUser | null
-
-    availabilityChangeMap.set(
-      this._id.toString(),
-      JSON.stringify(oldDoc?.availability || []),
-    )
-  }
-})
-
-userSchema.post('save', async function (doc: any) {
-  const userId = doc._id.toString()
-  const oldAvailability = availabilityChangeMap.get(userId)
-
-  // Not in map means availability was not modified
-  if (oldAvailability === undefined) return
-
-  // ✅ Cleanup immediately
-  availabilityChangeMap.delete(userId)
-
-  const newAvailability = JSON.stringify(doc.availability || [])
-  if (oldAvailability === newAvailability) {
-    console.log('[Availability Hook] Content unchanged — skipping regeneration')
-    return
-  }
-
-  console.log(
-    '[Availability Hook] ✅ Change detected — triggering slot regeneration',
-  )
-
-  setImmediate(async () => {
-    try {
-      await regenerateSlotsForExpert(userId)
-      console.log(`[Slot Regeneration] ✅ Completed for expert: ${userId}`)
-    } catch (err: any) {
-      console.error(
-        `[Slot Regeneration] ❌ Failed for expert ${userId}:`,
-        err.message,
-      )
-    }
-  })
 })
 
 //* Static method: find user by email

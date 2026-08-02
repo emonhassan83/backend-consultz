@@ -15,7 +15,6 @@ import {
   sendBookingsNotification,
 } from './booking.utils'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { BookingSlots } from '../bookingSlots/bookingSlots.model'
 import { Payment } from '../payment/payment.model'
 import { Contents } from '../contents/contents.models'
 import Stripe from 'stripe'
@@ -102,31 +101,16 @@ const buildLegacyBookingInterval = ({
     }
   }
 
-  if (!booking.slot?.date || !booking.slot?.time) {
-    const bookingDate = booking.localDate || booking.date
-    const bookingTime = booking.localStartTime || booking.localTime
+  const bookingDate = booking.localDate || booking.date
+  const bookingTime = booking.localStartTime || booking.startTime
 
-    if (!bookingDate || !bookingTime) {
-      return null
-    }
-
-    const interval = buildBookingInterval({
-      date: bookingDate,
-      startTime: bookingTime,
-      duration: booking.sessionDuration,
-      timezone: booking.timezone || timezone,
-      rules,
-    })
-
-    return {
-      start: interval.startAt,
-      end: interval.bufferEndAt,
-    }
+  if (!bookingDate || !bookingTime) {
+    return null
   }
 
   const interval = buildBookingInterval({
-    date: booking.slot.date,
-    startTime: booking.slot.time,
+    date: bookingDate,
+    startTime: bookingTime,
     duration: booking.sessionDuration,
     timezone: booking.timezone || timezone,
     rules,
@@ -138,21 +122,16 @@ const buildLegacyBookingInterval = ({
   }
 }
 
-const getBookingDisplayFields = (booking: any, slot?: any) => ({
-  displayDate: booking.localDate || booking.date || slot?.date || null,
-  displayStartTime:
-    booking.localStartTime ||
-    booking.localTime ||
-    slot?.time ||
-    booking.startTime ||
-    null,
+const getBookingDisplayFields = (booking: any) => ({
+  displayDate: booking.localDate || booking.date || null,
+  displayStartTime: booking.localStartTime || booking.startTime || null,
   displayEndTime: booking.localEndTime || booking.endTime || null,
   displayTimezone: booking.timezone || 'UTC',
 })
 
-const attachBookingDisplayFields = (booking: any, slot?: any) => ({
+const attachBookingDisplayFields = (booking: any) => ({
   ...booking,
-  ...getBookingDisplayFields(booking, slot),
+  ...getBookingDisplayFields(booking),
 })
 
 const getGeneralNumberSetting = async (
@@ -169,12 +148,8 @@ const resolveBookingStartDate = (booking: any): Date | null => {
     return new Date(booking.startAt)
   }
 
-  const bookingDate = booking.localDate || booking.date || booking.slot?.date
-  const bookingTime =
-    booking.localStartTime ||
-    booking.localTime ||
-    booking.startTime ||
-    booking.slot?.time
+  const bookingDate = booking.localDate || booking.date
+  const bookingTime = booking.localStartTime || booking.startTime
 
   if (!bookingDate || !bookingTime) {
     return null
@@ -222,37 +197,6 @@ const ensureActionBeforePolicyWindow = async ({
   }
 }
 
-const getLegacySlotMapForBookings = async (bookingIds: string[]) => {
-  if (!bookingIds.length) return new Map<string, any>()
-
-  const rawBookings = await Booking.collection
-    .find({ _id: { $in: bookingIds.map((id) => new mongoose.Types.ObjectId(id)) } })
-    .project({ _id: 1, slot: 1 })
-    .toArray()
-
-  const slotIds = rawBookings
-    .map((booking) => booking.slot)
-    .filter(Boolean)
-
-  if (!slotIds.length) return new Map<string, any>()
-
-  const slots = await BookingSlots.find({ _id: { $in: slotIds } })
-    .select('date time')
-    .lean()
-
-  const slotById = new Map(slots.map((slot: any) => [slot._id.toString(), slot]))
-  const slotByBookingId = new Map<string, any>()
-
-  rawBookings.forEach((booking) => {
-    if (booking.slot) {
-      const slot = slotById.get(booking.slot.toString())
-      if (slot) slotByBookingId.set(booking._id.toString(), slot)
-    }
-  })
-
-  return slotByBookingId
-}
-
 const createBookings = async (payload: TBookings, userId: string) => {
   const session = await mongoose.startSession()
   session.startTransaction()
@@ -292,6 +236,7 @@ const createBookings = async (payload: TBookings, userId: string) => {
         duration: payload.sessionDuration,
         timezone: timezoneValue,
         rules,
+        inputTimeMode: 'utc',
       })
 
       if (!isMinNoticeSatisfied(interval.startAt, rules)) {
@@ -309,7 +254,7 @@ const createBookings = async (payload: TBookings, userId: string) => {
       }
 
       const requestedDay = dayjs
-        .tz(payload.date as string, 'YYYY-MM-DD', timezoneValue)
+        .tz(interval.localDate, 'YYYY-MM-DD', timezoneValue)
         .format('ddd')
         .toLowerCase()
       const dayAvailability = consult.availability?.find(
@@ -319,12 +264,12 @@ const createBookings = async (payload: TBookings, userId: string) => {
       const isInsideAvailability = dayAvailability?.slots?.some(
         (slot: { from: string; to: string }) => {
           const availabilityStart = parseLocalDateTimeToUtc(
-            payload.date as string,
+            interval.localDate,
             slot.from,
             timezoneValue,
           )
           const availabilityEnd = parseLocalDateTimeToUtc(
-            payload.date as string,
+            interval.localDate,
             slot.to,
             timezoneValue,
           )
@@ -429,105 +374,6 @@ const createBookings = async (payload: TBookings, userId: string) => {
       await session.commitTransaction()
       return createdBooking
     }
-
-    throw new AppError(httpStatus.BAD_REQUEST, 'Legacy slot booking payload is no longer supported.')
-    /*
-
-    // 3. Slot validation
-    const slotTime = await BookingSlots.findOne({
-      _id: slotId.toString(),
-      author: consultId,
-    }).session(session)
-    if (!slotTime) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Slot not found!')
-    }
-    if (slotTime.isBooked) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Slot already booked!')
-    }
-
-    // 🔥 NEW CHECK: Prevent same user from booking the same slot again if it's still booked
-    // const unpaidBooking = await Booking.findOne({
-    //   user: userId,
-    //   consult: consult?._id,
-    //   slot: slotId,
-    //   isDeleted: false,
-    //   paymentStatus: PAYMENT_STATUS.unpaid,
-    // }).session(session)
-    // if (unpaidBooking) {
-    //   return unpaidBooking
-    // }
-
-    const existingBooking = await Booking.findOne({
-      consult: consult?._id,
-      slot: slotId,
-      isDeleted: false,
-      status: {
-        $nin: [
-          BOOKING_STATUS.cancelled,
-          BOOKING_STATUS.not_responded,
-          BOOKING_STATUS.declined,
-        ],
-      }, // ignore bookings
-      paymentStatus: PAYMENT_STATUS.paid
-    }).session(session)
-
-    if (existingBooking) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'This expert already booked this slot. You cannot book the same slot again.',
-      )
-    }
-
-    // 4. Date/time validation (buffer time check)
-    const slotDateTimeStr = `${slotTime.date} ${slotTime.time}`
-    const slotDateTime = dayjs(slotDateTimeStr, 'YYYY-MM-DD HH:mm')
-
-    if (!slotDateTime.isValid()) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'Invalid slot date/time format',
-      )
-    }
-
-    const now = dayjs()
-    const minBufferMinutes = 0
-
-    if (slotDateTime.isBefore(now.add(minBufferMinutes, 'minute'))) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        `Booking must be made at least ${minBufferMinutes} minutes in advance. Slot time: ${slotDateTime.format('YYYY-MM-DD HH:mm')}`,
-      )
-    }
-
-    // 5. Assign payload values
-    payload.user = new mongoose.Types.ObjectId(userData._id)
-    payload.slot = new mongoose.Types.ObjectId(slotTime._id)
-    // Keep the timezone associated with localDate/localTime when the client
-    // supplies it. Fall back to the consultant's slot timezone for old clients.
-    payload.timezone = payload.timezone || consult.timeZone || 'UTC'
-    payload.status = BOOKING_STATUS.pending
-    payload.isExpertVatRegistered = !!(
-      consult.isVatRegistered && consult.vatRegistrationNumber
-    )
-
-    // Calculate DM close time
-    const sessionDurationMinutes = payload.sessionDuration || 60
-    const dmCloseTime = slotDateTime
-      .add(sessionDurationMinutes, 'minute')
-      .add(6, 'hour')
-      .toDate()
-
-    payload.dmCloseTime = dmCloseTime
-
-    // 6. Create the booking
-    const [createdBooking] = await Booking.create([payload], { session })
-    if (!createdBooking) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Failed to create booking')
-    }
-    await session.commitTransaction()
-
-    return createdBooking
-    */
   } catch (error) {
     await session.abortTransaction()
     throw error instanceof AppError
@@ -577,18 +423,6 @@ const getBookingCalender = async (
     .select('date localDate')
     .lean()
 
-  const slotIds = bookings
-    .filter((b) => (b as any).slot)
-    .map((b) => (b as any).slot.toString())
-
-  // 2. এই মাসের স্লটগুলো নেওয়া
-  const slots = await BookingSlots.find({
-    _id: { $in: slotIds },
-    date: { $gte: startOfMonth, $lte: endOfMonth },
-  })
-    .select('date isBooked')
-    .lean()
-
   // 3. Date wise isBooked map তৈরি
   const bookedDates = new Set<string>()
   bookings.forEach((booking: any) => {
@@ -599,22 +433,6 @@ const getBookingCalender = async (
       bookingDate <= endOfMonth
     ) {
       bookedDates.add(bookingDate)
-    }
-  })
-
-  const slotByBookingId = await getLegacySlotMapForBookings(
-    bookings.map((booking: any) => booking._id.toString()),
-  )
-
-  bookings.forEach((booking: any) => {
-    const slotDate = slotByBookingId.get(booking._id.toString())?.date
-    if (slotDate && slotDate >= startOfMonth && slotDate <= endOfMonth) {
-      bookedDates.add(slotDate)
-    }
-  })
-  slots.forEach((slot) => {
-    if (slot.isBooked === true) {
-      bookedDates.add(slot.date)
     }
   })
 
@@ -676,7 +494,6 @@ const getAllBookings = async (
 
   // ✅ Batch payment details
   const payments = await Payment.find({ booking: { $in: bookingIds } }).lean()
-  const slotByBookingId = await getLegacySlotMapForBookings(bookingIds)
   const paymentMap = new Map()
   payments.forEach((p: any) => {
     paymentMap.set(p.booking.toString(), p)
@@ -685,10 +502,7 @@ const getAllBookings = async (
   const enriched = data.map((booking: any) => {
     const payment = paymentMap.get(booking._id.toString())
     return {
-      ...attachBookingDisplayFields(
-        booking.toObject(),
-        slotByBookingId.get(booking._id.toString()),
-      ),
+      ...attachBookingDisplayFields(booking.toObject()),
       unreadMessageCount: unreadMap.get(booking._id.toString()) ?? 0,
       totalPay: payment?.amount || 0,
       vat: payment?.consultantVat || 0,
@@ -740,20 +554,6 @@ const getAllBookingsByDate = async (
     targetDates = [today.format('YYYY-MM-DD')]
   }
 
-  const matchingSlots = await BookingSlots.find({
-    date: { $in: targetDates },
-  }).select('_id')
-
-  const slotIds = matchingSlots.map((s) => s._id)
-  const legacyBookingIds = slotIds.length
-    ? (
-      await Booking.collection
-        .find({ slot: { $in: slotIds } })
-        .project({ _id: 1 })
-        .toArray()
-    ).map((booking) => booking._id)
-    : []
-
   const bookingFilter: Record<string, any> = {
     isDeleted: false,
     paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
@@ -763,7 +563,6 @@ const getAllBookingsByDate = async (
         $or: [
           { localDate: { $in: targetDates } },
           { date: { $in: targetDates } },
-          { _id: { $in: legacyBookingIds } },
         ],
       },
     ],
@@ -785,7 +584,6 @@ const getAllBookingsByDate = async (
 
   // ✅ Batch payment details
   const payments = await Payment.find({ booking: { $in: bookingIds } }).lean()
-  const slotByBookingId = await getLegacySlotMapForBookings(bookingIds)
   const paymentMap = new Map()
   payments.forEach((p: any) => {
     paymentMap.set(p.booking.toString(), p)
@@ -794,10 +592,7 @@ const getAllBookingsByDate = async (
   const enrichBooking = (booking: any) => {
     const payment = paymentMap.get(booking._id.toString())
     return {
-      ...attachBookingDisplayFields(
-        booking.toObject(),
-        slotByBookingId.get(booking._id.toString()),
-      ),
+      ...attachBookingDisplayFields(booking.toObject()),
       unreadMessageCount: unreadMap.get(booking._id.toString()) ?? 0,
       totalPay: payment?.amount || 0,
       vat: payment?.consultantVat || 0,
@@ -856,15 +651,9 @@ const getBookingsById = async (id: string, currentUserId: string) => {
   )
 
   const payment = await Payment.findOne({ booking: result._id.toString() }).lean()
-  const slotByBookingId = await getLegacySlotMapForBookings([
-    result._id.toString(),
-  ])
 
   return {
-    ...attachBookingDisplayFields(
-      result.toObject(),
-      slotByBookingId.get(result._id.toString()),
-    ),
+    ...attachBookingDisplayFields(result.toObject()),
     unreadMessageCount,
     totalPay: payment?.amount || 0,
     vat: payment?.consultantVat || 0,
@@ -920,18 +709,6 @@ const cancelBooking = async (
       settingKey: 'cancellationTime',
       actionLabel: 'Cancellation',
     })
-
-    const legacySlotId = (booking as any).slot
-      ? getEntityId((booking as any).slot)
-      : null
-
-    if (legacySlotId) {
-      await BookingSlots.findByIdAndUpdate(
-        legacySlotId,
-        { isBooked: false },
-        { session },
-      )
-    }
 
     // Booking status canceled
     const cancelledBooking = await Booking.findByIdAndUpdate(
@@ -999,7 +776,6 @@ const cancelBooking = async (
         cancelledBooking,
         booker,
         expert as TUser,
-        null as any,
         { cancelledBy },
       )
     }
@@ -1009,7 +785,6 @@ const cancelBooking = async (
         cancelledBooking,
         expert,
         expert as TUser,
-        null as any,
         {
           cancelledBy,
           otherPartyName: booker?.firstName || 'your client',
@@ -1181,7 +956,6 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
         updatedBooking,
         user,
         updatedBooking.consult as any,
-        null as any,
       )
     }
 
@@ -1251,18 +1025,6 @@ const declineBooking = async (
       )
     }
 
-    const legacySlotId = (booking as any).slot
-      ? getEntityId((booking as any).slot)
-      : null
-
-    if (legacySlotId) {
-      await BookingSlots.findByIdAndUpdate(
-        legacySlotId,
-        { isBooked: false },
-        { session },
-      )
-    }
-
     // 4. Mark booking as declined
     const updatedBooking = await Booking.findByIdAndUpdate(
       bookingId,
@@ -1312,14 +1074,14 @@ const declineBooking = async (
 
     // 7. Push notification to booker
     if (booker && booker.fcmToken && booker.pushNotify?.bookingAndSchedule) {
-      await sendBookingsNotification('declined', updatedBooking, booker, expert as TUser, null as any, {
+      await sendBookingsNotification('declined', updatedBooking, booker, expert as TUser, {
         cancelledBy: 'booker',
       })
     }
 
     // 8. Push notification to expert (optional — self declined)
     if (expert && expert.fcmToken && expert.pushNotify?.bookingAndSchedule) {
-      await sendBookingsNotification('declined', updatedBooking, expert, expert as TUser, null as any, {
+      await sendBookingsNotification('declined', updatedBooking, expert, expert as TUser, {
         cancelledBy: 'consult',
         otherPartyName: booker?.firstName || 'your client',
       })
@@ -1494,7 +1256,6 @@ const completedBooking = async (
           updatedBooking,
           consultant,
           consultant as TUser,
-          null as any,
         )
       }
 
@@ -1716,7 +1477,7 @@ const rescheduleBooking = async (
       ])
 
       if (user?.fcmToken && user.pushNotify?.bookingAndSchedule) {
-        await sendBookingsNotification('reschedule', updatedBooking, user, expert as TUser, null as any)
+        await sendBookingsNotification('reschedule', updatedBooking, user, expert as TUser)
       }
 
       if (expert?.fcmToken && expert.pushNotify?.bookingAndSchedule) {
@@ -1725,7 +1486,6 @@ const rescheduleBooking = async (
           updatedBooking,
           expert,
           expert as TUser,
-          null as any,
           { otherPartyName: user?.firstName || 'your client' },
         )
       }
@@ -1780,7 +1540,6 @@ const requestScheduleChange = async (
       booking,
       user,
       consultant,
-      null as any,
     )
   }
 
@@ -1827,4 +1586,6 @@ export const bookingsService = {
   rescheduleBooking,
   requestScheduleChange,
 }
+
+
 

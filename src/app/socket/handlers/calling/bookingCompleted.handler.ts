@@ -8,7 +8,10 @@ import { Payment } from '../../../modules/payment/payment.model'
 import { Withdraw } from '../../../modules/withdraw/withdraw.model'
 import { User } from '../../../modules/user/user.model'
 import { Contents } from '../../../modules/contents/contents.models'
-import { BOOKING_STATUS } from '../../../modules/booking/booking.constants'
+import {
+  BOOKING_STATUS,
+  PAYMENT_STATUS,
+} from '../../../modules/booking/booking.constants'
 import { WITHDRAW_STATUS } from '../../../modules/withdraw/withdraw.constant'
 import { sendNotification } from '../../../utils/sentNotification'
 import { sendWithdrawNotify } from '../../../modules/withdraw/withdraw.utils'
@@ -27,22 +30,38 @@ export const bookingComplete = eventHandler<TBookingCompletePayload>(
     if (!data?.bookingId) return
 
     const { bookingId, callId, duration } = data
+    const userId = socket.auth._id.toString()
 
     const session = await mongoose.startSession()
     session.startTransaction()
 
     try {
       // 1. Complete Booking
-      const booking = await Booking.findById(bookingId).session(session)
+      const booking = await Booking.findOne({
+        _id: bookingId,
+        paymentStatus: PAYMENT_STATUS.paid,
+        isDeleted: false,
+        $or: [{ user: userId }, { consult: userId }],
+        status: {
+          $in: [
+            BOOKING_STATUS.running,
+            BOOKING_STATUS.confirmed,
+            BOOKING_STATUS.completed,
+          ],
+        },
+      }).session(session)
       if (!booking)
-        throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
+        throw new AppError(httpStatus.NOT_FOUND, 'Paid active booking not found')
 
-      booking.status = BOOKING_STATUS.completed
-      await booking.save({ session })
+      if (booking.status !== BOOKING_STATUS.completed) {
+        booking.status = BOOKING_STATUS.completed
+        await booking.save({ session })
+      }
 
       // 2. Find Payment
       const payment = await Payment.findOne({
         booking: booking._id.toString(),
+        isPaid: true,
         isDeleted: false,
       }).session(session)
 

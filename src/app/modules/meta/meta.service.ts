@@ -166,8 +166,8 @@ const paymentTransactionMetaData = async (
     }).populate([
       {
         path: 'booking',
-        select: 'sessionType sessionDuration price slot timezone',
-        populate: { path: 'slot', select: 'date time' },
+        select:
+          'sessionType sessionDuration price timezone date startTime endTime localDate localStartTime localEndTime startAt endAt',
       },
       {
         path: 'account',

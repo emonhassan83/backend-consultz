@@ -124,6 +124,7 @@ type TBuildBookingIntervalInput = {
   duration: number
   timezone: string
   rules: TBookingRules
+  inputTimeMode?: 'local' | 'utc'
 }
 
 export const buildBookingInterval = ({
@@ -132,14 +133,15 @@ export const buildBookingInterval = ({
   duration,
   timezone,
   rules,
+  inputTimeMode = 'local',
 }: TBuildBookingIntervalInput) => {
-  const localStart = dayjs.tz(
-    `${date} ${startTime}`,
-    'YYYY-MM-DD HH:mm',
-    timezone,
-  )
+  const inputStart =
+    inputTimeMode === 'utc'
+      ? dayjs.utc(`${date} ${startTime}`, 'YYYY-MM-DD HH:mm')
+      : dayjs.tz(`${date} ${startTime}`, 'YYYY-MM-DD HH:mm', timezone)
+  const localStart = inputStart.tz(timezone)
 
-  if (!localStart.isValid()) {
+  if (!inputStart.isValid() || !localStart.isValid()) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
       'Invalid booking date, start time, or timezone',
@@ -149,14 +151,21 @@ export const buildBookingInterval = ({
   const bufferTime = getBufferForDuration(rules, duration)
   const localEnd = localStart.add(duration, 'minute')
   const localBufferEnd = localEnd.add(bufferTime, 'minute')
+  const utcEnd = inputStart.add(duration, 'minute')
 
   return {
     date,
     startAt: localStart.utc().toDate(),
     endAt: localEnd.utc().toDate(),
     bufferEndAt: localBufferEnd.utc().toDate(),
-    startTime: localStart.format('HH:mm'),
-    endTime: localEnd.format('HH:mm'),
+    startTime:
+      inputTimeMode === 'utc'
+        ? inputStart.utc().format('HH:mm')
+        : localStart.format('HH:mm'),
+    endTime:
+      inputTimeMode === 'utc'
+        ? utcEnd.utc().format('HH:mm')
+        : localEnd.format('HH:mm'),
     bufferTime,
     localDate: localStart.format('YYYY-MM-DD'),
     localStartTime: localStart.format('HH:mm'),

@@ -7,14 +7,14 @@ dayjs.extend(utc)
 dayjs.extend(timezone)
 dayjs.extend(customParseFormat)
 
-export const resolveBookingStartUtc = (booking: any, slot?: any): dayjs.Dayjs | null => {
+export const resolveBookingStartUtc = (booking: any): dayjs.Dayjs | null => {
   if (booking.startAt) {
     return dayjs.utc(booking.startAt)
   }
 
   const bookingTimezone = booking.timezone || 'UTC'
-  const bookingDate = booking.localDate || booking.date || slot?.date
-  const bookingTime = booking.localStartTime || booking.localTime || slot?.time
+  const bookingDate = booking.localDate || booking.date
+  const bookingTime = booking.localStartTime || booking.startTime
 
   if (!bookingDate || !bookingTime) {
     return null
@@ -29,12 +29,12 @@ export const resolveBookingStartUtc = (booking: any, slot?: any): dayjs.Dayjs | 
   }
 }
 
-export const resolveBookingEndUtc = (booking: any, slot?: any): dayjs.Dayjs | null => {
+export const resolveBookingEndUtc = (booking: any): dayjs.Dayjs | null => {
   if (booking.endAt) {
     return dayjs.utc(booking.endAt)
   }
 
-  const startUtc = resolveBookingStartUtc(booking, slot)
+  const startUtc = resolveBookingStartUtc(booking)
   if (!startUtc) {
     return null
   }
@@ -42,12 +42,12 @@ export const resolveBookingEndUtc = (booking: any, slot?: any): dayjs.Dayjs | nu
   return startUtc.add(booking.sessionDuration || 0, 'minute')
 }
 
-export const resolveBookingBufferEndUtc = (booking: any, slot?: any): dayjs.Dayjs | null => {
+export const resolveBookingBufferEndUtc = (booking: any): dayjs.Dayjs | null => {
   if (booking.bufferEndAt) {
     return dayjs.utc(booking.bufferEndAt)
   }
 
-  const endUtc = resolveBookingEndUtc(booking, slot)
+  const endUtc = resolveBookingEndUtc(booking)
   if (!endUtc) {
     return null
   }
@@ -55,10 +55,10 @@ export const resolveBookingBufferEndUtc = (booking: any, slot?: any): dayjs.Dayj
   return endUtc.add(booking.bufferTime || 0, 'minute')
 }
 
-export const getBookingSessionInfoForJob = (booking: any, slot?: any): string => {
+export const getBookingSessionInfoForJob = (booking: any): string => {
   const bookingTimezone = booking.timezone || 'UTC'
-  const displayDate = booking.localDate || booking.date || slot?.date || 'N/A'
-  const startTime = booking.localStartTime || booking.localTime || slot?.time || 'N/A'
+  const displayDate = booking.localDate || booking.date || 'N/A'
+  const startTime = booking.localStartTime || booking.startTime || 'N/A'
   const endTime = booking.localEndTime ? ` - ${booking.localEndTime}` : ''
 
   return `${displayDate} • ${startTime}${endTime} (${bookingTimezone})`

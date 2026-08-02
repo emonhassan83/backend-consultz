@@ -28,7 +28,6 @@ import { ProfileView } from '../profileView/profileView.model'
 import { Withdraw } from '../withdraw/withdraw.model'
 import { WITHDRAW_STATUS } from '../withdraw/withdraw.constant'
 import { modeType } from '../notification/notification.interface'
-import { BookingSlots } from '../bookingSlots/bookingSlots.model'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import {
@@ -936,135 +935,6 @@ const changeUserStatusFromDB = async (payload: {
   return updatedUser
 }
 
-const generateHourlySlots = (from: string, to: string): string[] => {
-  const slots: string[] = []
-  let current = dayjs.utc(`2000-01-01 ${from}`)
-  const end = dayjs.utc(`2000-01-01 ${to}`)
-
-  while (current.isBefore(end)) {
-    slots.push(current.format('HH:mm'))
-    current = current.add(1, 'hour')
-  }
-
-  return slots
-}
-
-export const regenerateSlotsForExpert = async (
-  expertId: string,
-): Promise<void> => {
-  console.log(`[Slot Regeneration] 🔄 Starting for expert: ${expertId}`)
-
-  const expert = (await User.findById(expertId)
-    .select('availability')
-    .lean()) as any
-
-  if (!expert?.availability?.length) {
-    console.log(
-      `[Slot Regeneration] ⚠️ No availability for expert: ${expertId}`,
-    )
-    await BookingSlots.deleteMany({
-      author: expertId,
-      date: { $gte: dayjs.utc().format('YYYY-MM-DD') },
-      isBooked: false,
-    })
-    return
-  }
-
-  const availabilityMap = new Map<string, { from: string; to: string }[]>()
-  for (const entry of expert.availability) {
-    availabilityMap.set(entry.day.toLowerCase(), entry.slots || [])
-  }
-
-  // ✅ Use UTC for all date operations
-  const currentMonth = dayjs.utc().startOf('month')
-  const futureMonths = 6
-
-  for (let i = 0; i < futureMonths; i++) {
-    const targetMonth = currentMonth.add(i, 'month')
-    const year = targetMonth.year()
-    const month = targetMonth.month() + 1
-    const monthPrefix = `${year}-${month.toString().padStart(2, '0')}`
-
-    console.log(`[Slot Regeneration] 📅 Processing month: ${monthPrefix}`)
-
-    const bookedSlots = await BookingSlots.find({
-      author: expertId,
-      date: { $regex: `^${monthPrefix}` },
-      isBooked: true,
-    })
-      .select('date time')
-      .lean()
-
-    const bookedSet = new Set(
-      bookedSlots.map((s: any) => `${s.date}|${s.time}`),
-    )
-    console.log(
-      `[Slot Regeneration] 🔒 Preserving ${bookedSet.size} booked slots`,
-    )
-
-    const deleted = await BookingSlots.deleteMany({
-      author: expertId,
-      date: { $regex: `^${monthPrefix}` },
-      isBooked: false,
-    })
-    console.log(
-      `[Slot Regeneration] 🗑️ Deleted ${deleted.deletedCount} unbooked slots`,
-    )
-
-    const daysInMonth = targetMonth.daysInMonth()
-    const slotsToInsert: any[] = []
-
-    for (let d = 1; d <= daysInMonth; d++) {
-      // ✅ Build date string directly — no dayjs date object needed for weekday
-      const dateStr = `${year}-${month.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`
-
-      // ✅ Parse in UTC to get correct weekday
-      const currentDate = dayjs.utc(dateStr)
-      const weekDay = currentDate.format('ddd').toLowerCase() // 'sun', 'mon', etc.
-
-      const daySlots = availabilityMap.get(weekDay)
-      if (!daySlots?.length) continue
-
-      for (const slotRange of daySlots) {
-        const hourlySlots = generateHourlySlots(slotRange.from, slotRange.to)
-
-        for (const time of hourlySlots) {
-          const slotKey = `${dateStr}|${time}`
-          if (bookedSet.has(slotKey)) continue
-
-          slotsToInsert.push({
-            author: expertId,
-            date: dateStr,
-            time,
-            isBooked: false,
-          })
-        }
-      }
-    }
-
-    if (!slotsToInsert.length) {
-      console.log(
-        `[Slot Regeneration] ℹ️ No new slots needed for ${monthPrefix}`,
-      )
-      continue
-    }
-
-    try {
-      await BookingSlots.insertMany(slotsToInsert, { ordered: false })
-      console.log(
-        `[Slot Regeneration] ✅ Inserted ${slotsToInsert.length} slots for ${monthPrefix}`,
-      )
-    } catch (err: any) {
-      if (err.code !== 11000) throw err
-      console.log(
-        `[Slot Regeneration] ⚠️ Duplicate slots skipped for ${monthPrefix}`,
-      )
-    }
-  }
-
-  console.log(`[Slot Regeneration] ✅ Done for expert: ${expertId}`)
-}
-
 const changeUserNotifyFromDB = async (id: string, payload: any) => {
   // 1️⃣ Validate user
   const user = await User.findById(id)
@@ -1249,36 +1119,11 @@ const updateUserInfoFromDB = async (
       }
     }
 
-    // ✅ Step 4: Detect availability change BEFORE save
-    const availabilityChanged =
-      isExpert &&
-      finalPayload.availability !== undefined &&
-      JSON.stringify(user.availability) !==
-      JSON.stringify(finalPayload.availability)
-
     // Step 5: Apply payload and save
     Object.assign(user, finalPayload)
     const updatedUser = await user.save({ session })
 
     await session.commitTransaction()
-
-    // ✅ Step 6: Trigger slot regeneration AFTER session commit
-    // This runs independently of the model hook — handles session timing safely
-    if (availabilityChanged) {
-      setImmediate(async () => {
-        try {
-          await regenerateSlotsForExpert(updatedUser._id.toString())
-          console.log(
-            `[Slot Regeneration] ✅ Completed for expert: ${updatedUser._id}`,
-          )
-        } catch (err: any) {
-          console.error(
-            `[Slot Regeneration] ❌ Failed for expert ${updatedUser._id}:`,
-            err.message,
-          )
-        }
-      })
-    }
 
     const profileSetupProgress = calculateProfileSetupProgress(updatedUser)
     const safeUpdatedUser = updatedUser.toObject()
@@ -1418,3 +1263,4 @@ export const UserService = {
   deleteAUserFromDB,
   updateVatInfoFromDB,
 }
+

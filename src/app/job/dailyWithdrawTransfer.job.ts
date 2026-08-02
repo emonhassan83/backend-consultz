@@ -49,9 +49,10 @@ export const dailyWithdrawTransferJob = async (): Promise<void> => {
         continue
       }
 
-      // Fetch booking with slot and user (booker) populated
+      // Fetch booking with user (booker) populated. Dynamic bookings no longer
+      // have a Booking.slot schema path.
       const booking = await Booking.findById(withdraw.booking)
-        .populate('slot user')
+        .populate('user')
         .session(session)
 
       if (!booking) {

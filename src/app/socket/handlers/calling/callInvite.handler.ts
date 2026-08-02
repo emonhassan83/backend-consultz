@@ -9,7 +9,10 @@ import httpStatus from 'http-status'
 import { sendVoIPPush } from '../../../utils/voipService'
 import { sendDataMessageToToken } from '../../../utils/sentNotification'
 import { Booking } from '../../../modules/booking/booking.models'
-import { BOOKING_STATUS } from '../../../modules/booking/booking.constants'
+import {
+  BOOKING_STATUS,
+  PAYMENT_STATUS,
+} from '../../../modules/booking/booking.constants'
 import AppError from '../../../errors/AppError'
 
 type TCallInvitePayload = {
@@ -41,7 +44,8 @@ export const callInvite = eventHandler<TCallInvitePayload>(
 
       const booking = await Booking.findOne({
         _id: call.booking.toString(),
-        status: { $in: [BOOKING_STATUS.confirmed] },
+        status: { $in: [BOOKING_STATUS.confirmed, BOOKING_STATUS.running] },
+        paymentStatus: PAYMENT_STATUS.paid,
         isDeleted: false,
       })
 

@@ -10,7 +10,6 @@ import { generateHourlySlots } from './bookingSlots.utils'
 import { Booking } from '../booking/booking.models'
 import { BOOKING_STATUS, PAYMENT_STATUS } from '../booking/booking.constants'
 import {
-  buildBookingInterval,
   getBufferForDuration,
   isMinNoticeSatisfied,
   isWithinBookingHorizon,
@@ -72,37 +71,6 @@ const subtractBlockedIntervals = (
 
 const formatInTimezone = (date: Date, timezone: string) =>
   dayjs(date).tz(timezone).format('HH:mm')
-
-const getLegacySlotMapForBookings = async (bookingIds: string[]) => {
-  if (!bookingIds.length) return new Map<string, any>()
-
-  const rawBookings = await Booking.collection
-    .find({ _id: { $in: bookingIds.map((id) => id as any) } })
-    .project({ _id: 1, slot: 1 })
-    .toArray()
-
-  const slotIds = rawBookings
-    .map((booking) => booking.slot)
-    .filter(Boolean)
-
-  if (!slotIds.length) return new Map<string, any>()
-
-  const slots = await BookingSlots.find({ _id: { $in: slotIds } })
-    .select('date time')
-    .lean()
-
-  const slotById = new Map(slots.map((slot: any) => [slot._id.toString(), slot]))
-  const slotByBookingId = new Map<string, any>()
-
-  rawBookings.forEach((booking) => {
-    if (booking.slot) {
-      const slot = slotById.get(booking.slot.toString())
-      if (slot) slotByBookingId.set(booking._id.toString(), slot)
-    }
-  })
-
-  return slotByBookingId
-}
 
 const insertIntoDB = async (
   payload: { author: string },
@@ -294,14 +262,8 @@ const getDynamicSlotsFromDB = async (query: Record<string, unknown>) => {
     .select('sessionDuration timezone status startAt endAt bufferEndAt date localDate localTime localStartTime')
     .lean()
 
-  const legacySlotByBookingId = await getLegacySlotMapForBookings(
-    existingBookings.map((booking: any) => booking._id.toString()),
-  )
-
   const blockedIntervals = existingBookings
     .map((booking: any): TInterval | null => {
-      const legacySlot = legacySlotByBookingId.get(booking._id.toString())
-
       if (booking.startAt && booking.bufferEndAt) {
         return {
           start: new Date(booking.startAt),
@@ -312,27 +274,7 @@ const getDynamicSlotsFromDB = async (query: Record<string, unknown>) => {
         }
       }
 
-      if (!legacySlot?.date || !legacySlot?.time) {
-        return null
-      }
-
-      if (legacySlot.date !== date) {
-        return null
-      }
-
-      const interval = buildBookingInterval({
-        date: legacySlot.date,
-        startTime: legacySlot.time,
-        duration: booking.sessionDuration,
-        timezone,
-        rules,
-      })
-
-      return {
-        start: interval.startAt,
-        end: interval.bufferEndAt,
-        sessionEnd: interval.endAt,
-      }
+      return null
     })
     .filter((interval: TInterval | null): interval is TInterval => {
       if (!interval || interval.start >= interval.end) {

@@ -10,7 +10,6 @@ import mongoose from 'mongoose'
 import { PAYMENT_STATUS } from './payment.constant'
 import { BOOKING_STATUS } from '../booking/booking.constants'
 import { User } from '../user/user.model'
-import { BookingSlots } from '../bookingSlots/bookingSlots.model'
 import { sendBookingsNotification } from '../booking/booking.utils'
 import {
   sendNewBookingToConsultant,
@@ -178,7 +177,6 @@ const confirmPayment = async (payload: {
 
   let confirmedPayment: any
   let confirmedBooking: any
-  let legacySlotId: any
   let shouldAwardFirstPaidBookingBonus = false
 
   try {
@@ -219,25 +217,10 @@ const confirmPayment = async (payload: {
       throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
     }
 
-    const legacyBookingRaw = await Booking.collection.findOne(
-      { _id: booking._id as any },
-      { session },
-    )
-    legacySlotId = legacyBookingRaw?.slot
-
     if (shouldAwardFirstPaidBookingBonus) {
       await User.findByIdAndUpdate(
         userId,
         { $inc: { points: 300 } },
-        { session },
-      )
-    }
-
-    /* ========= 4. Mark Slot as Booked (old fixed-slot bookings only) ========= */
-    if (legacySlotId) {
-      await BookingSlots.findByIdAndUpdate(
-        legacySlotId,
-        { isBooked: true },
         { session },
       )
     }
@@ -279,16 +262,11 @@ const confirmPayment = async (payload: {
     ])
 
     if (consult?.fcmToken) {
-      const legacySlot = legacySlotId
-        ? await BookingSlots.findById(legacySlotId).select('date time').lean()
-        : null
-
       await sendBookingsNotification(
         'pending',
         confirmedBooking,
         consult,
         consult as unknown as TUser,
-        legacySlot as any,
         { requesterName: user?.firstName || 'a client' },
       )
     }

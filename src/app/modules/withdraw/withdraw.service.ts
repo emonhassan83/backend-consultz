@@ -190,10 +190,6 @@ const getAWithdrawFromDB = async (id: string) => {
           path: 'user',
           select: 'firstName lastName email photoUrl',
         },
-        {
-          path: 'slot',
-          select: 'date time',
-        },
       ],
     },
   ])

@@ -7,7 +7,7 @@ import mongoose from 'mongoose'
 import { Booking } from '../booking/booking.models'
 import { sendNotification } from '../../utils/sentNotification'
 import { modeType } from '../notification/notification.interface'
-import { BOOKING_STATUS } from '../booking/booking.constants'
+import { BOOKING_STATUS, PAYMENT_STATUS } from '../booking/booking.constants'
 import { CALLING_STATUS } from './calling.constant'
 import { ICalling } from './calling.interface'
 import { Withdraw } from '../withdraw/withdraw.model'
@@ -35,7 +35,9 @@ const startCalling = async (userId: string, payload: ICalling) => {
     const booking = await Booking.findOne({
       _id: payload.bookingId,
       status: BOOKING_STATUS.confirmed,
+      paymentStatus: PAYMENT_STATUS.paid,
       isDeleted: false,
+      $or: [{ user: userId }, { consult: userId }],
     }).session(session)
 
     if (!booking) {
@@ -46,7 +48,10 @@ const startCalling = async (userId: string, payload: ICalling) => {
     }
 
     /* 3. Get receiver */
-    const receiver = await User.findById(booking.user).session(session)
+    const receiverId =
+      booking.user.toString() === userId ? booking.consult : booking.user
+
+    const receiver = await User.findById(receiverId).session(session)
     if (!receiver || receiver.isDeleted) {
       throw new AppError(httpStatus.NOT_FOUND, 'Receiver not found')
     }
@@ -184,7 +189,13 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
     await call.save({ session })
 
     /* booking complete */
-    const booking = await Booking.findById(call.booking).session(session)
+    const booking = (await Booking.findOne({
+      _id: call.booking,
+      paymentStatus: PAYMENT_STATUS.paid,
+      isDeleted: false,
+      $or: [{ user: userId }, { consult: userId }],
+      status: { $in: [BOOKING_STATUS.running, BOOKING_STATUS.confirmed] },
+    } as any).session(session)) as any
     if (!booking) throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
 
     booking.status = BOOKING_STATUS.completed
@@ -203,18 +214,24 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
 
     const proceedAt = dayjs(now).add(holdDays, 'day').toDate()
 
-    const [withdraw] = await Withdraw.create(
-      [
-        {
-          user: booking.consult,
-          booking: booking._id.toString(),
-          amount: payment.consultAmount,
-          status: WITHDRAW_STATUS.proceed,
-          proceedAt,
-        },
-      ],
-      { session },
-    )
+    const existingWithdraw = await Withdraw.findOne({
+      booking: booking._id.toString(),
+    }).session(session)
+
+    const withdraw = existingWithdraw ?? (
+      await Withdraw.create(
+        [
+          {
+            user: booking.consult,
+            booking: booking._id.toString(),
+            amount: payment.consultAmount,
+            status: WITHDRAW_STATUS.proceed,
+            proceedAt,
+          },
+        ],
+        { session },
+      )
+    )[0]
 
     /* notification */
     const [caller, receiver] = await Promise.all([
@@ -237,7 +254,7 @@ const endCalling = async (payload: { callId: string }, userId: string) => {
     }
 
     // sent notify to consult
-    if (caller?._id.toString() === booking.consult.toString()) {
+    if (caller && caller._id.toString() === booking.consult.toString()) {
       await sendWithdrawNotify(WITHDRAW_STATUS.proceed, withdraw, caller)
     }
 
