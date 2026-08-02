@@ -30,14 +30,13 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
       { lastPendingReminderSentAt: { $lte: tenMinutesAgo } },
     ],
   })
-    .populate('slot')
     .populate('consult')
     .populate('user')
 
   console.log(`Found ${pendingBookings.length} pending bookings to check for reminders`)
 
   for (const booking of pendingBookings) {
-    const slot = (booking as any).slot
+    const slot = null
     const expert = booking.consult as any
     const booker = booking.user as any
 
@@ -66,7 +65,7 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
           booking,
           expert as TUser,
           expert as TUser,
-          slot,
+          null as any,
           { requesterName: booker?.firstName || 'your client' },
         )
 

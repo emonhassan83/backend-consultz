@@ -191,17 +191,19 @@ const resolveBookingStartDate = (booking: any): Date | null => {
 
 const ensureActionBeforePolicyWindow = async ({
   booking,
+  startAt: providedStartAt,
   settingKey,
   defaultMinutes = 60,
   actionLabel,
 }: {
-  booking: any
+  booking?: any
+  startAt?: Date
   settingKey: 'reschedulingTime' | 'cancellationTime'
   defaultMinutes?: number
   actionLabel: string
 }) => {
   const policyMinutes = await getGeneralNumberSetting(settingKey, defaultMinutes)
-  const startAt = resolveBookingStartDate(booking)
+  const startAt = providedStartAt || resolveBookingStartDate(booking)
 
   if (!startAt) {
     throw new AppError(
@@ -1571,12 +1573,6 @@ const rescheduleBooking = async (
       )
     }
 
-    await ensureActionBeforePolicyWindow({
-      booking,
-      settingKey: 'reschedulingTime',
-      actionLabel: 'Rescheduling',
-    })
-
     {
       const consultant = booking.consult as any
       const timezoneValue = consultant.timeZone || booking.timezone || 'UTC'
@@ -1589,17 +1585,16 @@ const rescheduleBooking = async (
         rules,
       })
 
+      await ensureActionBeforePolicyWindow({
+        startAt: interval.startAt,
+        settingKey: 'reschedulingTime',
+        actionLabel: 'Rescheduling',
+      })
+
       if (!getOfferedSessionDuration(consultant, booking.sessionDuration)) {
         throw new AppError(
           httpStatus.BAD_REQUEST,
           'Selected session duration is not offered by this consultant.',
-        )
-      }
-
-      if (!isMinNoticeSatisfied(interval.startAt, rules)) {
-        throw new AppError(
-          httpStatus.BAD_REQUEST,
-          `Reschedule must be made at least ${rules.minNotice} hours before the new session start time.`,
         )
       }
 

@@ -41,9 +41,7 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
       { is10MinReminderSent: { $ne: true } },
       { isJoinCallReminderSent: { $ne: true } },
     ],
-  })
-    .populate('slot')
-    .lean()) as any[]
+  }).lean()) as any[]
 
   // Collect all unique user and consultant IDs for a single batch DB fetch
   const userIds = [...new Set(todayBookings.map((b) => b.user.toString()))]
@@ -73,7 +71,7 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
   const failedJoinCallBookingIds = new Set<string>()
 
   for (const booking of todayBookings) {
-    const slot = booking.slot
+    const slot = null
     const user = userMap.get(booking.user.toString())
     const consult = userMap.get(booking.consult.toString())
 

@@ -6,7 +6,6 @@ import utc from 'dayjs/plugin/utc'
 import mongoose from 'mongoose'
 import Stripe from 'stripe'
 import { Booking } from '../modules/booking/booking.models'
-import { BookingSlots } from '../modules/bookingSlots/bookingSlots.model'
 import { Payment } from '../modules/payment/payment.model'
 import { User } from '../modules/user/user.model'
 import { BOOKING_STATUS, PAYMENT_STATUS } from '../modules/booking/booking.constants'
@@ -14,7 +13,6 @@ import { sendBookingsNotification } from '../modules/booking/booking.utils'
 import { sendNotRespondedEmail } from '../utils/emailNotify'
 import config from '../config'
 import { TUser } from '../modules/user/user.interface'
-import { TBookingSlots } from '../modules/bookingSlots/bookingSlots.interface'
 import {
   resolveBookingEndUtc,
   resolveBookingStartUtc,
@@ -43,9 +41,7 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
       status: { $in: [BOOKING_STATUS.confirmed, BOOKING_STATUS.pending] },
       paymentStatus: PAYMENT_STATUS.paid,
       isDeleted: false,
-    })
-      .populate('slot')
-      .session(session)
+    }).session(session)
 
     console.log(`Found ${oldBookings.length} bookings to check`)
 
@@ -55,13 +51,13 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
     let updatedCount = 0
 
     for (const booking of oldBookings) {
-      let slot = (booking as any).slot
-      if (!slot && booking.localDate && (booking.localStartTime || booking.localTime)) {
+      let slot = null
+      if (booking.localDate && (booking.localStartTime || booking.localTime)) {
         slot = {
           date: booking.localDate,
           time: booking.localStartTime || booking.localTime,
         }
-      } else if (!slot && booking.date && (booking.localStartTime || booking.startTime)) {
+      } else if (booking.date && (booking.localStartTime || booking.startTime)) {
         slot = {
           date: booking.date,
           time: booking.localStartTime || booking.startTime,
@@ -100,7 +96,6 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
           _id: booking._id,
           status: booking.status,
           paymentStatus: PAYMENT_STATUS.paid,
-          ...(slot?._id ? { slot: slot._id } : {}),
           updatedAt: booking.updatedAt,
         },
         { status: BOOKING_STATUS.not_responded, respondedAt: new Date() },
@@ -114,14 +109,6 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
         continue
       }
 
-      if (slot?._id) {
-        await BookingSlots.findByIdAndUpdate(
-          slot._id,
-          { isBooked: false },
-          { session },
-        )
-      }
-
       // â”€â”€ Refund â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const payment = await Payment.findOne({
         booking: booking._id as any,
@@ -130,14 +117,13 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
       }).session(session)
 
       // â”€â”€ Fetch user data for notifications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-      const [booker, expert, slotInfo] = await Promise.all([
+      const [booker, expert] = await Promise.all([
         User.findById(booking.user)
           .select('_id firstName lastName email fcmToken pushNotify emailNotify')
           .session(session),
         User.findById(booking.consult)
           .select('_id firstName lastName email fcmToken pushNotify emailNotify')
           .session(session),
-        (booking as any).slot ? BookingSlots.findById((booking as any).slot).session(session) : null,
       ])
 
       // âœ… Session commit à¦à¦° à¦ªà¦°à§‡ push/email à¦ªà¦¾à¦ à¦¾à¦¬à§‹
@@ -173,13 +159,13 @@ export const autoMarkNotRespondedJob = async (): Promise<void> => {
         }
 
         if (booker?.fcmToken && booker.pushNotify?.bookingAndSchedule) {
-          await sendBookingsNotification('not_responded', capturedBooking, booker as TUser, expert as TUser, slotInfo as TBookingSlots).catch(
+          await sendBookingsNotification('not_responded', capturedBooking, booker as TUser, expert as TUser, null as any).catch(
             (err) => console.error(`Push failed (booker ${booker._id}):`, err),
           )
         }
 
         if (expert?.fcmToken && expert.pushNotify?.bookingAndSchedule) {
-          await sendBookingsNotification('not_responded', capturedBooking, expert as TUser, expert as TUser, slotInfo as TBookingSlots, {
+          await sendBookingsNotification('not_responded', capturedBooking, expert as TUser, expert as TUser, null as any, {
             otherPartyName: booker?.firstName || 'your client',
           }).catch(
             (err) => console.error(`Push failed (expert ${expert._id}):`, err),
