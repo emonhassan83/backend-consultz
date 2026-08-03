@@ -83,7 +83,7 @@ const para = (text: string) =>
   `<p style="margin:0 0 14px; font-size:14px; color:#444444; line-height:1.7;">${text}</p>`
 
 const getBookingSessionTime = (booking: TBookings) => {
-  const startTime = booking.localStartTime || booking.localTime || booking.startTime || 'N/A'
+  const startTime = booking.localStartTime || booking.startTime || 'N/A'
   const endTime = booking.localEndTime ? ` - ${booking.localEndTime}` : ''
   return `${startTime}${endTime}`
 }

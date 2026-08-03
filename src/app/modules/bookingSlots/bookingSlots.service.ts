@@ -1,4 +1,4 @@
-import httpStatus from 'http-status'
+﻿import httpStatus from 'http-status'
 import AppError from '../../errors/AppError'
 import { BookingSlots } from './bookingSlots.model'
 import { User } from '../user/user.model'
@@ -13,7 +13,6 @@ import {
   getBufferForDuration,
   isMinNoticeSatisfied,
   isWithinBookingHorizon,
-  parseLocalDateTimeToUtc,
   resolveBookingRules,
 } from '../booking/bookingRules.utils'
 
@@ -69,8 +68,11 @@ const subtractBlockedIntervals = (
   return freeGaps
 }
 
-const formatInTimezone = (date: Date, timezone: string) =>
-  dayjs(date).tz(timezone).format('HH:mm')
+const formatUtcTime = (date: Date) =>
+  dayjs(date).utc().format('HH:mm')
+
+const parseUtcDateTime = (date: string, time: string): Date =>
+  dayjs.utc(`${date} ${time}`, 'YYYY-MM-DD HH:mm').toDate()
 
 const insertIntoDB = async (
   payload: { author: string },
@@ -178,10 +180,10 @@ const getAllIntoFromDB = async (query: Record<string, unknown>, author: string) 
   let dateFilter: Record<string, any>
 
   if (date) {
-    // ✅ specific date filter
+    // âœ… specific date filter
     dateFilter = { date }
   } else {
-    // ✅ month wise filter
+    // âœ… month wise filter
     const monthPrefix = `${year}-${month.padStart(2, '0')}`
     dateFilter = { date: { $regex: `^${monthPrefix}` } }
   }
@@ -226,14 +228,13 @@ const getDynamicSlotsFromDB = async (query: Record<string, unknown>) => {
   const timezone = expert.timeZone || 'UTC'
   const rules = resolveBookingRules(expert)
   const bufferTime = getBufferForDuration(rules, sessionDuration)
-  const requestedDay = dayjs.tz(date, 'YYYY-MM-DD', timezone).format('ddd').toLowerCase()
+  const requestedDay = dayjs.utc(date, 'YYYY-MM-DD').format('ddd').toLowerCase()
   const dayAvailability = expert.availability.find(
     (availability: any) => availability.day === requestedDay,
   )
 
   if (!dayAvailability?.slots?.length) {
     return {
-      expertId,
       date,
       duration: sessionDuration,
       timezone,
@@ -245,12 +246,12 @@ const getDynamicSlotsFromDB = async (query: Record<string, unknown>) => {
 
   const availabilityGaps: TInterval[] = dayAvailability.slots
     .map((slot: { from: string; to: string }) => ({
-      start: parseLocalDateTimeToUtc(date, slot.from, timezone),
-      end: parseLocalDateTimeToUtc(date, slot.to, timezone),
+      start: parseUtcDateTime(date, slot.from),
+      end: parseUtcDateTime(date, slot.to),
     }))
     .filter((gap: TInterval) => gap.start < gap.end)
 
-  const dayStart = parseLocalDateTimeToUtc(date, '00:00', timezone)
+  const dayStart = parseUtcDateTime(date, '00:00')
   const dayEnd = dayjs(dayStart).add(1, 'day').toDate()
 
   const existingBookings = await Booking.find({
@@ -259,7 +260,7 @@ const getDynamicSlotsFromDB = async (query: Record<string, unknown>) => {
     paymentStatus: PAYMENT_STATUS.paid,
     isDeleted: false,
   })
-    .select('sessionDuration timezone status startAt endAt bufferEndAt date localDate localTime localStartTime')
+    .select('sessionDuration timezone status startAt endAt bufferEndAt date localDate localStartTime')
     .lean()
 
   const blockedIntervals = existingBookings
@@ -295,12 +296,13 @@ const getDynamicSlotsFromDB = async (query: Record<string, unknown>) => {
   let generatedSlotCount = 0
   let skippedByMinNotice = 0
   let skippedByBookingHorizon = 0
+  const nowUtc = dayjs.utc().toDate()
 
   blockedIntervals.forEach((interval) => {
     slots.push({
-      startTime: formatInTimezone(interval.start, timezone),
-      endTime: formatInTimezone(interval.sessionEnd || interval.end, timezone),
-      bufferEndTime: formatInTimezone(interval.end, timezone),
+      startTime: formatUtcTime(interval.start),
+      endTime: formatUtcTime(interval.sessionEnd || interval.end),
+      bufferEndTime: formatUtcTime(interval.end),
       available: false,
       unavailableReason: 'booked',
     })
@@ -318,8 +320,8 @@ const getDynamicSlotsFromDB = async (query: Record<string, unknown>) => {
       }
 
       generatedSlotCount++
-      const minNoticeSatisfied = isMinNoticeSatisfied(cursor, rules)
-      const withinBookingHorizon = isWithinBookingHorizon(cursor, rules)
+      const minNoticeSatisfied = isMinNoticeSatisfied(cursor, rules, nowUtc)
+      const withinBookingHorizon = isWithinBookingHorizon(cursor, rules, nowUtc)
 
       if (!minNoticeSatisfied) {
         skippedByMinNotice++
@@ -330,9 +332,9 @@ const getDynamicSlotsFromDB = async (query: Record<string, unknown>) => {
       }
 
       slots.push({
-        startTime: formatInTimezone(cursor, timezone),
-        endTime: formatInTimezone(sessionEnd, timezone),
-        bufferEndTime: formatInTimezone(bufferEnd, timezone),
+        startTime: formatUtcTime(cursor),
+        endTime: formatUtcTime(sessionEnd),
+        bufferEndTime: formatUtcTime(bufferEnd),
         available: minNoticeSatisfied && withinBookingHorizon,
         unavailableReason: !minNoticeSatisfied
           ? 'min_notice'
@@ -350,7 +352,6 @@ const getDynamicSlotsFromDB = async (query: Record<string, unknown>) => {
   const availableSlotCount = slots.filter((slot) => slot.available).length
 
   return {
-    expertId,
     date,
     duration: sessionDuration,
     timezone,
@@ -382,3 +383,4 @@ export const BookingSlotsService = {
   getAIntoFromDB,
   getDynamicSlotsFromDB,
 }
+

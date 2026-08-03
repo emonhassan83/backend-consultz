@@ -1,4 +1,4 @@
-import dayjs from 'dayjs'
+﻿import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
@@ -36,12 +36,14 @@ import {
   buildBookingInterval,
   isMinNoticeSatisfied,
   isWithinBookingHorizon,
-  parseLocalDateTimeToUtc,
   resolveBookingRules,
 } from './bookingRules.utils'
 
 const getEntityId = (entity: any): string =>
   (entity?._id || entity)?.toString()
+
+const parseUtcDateTime = (date: string, time: string): Date =>
+  dayjs.utc(`${date} ${time}`, 'YYYY-MM-DD HH:mm').toDate()
 
 dayjs.extend(isSameOrBefore)
 dayjs.extend(isoWeek)
@@ -253,25 +255,20 @@ const createBookings = async (payload: TBookings, userId: string) => {
         )
       }
 
-      const requestedDay = dayjs
-        .tz(interval.localDate, 'YYYY-MM-DD', timezoneValue)
-        .format('ddd')
-        .toLowerCase()
+      const requestedDay = dayjs.utc(interval.date, 'YYYY-MM-DD').format('ddd').toLowerCase()
       const dayAvailability = consult.availability?.find(
         (availability: any) => availability.day === requestedDay,
       )
 
       const isInsideAvailability = dayAvailability?.slots?.some(
         (slot: { from: string; to: string }) => {
-          const availabilityStart = parseLocalDateTimeToUtc(
-            interval.localDate,
+          const availabilityStart = parseUtcDateTime(
+            interval.date,
             slot.from,
-            timezoneValue,
           )
-          const availabilityEnd = parseLocalDateTimeToUtc(
-            interval.localDate,
+          const availabilityEnd = parseUtcDateTime(
+            interval.date,
             slot.to,
-            timezoneValue,
           )
 
           return (
@@ -294,7 +291,7 @@ const createBookings = async (payload: TBookings, userId: string) => {
         paymentStatus: PAYMENT_STATUS.paid,
         isDeleted: false,
       })
-        .select('sessionDuration timezone startAt endAt bufferEndAt date localDate localTime localStartTime')
+        .select('sessionDuration timezone startAt endAt bufferEndAt date localDate localStartTime')
         .session(session)
 
       const hasOverlap = existingBookings.some((booking: any) => {
@@ -325,7 +322,7 @@ const createBookings = async (payload: TBookings, userId: string) => {
 
       const frontendLocalDate = payload.localDate
       const frontendLocalStartTime =
-        payload.localStartTime || payload.localTime
+        payload.localStartTime
       const frontendLocalEndTime = frontendLocalDate &&
         frontendLocalStartTime &&
         dayjs(
@@ -407,7 +404,7 @@ const getBookingCalender = async (
     .endOf('month')
     .format('YYYY-MM-DD')
 
-  // 1. Current user-এর সব active booking খুঁজে বের করা
+  // 1. Current user-à¦à¦° à¦¸à¦¬ active booking à¦–à§à¦à¦œà§‡ à¦¬à§‡à¦° à¦•à¦°à¦¾
   const bookings = await Booking.find({
     $or: [{ user: userId }, { consult: userId }],
     isDeleted: false,
@@ -423,7 +420,7 @@ const getBookingCalender = async (
     .select('date localDate')
     .lean()
 
-  // 3. Date wise isBooked map তৈরি
+  // 3. Date wise isBooked map à¦¤à§ˆà¦°à¦¿
   const bookedDates = new Set<string>()
   bookings.forEach((booking: any) => {
     const bookingDate = booking.localDate || booking.date
@@ -436,7 +433,7 @@ const getBookingCalender = async (
     }
   })
 
-  // 4. পুরো মাসের সব তারিখ generate করা + isBooked flag
+  // 4. à¦ªà§à¦°à§‹ à¦®à¦¾à¦¸à§‡à¦° à¦¸à¦¬ à¦¤à¦¾à¦°à¦¿à¦– generate à¦•à¦°à¦¾ + isBooked flag
   const calendarData: { date: string; isBooked: boolean }[] = []
 
   let currentDate = dayjs(startOfMonth)
@@ -476,7 +473,7 @@ const getAllBookings = async (
         { path: 'consult', select: 'firstName lastName photoUrl' },
       ])
       .select(
-        'user consult sessionType sessionDuration price timezone status createdAt mainQuestion date localDate localTime localStartTime localEndTime startTime endTime',
+        'user consult sessionType sessionDuration price timezone status createdAt mainQuestion date localDate localStartTime localEndTime startTime endTime',
       ) as any,
     restQuery,
   )
@@ -488,11 +485,11 @@ const getAllBookings = async (
   const data = await bookingModel.modelQuery
   const meta = await bookingModel.countTotal()
 
-  // ✅ Batch unread counts
+  // âœ… Batch unread counts
   const bookingIds = data.map((b: any) => b._id.toString())
   const unreadMap = await getUnreadMessageCountsBatch(bookingIds, currentUserId)
 
-  // ✅ Batch payment details
+  // âœ… Batch payment details
   const payments = await Payment.find({ booking: { $in: bookingIds } }).lean()
   const paymentMap = new Map()
   payments.forEach((p: any) => {
@@ -574,15 +571,15 @@ const getAllBookingsByDate = async (
       { path: 'consult', select: 'firstName lastName photoUrl' },
     ])
     .select(
-      'user consult sessionType sessionDuration price timezone status createdAt date localDate localTime localStartTime localEndTime startTime endTime',
+      'user consult sessionType sessionDuration price timezone status createdAt date localDate localStartTime localEndTime startTime endTime',
     )
     .sort({ createdAt: -1 })
 
-  // ✅ Batch unread counts for all fetched bookings
+  // âœ… Batch unread counts for all fetched bookings
   const bookingIds = bookings.map((b) => b._id.toString())
   const unreadMap = await getUnreadMessageCountsBatch(bookingIds, userId)
 
-  // ✅ Batch payment details
+  // âœ… Batch payment details
   const payments = await Payment.find({ booking: { $in: bookingIds } }).lean()
   const paymentMap = new Map()
   payments.forEach((p: any) => {
@@ -887,14 +884,14 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
         await sendNotification([user.fcmToken], {
           receiver: user._id,
           message: 'Booking Confirmed!',
-          description: `You have earned 50 points for booking a consultation. Keep booking more! 🎉`,
+          description: `You have earned 50 points for booking a consultation. Keep booking more! ðŸŽ‰`,
           reference: updatedBooking._id as string,
           modelType: modeType.Achievement,
         })
       }
     }
 
-    // 5. New Reward #1: Rebook same expert within 30 days → 150 points for user
+    // 5. New Reward #1: Rebook same expert within 30 days â†’ 150 points for user
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
@@ -907,7 +904,7 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
     }).session(session)
 
     if (previousBookingsWithSameExpert > 0) {
-      // This is a repeat booking → award 150 points
+      // This is a repeat booking â†’ award 150 points
       user!.points = (user!.points || 0) + 150
       await user!.save({ session })
 
@@ -922,7 +919,7 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
       }
     }
 
-    // 6. New Reward #2: 3 bookings within 30 days → 300 bonus points for user
+    // 6. New Reward #2: 3 bookings within 30 days â†’ 300 bonus points for user
     const thirtyDaysAgoForBonus = new Date()
     thirtyDaysAgoForBonus.setDate(thirtyDaysAgoForBonus.getDate() - 30)
 
@@ -1079,7 +1076,7 @@ const declineBooking = async (
       })
     }
 
-    // 8. Push notification to expert (optional — self declined)
+    // 8. Push notification to expert (optional â€” self declined)
     if (expert && expert.fcmToken && expert.pushNotify?.bookingAndSchedule) {
       await sendBookingsNotification('declined', updatedBooking, expert, expert as TUser, {
         cancelledBy: 'consult',
@@ -1182,7 +1179,7 @@ const completedBooking = async (
       )
     }
 
-    // ✅ Fetch consultAmount from Payment model
+    // âœ… Fetch consultAmount from Payment model
     const paymentRecord = await Payment.findOne({
       booking: bookingId,
       isDeleted: false,
@@ -1206,7 +1203,7 @@ const completedBooking = async (
         await sendNotification([booker.fcmToken], {
           receiver: booker._id,
           message: 'Session Completed!',
-          description: `You have earned 100 points for attending and completing your consultation. Great job! 🎉`,
+          description: `You have earned 100 points for attending and completing your consultation. Great job! ðŸŽ‰`,
           reference: updatedBooking._id as string,
           modelType: modeType.Achievement,
         })
@@ -1237,7 +1234,7 @@ const completedBooking = async (
           await sendNotification([consultant.fcmToken], {
             receiver: consultant._id,
             message: 'Weekly Performance Bonus!',
-            description: `Congratulations! You completed 5+ sessions this week and earned 300 bonus points! Keep it up! 🎉`,
+            description: `Congratulations! You completed 5+ sessions this week and earned 300 bonus points! Keep it up! ðŸŽ‰`,
             reference: updatedBooking._id as string,
             modelType: modeType.Achievement,
           })
@@ -1264,7 +1261,7 @@ const completedBooking = async (
           .session(session)
           .lean()
         const holdDays = paymentHoldDaysContent?.value || 7
-        // ✅ consultAmount pass করুন
+        // âœ… consultAmount pass à¦•à¦°à§à¦¨
         await sendSessionCompletedToConsultant(
           consultant,
           updatedBooking,
@@ -1311,7 +1308,7 @@ const rescheduleBooking = async (
     }
 
     // 2. Verify ownership (security)
-    // ✅ সঠিক Authorization Check
+    // âœ… à¦¸à¦ à¦¿à¦• Authorization Check
     const isUser = booking.user._id.toString() === currentUserId
     const isConsult = booking.consult._id.toString() === currentUserId
 
@@ -1344,6 +1341,7 @@ const rescheduleBooking = async (
         duration: booking.sessionDuration,
         timezone: timezoneValue,
         rules,
+        inputTimeMode: 'utc',
       })
 
       await ensureActionBeforePolicyWindow({
@@ -1366,25 +1364,20 @@ const rescheduleBooking = async (
         )
       }
 
-      const requestedDay = dayjs
-        .tz(payload.date, 'YYYY-MM-DD', timezoneValue)
-        .format('ddd')
-        .toLowerCase()
+      const requestedDay = dayjs.utc(interval.date, 'YYYY-MM-DD').format('ddd').toLowerCase()
       const dayAvailability = consultant.availability?.find(
         (availability: any) => availability.day === requestedDay,
       )
 
       const isInsideAvailability = dayAvailability?.slots?.some(
         (slot: { from: string; to: string }) => {
-          const availabilityStart = parseLocalDateTimeToUtc(
-            payload.date as string,
+          const availabilityStart = parseUtcDateTime(
+            interval.date,
             slot.from,
-            timezoneValue,
           )
-          const availabilityEnd = parseLocalDateTimeToUtc(
-            payload.date as string,
+          const availabilityEnd = parseUtcDateTime(
+            interval.date,
             slot.to,
-            timezoneValue,
           )
 
           return (
@@ -1408,7 +1401,7 @@ const rescheduleBooking = async (
         paymentStatus: PAYMENT_STATUS.paid,
         isDeleted: false,
       })
-        .select('sessionDuration timezone startAt endAt bufferEndAt date localDate localTime localStartTime')
+        .select('sessionDuration timezone startAt endAt bufferEndAt date localDate localStartTime')
         .session(session)
 
       const hasOverlap = existingBookings.some((existingBooking: any) => {
@@ -1586,6 +1579,7 @@ export const bookingsService = {
   rescheduleBooking,
   requestScheduleChange,
 }
+
 
 
 

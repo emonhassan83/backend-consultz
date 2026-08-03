@@ -31,7 +31,7 @@ const baseLayout = (title: string, recipientName: string, body: string) => `
           <tr>
             <td style="background:#f9f9f9; border-top:1px solid #eeeeee; padding:16px 32px; text-align:center;">
               <p style="margin:0; font-size:12px; color:#999999;">Best regards, <strong>Consultz Team</strong></p>
-              <p style="margin:6px 0 0; font-size:11px; color:#cccccc;">© ${new Date().getFullYear()} Consultz App. All rights reserved.</p>
+              <p style="margin:6px 0 0; font-size:11px; color:#cccccc;">Â© ${new Date().getFullYear()} Consultz App. All rights reserved.</p>
             </td>
           </tr>
         </table>
@@ -66,23 +66,21 @@ const noticeBlock = (text: string) => `
 const para = (text: string) =>
   `<p style="margin:0 0 14px; font-size:14px; color:#444444; line-height:1.7;">${text}</p>`
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. Withdrawal completed → consultant
-// ─────────────────────────────────────────────────────────────────────────────
+// 1. Withdrawal completed â†’ consultant
 export const withdrawCompletedTemplate = (
   consultant: TUser,
   withdraw: TWithdraw,
   booking: TBookings,
   user: TUser,
 ): string => {
-  const sessionStartTime = booking.localStartTime || booking.localTime || booking.startTime || 'N/A'
+  const sessionStartTime = booking.localStartTime || booking.startTime || 'N/A'
   const sessionEndTime = booking.localEndTime ? ` - ${booking.localEndTime}` : ''
-  const sessionInfo = `${booking.localDate || booking.date || 'N/A'} � ${sessionStartTime}${sessionEndTime} (${booking.timezone || 'UTC'})`
+  const sessionInfo = `${booking.localDate || booking.date || 'N/A'} • ${sessionStartTime}${sessionEndTime} (${booking.timezone || 'UTC'})`
 
   const body = `
     ${para('Your withdrawal request has been successfully processed.')}
     ${infoBlock([
-      { label: 'Amount', value: `£${withdraw.amount.toFixed(2)}` },
+      { label: 'Amount', value: `Â£${withdraw.amount.toFixed(2)}` },
       { label: 'From Booking', value: `${booking.sessionType} with ${user.firstName} ${user.lastName}` },
       { label: 'Session Date', value: sessionInfo },
       { label: 'Status', value: 'Completed' },
@@ -94,9 +92,7 @@ export const withdrawCompletedTemplate = (
   return baseLayout('Withdrawal Completed', consultant.firstName, body)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 2. Withdrawal status changed → consultant
-// ─────────────────────────────────────────────────────────────────────────────
+// 2. Withdrawal status changed â†’ consultant
 export const withdrawStatusChangeTemplate = (
   consultant: TUser,
   withdraw: TWithdraw,
@@ -113,7 +109,7 @@ export const withdrawStatusChangeTemplate = (
   const body = `
     ${para('Your withdrawal request status has been updated.')}
     ${infoBlock([
-      { label: 'Amount', value: `£${withdraw.amount.toFixed(2)}` },
+      { label: 'Amount', value: `Â£${withdraw.amount.toFixed(2)}` },
       { label: 'Current Status', value: statusLabel },
     ])}
     ${
@@ -126,9 +122,7 @@ export const withdrawStatusChangeTemplate = (
   return baseLayout(`Withdrawal ${statusLabel}`, consultant.firstName, body)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. Withdrawal on hold → consultant (Stripe not connected)
-// ─────────────────────────────────────────────────────────────────────────────
+// 3. Withdrawal on hold â†’ consultant (Stripe not connected)
 export const withdrawOnHoldTemplate = (
   consultant: TUser,
   withdraw: TWithdraw,
@@ -137,7 +131,7 @@ export const withdrawOnHoldTemplate = (
     ${para('Your withdrawal request is currently on hold because your Stripe account is not yet connected.')}
 
     ${infoBlock([
-      { label: 'Amount', value: `£${withdraw.amount.toFixed(2)}` },
+      { label: 'Amount', value: `Â£${withdraw.amount.toFixed(2)}` },
       { label: 'Status', value: 'On Hold' },
       { label: 'Reason', value: 'Stripe account not connected' },
     ])}
@@ -149,5 +143,5 @@ export const withdrawOnHoldTemplate = (
     ${para('If you need help connecting your Stripe account, please contact our support team.')}
   `
 
-  return baseLayout('Withdrawal On Hold – Action Required', consultant.firstName, body)
+  return baseLayout('Withdrawal On Hold â€“ Action Required', consultant.firstName, body)
 }

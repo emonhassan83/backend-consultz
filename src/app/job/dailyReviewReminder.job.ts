@@ -33,7 +33,7 @@ export const dailyReviewReminderJob = async (): Promise<void> => {
     ],
     isDeleted: false,
   })
-    .select('user consult timezone localDate localTime localStartTime localEndTime startAt endAt updatedAt')
+    .select('user consult timezone localDate localStartTime localEndTime startAt endAt updatedAt')
     .lean()
 
   console.log(`Found ${completedBookings.length} eligible bookings for review reminder`)

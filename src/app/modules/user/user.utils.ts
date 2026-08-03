@@ -308,7 +308,7 @@ export const sendSlotRegenerationNotification = async (expertId: string) => {
   await sendNotification([expert.fcmToken], {
     receiver: expert._id,
     message: 'Availability Updated',
-    description: 'Your availability has been updated. Slots have been regenerated for upcoming months.',
+    description: 'Your availability has been updated. New booking times will be generated dynamically.',
     modelType: modeType.User,
   });
 };
