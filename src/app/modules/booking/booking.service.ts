@@ -1292,6 +1292,8 @@ const rescheduleBooking = async (
   payload: {
     date: string
     startTime: string
+    localDate?: string
+    localStartTime?: string
   },
   currentUserId: string, // added for ownership check (recommended)
 ) => {
@@ -1430,6 +1432,20 @@ const rescheduleBooking = async (
         )
       }
 
+      const frontendLocalDate = payload.localDate
+      const frontendLocalStartTime = payload.localStartTime
+      const frontendLocalEndTime = frontendLocalDate &&
+        frontendLocalStartTime &&
+        dayjs(
+          `${frontendLocalDate} ${frontendLocalStartTime}`,
+          'YYYY-MM-DD HH:mm',
+          true,
+        ).isValid()
+        ? dayjs(`${frontendLocalDate} ${frontendLocalStartTime}`, 'YYYY-MM-DD HH:mm')
+          .add(booking.sessionDuration, 'minute')
+          .format('HH:mm')
+        : undefined
+
       const updatedBooking = await Booking.findOneAndUpdate(
         {
           _id: booking._id,
@@ -1446,9 +1462,9 @@ const rescheduleBooking = async (
             startAt: interval.startAt,
             endAt: interval.endAt,
             bufferEndAt: interval.bufferEndAt,
-            localDate: interval.localDate,
-            localStartTime: interval.localStartTime,
-            localEndTime: interval.localEndTime,
+            localDate: frontendLocalDate || interval.localDate,
+            localStartTime: frontendLocalStartTime || interval.localStartTime,
+            localEndTime: frontendLocalEndTime || interval.localEndTime,
             is10MinReminderSent: false,
             isJoinCallReminderSent: false,
             lastPendingReminderSentAt: null,

@@ -57,18 +57,48 @@ const createValidationSchema = z.object({
 })
 
 const rescheduleValidationSchema = z.object({
-  body: z.object({
-    date: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, {
-        message: 'Date must be in YYYY-MM-DD format',
-      }),
-    startTime: z
-      .string()
-      .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, {
-        message: 'Start time must be in HH:mm format',
-      }),
-  }),
+  body: z
+    .object({
+      date: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, {
+          message: 'Date must be in YYYY-MM-DD format',
+        }),
+      startTime: z
+        .string()
+        .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, {
+          message: 'Start time must be in HH:mm format',
+        }),
+      localDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, {
+          message: 'Local date must be in YYYY-MM-DD format',
+        })
+        .optional(),
+      localStartTime: z
+        .string()
+        .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, {
+          message: 'Local start time must be in HH:mm format',
+        })
+        .optional(),
+    })
+    .superRefine((data, ctx) => {
+      if (data.localDate && !data.localStartTime) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Local start time is required when local date is provided',
+          path: ['localStartTime'],
+        })
+      }
+
+      if (data.localStartTime && !data.localDate) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Local date is required when local start time is provided',
+          path: ['localDate'],
+        })
+      }
+    }),
 })
 
 const requestScheduleChangeValidationSchema = z.object({
