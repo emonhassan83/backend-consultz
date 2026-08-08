@@ -457,10 +457,25 @@ const getAllBookings = async (
 ) => {
   const queryCopy = { ...query }
   const { consult, user, ...restQuery } = queryCopy
+  const requestedStatus =
+    typeof restQuery.status === 'string'
+      ? restQuery.status.trim().toLowerCase()
+      : undefined
+  delete restQuery.status
 
   let baseFilter: any = {
     isDeleted: false,
-    paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
+  }
+
+  if (
+    requestedStatus &&
+    Object.values(BOOKING_STATUS).includes(requestedStatus as any)
+  ) {
+    baseFilter.status = requestedStatus
+  }
+
+  if (requestedStatus !== BOOKING_STATUS.pending) {
+    baseFilter.paymentStatus = { $ne: PAYMENT_STATUS.unpaid }
   }
 
   if (consult) baseFilter.consult = new mongoose.Types.ObjectId(consult)
