@@ -21,6 +21,31 @@ import { generateOtp } from '../../utils/generateOtp'
 import moment from 'moment'
 import { REGISTER_WITH, USER_STATUS } from '../user/user.constant'
 
+const getEmailNameFallback = (email?: string) => {
+  const emailName = email?.split('@')?.[0]?.trim()
+  return emailName || 'User'
+}
+
+const normalizeSocialName = (payload: {
+  firstName?: string
+  lastName?: string
+  email?: string
+}) => {
+  const firstName = payload.firstName?.trim()
+  const lastName = payload.lastName?.trim()
+
+  return {
+    firstName: firstName || getEmailNameFallback(payload.email),
+    lastName: lastName || '',
+  }
+}
+
+const removeUndefinedFields = <T extends Record<string, any>>(payload: T): Partial<T> => {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined),
+  ) as Partial<T>
+}
+
 const loginUser = async (payload: TLoginUser) => {
   //* checking if the user is exist
   const user = await User.isUserExistsByEmail(payload.email)
@@ -111,15 +136,21 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
   }
 
   let user = await User.isUserExistsByEmail(payload.email as string)
+  const normalizedName = normalizeSocialName(payload)
 
-  const updateData: any = {
-    firstName: payload.firstName,
-    lastName: payload.lastName,
+  const updateData: any = removeUndefinedFields({
+    firstName: payload.firstName?.trim() || undefined,
+    lastName: payload.lastName?.trim() || undefined,
     email: payload.email,
     photoUrl: payload.photoUrl,
     fcmToken: payload.fcmToken,
     voipToken: payload.voipToken,
     deviceType: payload.deviceType,
+  })
+
+  const createData: any = {
+    ...updateData,
+    ...normalizedName,
   }
 
   if (payload.latitude && payload.longitude) {
@@ -166,7 +197,7 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
 
   // ================== NEW USER CREATION ==================
   const newUser = await User.create({
-    ...updateData,
+    ...createData,
     role: payload.role,
     registerWith: REGISTER_WITH.google,
     verification: { otp: 0, expiresAt: new Date(), status: true },
@@ -193,15 +224,21 @@ const registerWithApple = async (payload: TAppleLoginPayload) => {
   }
 
   const user = await User.isUserExistsByEmail(payload.email as string)
+  const normalizedName = normalizeSocialName(payload)
 
-  const updateData: any = {
-    firstName: payload.firstName,
-    lastName: payload.lastName,
+  const updateData: any = removeUndefinedFields({
+    firstName: payload.firstName?.trim() || undefined,
+    lastName: payload.lastName?.trim() || undefined,
     email: payload.email,
     photoUrl: payload.photoUrl,
     fcmToken: payload.fcmToken,
     voipToken: payload.voipToken,
     deviceType: payload.deviceType,
+  })
+
+  const createData: any = {
+    ...updateData,
+    ...normalizedName,
   }
 
   if (payload.latitude && payload.longitude) {
@@ -249,7 +286,7 @@ const registerWithApple = async (payload: TAppleLoginPayload) => {
 
   // ================== NEW USER CREATION ==================
   const newUser = await User.create({
-    ...updateData,
+    ...createData,
     role: payload.role,
     registerWith: REGISTER_WITH.apple,
     verification: { otp: 0, expiresAt: new Date(), status: true },
