@@ -465,6 +465,7 @@ const getAllBookings = async (
 
   let baseFilter: any = {
     isDeleted: false,
+    paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
   }
 
   if (
@@ -472,10 +473,6 @@ const getAllBookings = async (
     Object.values(BOOKING_STATUS).includes(requestedStatus as any)
   ) {
     baseFilter.status = requestedStatus
-  }
-
-  if (requestedStatus !== BOOKING_STATUS.pending) {
-    baseFilter.paymentStatus = { $ne: PAYMENT_STATUS.unpaid }
   }
 
   if (participant) {
