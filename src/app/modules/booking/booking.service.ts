@@ -456,7 +456,7 @@ const getAllBookings = async (
   currentUserId: string,
 ) => {
   const queryCopy = { ...query }
-  const { consult, user, ...restQuery } = queryCopy
+  const { consult, user, participant, ...restQuery } = queryCopy
   const requestedStatus =
     typeof restQuery.status === 'string'
       ? restQuery.status.trim().toLowerCase()
@@ -478,8 +478,13 @@ const getAllBookings = async (
     baseFilter.paymentStatus = { $ne: PAYMENT_STATUS.unpaid }
   }
 
-  if (consult) baseFilter.consult = new mongoose.Types.ObjectId(consult)
-  if (user) baseFilter.user = new mongoose.Types.ObjectId(user)
+  if (participant) {
+    const participantId = new mongoose.Types.ObjectId(participant)
+    baseFilter.$or = [{ consult: participantId }, { user: participantId }]
+  } else {
+    if (consult) baseFilter.consult = new mongoose.Types.ObjectId(consult)
+    if (user) baseFilter.user = new mongoose.Types.ObjectId(user)
+  }
 
   const bookingModel = new QueryBuilder(
     Booking.find(baseFilter)

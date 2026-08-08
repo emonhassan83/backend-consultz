@@ -27,7 +27,7 @@ const getBookingCalender = catchAsync(async (req: Request, res: Response) => {
 const getConsultBookings = catchAsync(async (req: Request, res: Response) => {
   const query = {
     ...req.query,
-    consult: req.user._id.toString(),
+    participant: req.user._id.toString(),
   };
   
   const result = await bookingsService.getAllBookings(query, req.user._id)
