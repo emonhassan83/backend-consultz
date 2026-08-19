@@ -6,6 +6,8 @@ import StripeService from '../../class/stripe/stripe'
 import { sendNotification } from '../../utils/sentNotification'
 import mongoose from 'mongoose'
 import { modeType } from '../notification/notification.interface'
+import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
+import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
 
 // Create Stripe Express account and return onboarding link
 const stripLinkAccount = async (userId: string) => {
@@ -216,6 +218,16 @@ const returnUrl = async (query: Record<string, any>) => {
     const pointsToAdd = 200
     if (isFirstTimeConnect) {
       user.points = (user.points || 0) + pointsToAdd
+      await PointsLogsService.createPointsLog(
+        {
+          user: user._id,
+          type: POINTS_LOG_TYPE.credit,
+          points: pointsToAdd,
+          reason: 'Stripe account connection reward',
+          source: POINTS_LOG_SOURCE.reword,
+        },
+        session,
+      )
 
       // 1. Send push notification (if enabled)
       if (user.fcmToken && user.pushNotify?.points) {

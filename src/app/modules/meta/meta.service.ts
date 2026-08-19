@@ -10,6 +10,7 @@ import { Withdraw } from '../withdraw/withdraw.model'
 import QueryBuilder from '../../builder/QueryBuilder'
 import { Payment } from '../payment/payment.model'
 import { PAYMENT_STATUS } from '../payment/payment.constant'
+import { getGeneralSettingNumber } from '../contents/contents.utils'
 
 const fetchDashboardMetaData = async (
   query: Record<string, unknown>,
@@ -46,6 +47,10 @@ const fetchDashboardMetaData = async (
 
   // Earning overview (separate year)
   const earningOverviewData = await getEarningOverview(selectedEarningYear)
+  const platformFeePercentage = await getGeneralSettingNumber(
+    'platformFeePercentage',
+    20,
+  )
 
   // Latest user find
   const latestUsers = await User.find({
@@ -73,8 +78,14 @@ const fetchDashboardMetaData = async (
   return {
     totalConsultCount,
     totalExpertCount,
+    platformFeePercentage,
     totalEarnings: earningOverviewData.totalEarnings,
+    grossBookingValue: earningOverviewData.grossBookingValue,
     totalCommission: revenueVsCommissionData.totalCommission,
+    platformCommission: earningOverviewData.platformCommission,
+    platformVat: earningOverviewData.platformVat,
+    platformTotalDeduction: earningOverviewData.platformTotalDeduction,
+    expertPayout: earningOverviewData.expertPayout,
     revenueVsCommission: revenueVsCommissionData.monthlyData,
     earningOverview: earningOverviewData.monthlyData,
     notifications,
@@ -140,6 +151,10 @@ const paymentTransactionMetaData = async (
 
   // 1. Earning Overview
   const earningOverviewData = await getEarningOverview(selectedYear);
+  const platformFeePercentage = await getGeneralSettingNumber(
+    'platformFeePercentage',
+    20,
+  );
 
   // 2. Notifications
   const notifications = await Notification.find({
@@ -189,8 +204,14 @@ const paymentTransactionMetaData = async (
     meta: paymentMeta,
 
     data: {
+      platformFeePercentage,
       totalEarnings: earningOverviewData.totalEarnings,
+      grossBookingValue: earningOverviewData.grossBookingValue,
       consultAmount: earningOverviewData.consultAmount || 0,
+      platformCommission: earningOverviewData.platformCommission,
+      platformVat: earningOverviewData.platformVat,
+      platformTotalDeduction: earningOverviewData.platformTotalDeduction,
+      expertPayout: earningOverviewData.expertPayout,
       // earningOverview: earningOverviewData.monthlyData,
       paymentList,
       notifications,

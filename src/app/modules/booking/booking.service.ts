@@ -38,6 +38,8 @@ import {
   isWithinBookingHorizon,
   resolveBookingRules,
 } from './bookingRules.utils'
+import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
+import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
 
 const getEntityId = (entity: any): string =>
   (entity?._id || entity)?.toString()
@@ -55,6 +57,24 @@ const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2026-06-24.dahlia',
   typescript: true,
 })
+
+const createRewardPointsLog = async (
+  userId: any,
+  points: number,
+  reason: string,
+  session?: mongoose.ClientSession,
+) => {
+  await PointsLogsService.createPointsLog(
+    {
+      user: new mongoose.Types.ObjectId(userId.toString()),
+      type: POINTS_LOG_TYPE.credit,
+      points,
+      reason,
+      source: POINTS_LOG_SOURCE.reword,
+    },
+    session,
+  )
+}
 
 const ACTIVE_BOOKING_STATUSES = [
   BOOKING_STATUS.pending,
@@ -895,6 +915,12 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
       const pointsToAdd = 50
       user.points = (user.points || 0) + pointsToAdd
       await user.save({ session })
+      await createRewardPointsLog(
+        user._id,
+        pointsToAdd,
+        'Booking confirmed reward',
+        session,
+      )
 
       // Send push notification (if enabled)
       if (user.fcmToken && user.pushNotify?.points) {
@@ -924,6 +950,12 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
       // This is a repeat booking â†’ award 150 points
       user!.points = (user!.points || 0) + 150
       await user!.save({ session })
+      await createRewardPointsLog(
+        user!._id,
+        150,
+        'Repeat booking reward within 30 days',
+        session,
+      )
 
       if (user!.fcmToken && user!.pushNotify?.points) {
         await sendNotification([user!.fcmToken], {
@@ -951,6 +983,12 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
     if (bookingsInLast30Days >= 3) {
       user!.points = (user!.points || 0) + 300
       await user!.save({ session })
+      await createRewardPointsLog(
+        user!._id,
+        300,
+        'Booking streak reward for 3 sessions within 30 days',
+        session,
+      )
 
       if (user!.fcmToken && user!.pushNotify?.points) {
         await sendNotification([user!.fcmToken], {
@@ -1215,6 +1253,12 @@ const completedBooking = async (
         { points: booker.points },
         { session },
       )
+      await createRewardPointsLog(
+        booker._id,
+        100,
+        'Session completed reward for consultee',
+        session,
+      )
 
       if (booker.fcmToken && booker.pushNotify?.points) {
         await sendNotification([booker.fcmToken], {
@@ -1246,6 +1290,12 @@ const completedBooking = async (
 
       if (completedInLastWeek >= 5) {
         consultant.points += 300
+        await createRewardPointsLog(
+          consultant._id,
+          300,
+          'Weekly performance bonus for completing 5+ sessions',
+          session,
+        )
 
         if (consultant.fcmToken && consultant.pushNotify?.points) {
           await sendNotification([consultant.fcmToken], {
@@ -1262,6 +1312,12 @@ const completedBooking = async (
         consultant._id,
         { points: consultant.points },
         { session },
+      )
+      await createRewardPointsLog(
+        consultant._id,
+        100,
+        'Session completed reward for consultant',
+        session,
       )
 
       if (consultant.fcmToken && consultant.pushNotify?.payment) {

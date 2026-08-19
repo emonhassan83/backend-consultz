@@ -34,7 +34,36 @@ import {
   buildBufferRulesFromSlotBufferStep,
   getDefaultBookingRules,
 } from '../booking/bookingRules.utils'
+import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
+import {
+  POINTS_LOG_SOURCE,
+  POINTS_LOG_TYPE,
+  TPointsLogType,
+} from '../pointsLogs/pointsLogs.constant'
 dayjs.extend(utc)
+
+const createPointsLog = async (
+  userId: Types.ObjectId | string,
+  points: number,
+  reason: string,
+  source: keyof typeof POINTS_LOG_SOURCE = POINTS_LOG_SOURCE.reword,
+  type: TPointsLogType = POINTS_LOG_TYPE.credit,
+  session?: mongoose.ClientSession,
+) => {
+  await PointsLogsService.createPointsLog(
+    {
+      user:
+        typeof userId === 'string'
+          ? new Types.ObjectId(userId)
+          : userId,
+      type,
+      points,
+      reason,
+      source,
+    },
+    session,
+  )
+}
 
 const applyReferralCodeToUser = async (userId: string, referralCode: string) => {
   const session = await mongoose.startSession()
@@ -69,6 +98,22 @@ const applyReferralCodeToUser = async (userId: string, referralCode: string) => 
     await Promise.all([
       user.save({ session }),
       referrer.save({ session }),
+      createPointsLog(
+        user._id,
+        500,
+        'Referral code reward for using a valid referral code',
+        POINTS_LOG_SOURCE.reword,
+        POINTS_LOG_TYPE.credit,
+        session,
+      ),
+      createPointsLog(
+        referrer._id,
+        500,
+        'Referral reward for inviting a new user',
+        POINTS_LOG_SOURCE.reword,
+        POINTS_LOG_TYPE.credit,
+        session,
+      ),
     ])
 
     await session.commitTransaction()
@@ -890,7 +935,7 @@ const changeUserStatusFromDB = async (payload: {
     { status },
     { new: true },
   ).select(
-    '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline status createdAt',
+    '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline status createdAt role points fcmToken pushNotify',
   )
 
   if (!updatedUser) {
@@ -910,6 +955,11 @@ const changeUserStatusFromDB = async (payload: {
     const pointsToAdd = 300
     updatedUser.points = (updatedUser.points || 0) + pointsToAdd
     await updatedUser.save()
+    await createPointsLog(
+      updatedUser._id,
+      pointsToAdd,
+      'Expert account approval reward',
+    )
 
     // Send push notification to expert (if enabled)
     if (updatedUser.fcmToken && updatedUser.pushNotify?.points) {
@@ -1039,6 +1089,14 @@ const updateUserInfoFromDB = async (
         user.points = (user.points || 0) + 150
         finalPayload.points = user.points
         finalPayload.socialProofBonusClaimed = true
+        await createPointsLog(
+          user._id,
+          150,
+          'Social profile addition reward',
+          POINTS_LOG_SOURCE.reword,
+          POINTS_LOG_TYPE.credit,
+          session,
+        )
 
         if (user.fcmToken && user.pushNotify?.points) {
           await sendNotification([user.fcmToken], {
@@ -1106,6 +1164,14 @@ const updateUserInfoFromDB = async (
         user.points = (user.points || 0) + pointsToAdd
         finalPayload.points = user.points
         finalPayload.profileCompletionBonusClaimed = true
+        await createPointsLog(
+          user._id,
+          pointsToAdd,
+          `${isExpert ? 'Expert' : 'Consult'} profile completion reward`,
+          POINTS_LOG_SOURCE.reword,
+          POINTS_LOG_TYPE.credit,
+          session,
+        )
 
         if (user.fcmToken && user.pushNotify?.points) {
           await sendNotification([user.fcmToken], {
@@ -1244,6 +1310,80 @@ const updateVatInfoFromDB = async (userId: string, payload: {
   }
 }
 
+const adjustUserPointsFromDB = async (
+  userId: string,
+  payload: { type: TPointsLogType; points: number; reason: string },
+) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
+
+  let updatedUser: any
+  let committed = false
+
+  try {
+    const user = await User.findById(userId).session(session)
+    if (!user || user.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+    }
+
+    const currentPoints = user.points || 0
+    const newPoints =
+      payload.type === POINTS_LOG_TYPE.credit
+        ? currentPoints + payload.points
+        : currentPoints - payload.points
+
+    if (newPoints < 0) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Insufficient points balance for debit adjustment',
+      )
+    }
+
+    user.points = newPoints
+    updatedUser = await user.save({ session })
+
+    await createPointsLog(
+      user._id,
+      payload.points,
+      payload.reason,
+      POINTS_LOG_SOURCE.manual_adjustment,
+      payload.type,
+      session,
+    )
+
+    await session.commitTransaction()
+    committed = true
+  } catch (error) {
+    if (!committed) {
+      await session.abortTransaction()
+    }
+    throw error
+  } finally {
+    session.endSession()
+  }
+
+  if (updatedUser?.fcmToken && updatedUser.pushNotify?.points) {
+    const actionText =
+      payload.type === POINTS_LOG_TYPE.credit ? 'credited to' : 'debited from'
+
+    await sendNotification([updatedUser.fcmToken], {
+      receiver: updatedUser._id,
+      message: 'Points Balance Updated',
+      description: `${payload.points} points have been ${actionText} your Consultz account. Reason: ${payload.reason}`,
+      reference: updatedUser._id,
+      modelType: modeType.Achievement,
+    })
+  }
+
+  return {
+    _id: updatedUser._id,
+    firstName: updatedUser.firstName,
+    lastName: updatedUser.lastName,
+    email: updatedUser.email,
+    points: updatedUser.points,
+  }
+}
+
 export const UserService = {
   registerUserIntoDB,
   applyReferralCodeToUser,
@@ -1262,5 +1402,6 @@ export const UserService = {
   updateLocationFromDB,
   deleteAUserFromDB,
   updateVatInfoFromDB,
+  adjustUserPointsFromDB,
 }
 

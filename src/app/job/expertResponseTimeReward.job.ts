@@ -7,6 +7,8 @@ import { BOOKING_STATUS, PAYMENT_STATUS } from '../modules/booking/booking.const
 import { USER_ROLE, USER_STATUS } from '../modules/user/user.constant'
 import { sendNotification } from '../utils/sentNotification'
 import { modeType } from '../modules/notification/notification.interface'
+import { PointsLogsService } from '../modules/pointsLogs/pointsLogs.service'
+import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../modules/pointsLogs/pointsLogs.constant'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -67,6 +69,13 @@ export const expertResponseTimeRewardJob = async (): Promise<void> => {
     }
 
     await User.findByIdAndUpdate(expert._id, { $inc: { points: 50 } })
+    await PointsLogsService.createPointsLog({
+      user: expert._id,
+      type: POINTS_LOG_TYPE.credit,
+      points: 50,
+      reason: 'Fast response time weekly reward',
+      source: POINTS_LOG_SOURCE.reword,
+    })
 
     console.log(
       `[Response Time Reward] ✅ 50 points awarded to expert ${expert._id} (rate: ${fastResponseRate.toFixed(1)}%)`,

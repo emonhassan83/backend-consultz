@@ -16,17 +16,21 @@ const paymentSchema = new Schema<TPayment>(
     isExpertVatRegistered: { type: Boolean, default: false },
 
     // What consultee pays
+    grossBookingValue: { type: Number, min: 0, default: 0 },
     consultationFee: { type: Number, default: 0 },   // Expert's net fee
     consultantVat: { type: Number, default: 0 },     // VAT on expert's fee
     amount: { type: Number, min: 0, default: 0 },    // Total consultee pays
 
     // Platform breakdown
+    platformFeePercentage: { type: Number, default: 0 },
     platformCommission: { type: Number, default: 0 },
     platformVat: { type: Number, default: 0 },
     platformTotal: { type: Number, default: 0 },
+    platformTotalDeduction: { type: Number, default: 0 },
 
     // Expert payout breakdown
     consultAmount: { type: Number, default: 0 },
+    expertPayout: { type: Number, default: 0 },
     expertVatOwed: { type: Number, default: 0 },
     expertNet: { type: Number, default: 0 },
     status: {

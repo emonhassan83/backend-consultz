@@ -226,6 +226,20 @@ const useReferralCode = catchAsync(async (req, res) => {
   })
 })
 
+const adjustUserPoints = catchAsync(async (req, res) => {
+  const result = await UserService.adjustUserPointsFromDB(
+    req.params.userId as string,
+    req.body,
+  )
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'User points adjusted successfully!',
+    data: result,
+  })
+})
+
 const updateMyProfile = catchAsync(async (req, res) => {
   if (req.files) {
     const { image, cover } = req.files as UploadedFiles
@@ -298,6 +312,7 @@ export const UserControllers = {
   getMyProfile,
   changeUserStatus,
   useReferralCode,
+  adjustUserPoints,
   updateMyProfile,
   changeUserNotify,
   deleteMyProfile,

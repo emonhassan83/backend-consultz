@@ -1,12 +1,25 @@
-import { Payment } from '../payment/payment.model';
-import { PAYMENT_STATUS } from '../payment/payment.constant';
-import { startOfYear, endOfYear } from 'date-fns';
-import { USER_ROLE, USER_STATUS } from '../user/user.constant';
-import { User } from '../user/user.model';
+import { endOfYear, startOfYear } from 'date-fns'
+import { USER_ROLE, USER_STATUS } from '../user/user.constant'
+import { User } from '../user/user.model'
+import { PAYMENT_STATUS } from '../payment/payment.constant'
+import { Payment } from '../payment/payment.model'
 
-const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+const MONTHS = [
+  'jan',
+  'feb',
+  'mar',
+  'apr',
+  'may',
+  'jun',
+  'jul',
+  'aug',
+  'sep',
+  'oct',
+  'nov',
+  'dec',
+]
 
-export const getRevenueVsCommission = async (year: number) => {
+const getPaymentFinancialOverview = async (year: number) => {
   const yearStart = startOfYear(new Date(year, 0, 1))
   const yearEnd = endOfYear(new Date(year, 11, 31))
 
@@ -22,64 +35,98 @@ export const getRevenueVsCommission = async (year: number) => {
     {
       $group: {
         _id: { $month: '$createdAt' },
-        revenue: { $sum: '$amount' },
-        commission: { $sum: '$platformCommission' },
+        grossBookingValue: {
+          $sum: { $ifNull: ['$grossBookingValue', '$amount'] },
+        },
+        platformCommission: { $sum: '$platformCommission' },
+        platformVat: { $sum: '$platformVat' },
+        platformTotalDeduction: {
+          $sum: { $ifNull: ['$platformTotalDeduction', '$platformTotal'] },
+        },
+        expertPayout: {
+          $sum: { $ifNull: ['$expertPayout', '$consultAmount'] },
+        },
       },
     },
     { $sort: { _id: 1 } },
   ])
 
-  const totalCommission = monthlyDataRaw.reduce((sum, m) => sum + m.commission, 0)
-
-  // ✅ সব 12 মাস দেখাবে, short name দিয়ে
   const monthlyData = MONTHS.map((month, index) => {
     const data = monthlyDataRaw.find((m: any) => m._id === index + 1)
+    const grossBookingValue = data?.grossBookingValue || 0
+    const platformCommission = data?.platformCommission || 0
+
     return {
       month,
-      revenue: data ? data.revenue : 0,
-      commission: data ? data.commission : 0,
+      grossBookingValue,
+      revenue: grossBookingValue,
+      platformCommission,
+      commission: platformCommission,
+      platformVat: data?.platformVat || 0,
+      platformTotalDeduction: data?.platformTotalDeduction || 0,
+      expertPayout: data?.expertPayout || 0,
     }
   })
 
-  return { totalCommission, monthlyData }
+  return {
+    totalGrossBookingValue: monthlyDataRaw.reduce(
+      (sum, m) => sum + m.grossBookingValue,
+      0,
+    ),
+    totalEarnings: monthlyDataRaw.reduce(
+      (sum, m) => sum + m.grossBookingValue,
+      0,
+    ),
+    totalPlatformCommission: monthlyDataRaw.reduce(
+      (sum, m) => sum + m.platformCommission,
+      0,
+    ),
+    totalCommission: monthlyDataRaw.reduce(
+      (sum, m) => sum + m.platformCommission,
+      0,
+    ),
+    totalPlatformVat: monthlyDataRaw.reduce((sum, m) => sum + m.platformVat, 0),
+    totalPlatformTotalDeduction: monthlyDataRaw.reduce(
+      (sum, m) => sum + m.platformTotalDeduction,
+      0,
+    ),
+    totalExpertPayout: monthlyDataRaw.reduce(
+      (sum, m) => sum + m.expertPayout,
+      0,
+    ),
+    consultAmount: monthlyDataRaw.reduce((sum, m) => sum + m.expertPayout, 0),
+    monthlyData,
+  }
+}
+
+export const getRevenueVsCommission = async (year: number) => {
+  const overview = await getPaymentFinancialOverview(year)
+
+  return {
+    totalCommission: overview.totalCommission,
+    totalPlatformCommission: overview.totalPlatformCommission,
+    totalPlatformVat: overview.totalPlatformVat,
+    totalPlatformTotalDeduction: overview.totalPlatformTotalDeduction,
+    monthlyData: overview.monthlyData,
+  }
 }
 
 export const getEarningOverview = async (year: number) => {
-  const yearStart = startOfYear(new Date(year, 0, 1))
-  const yearEnd = endOfYear(new Date(year, 11, 31))
+  const overview = await getPaymentFinancialOverview(year)
 
-  const monthlyDataRaw = await Payment.aggregate([
-    {
-      $match: {
-        createdAt: { $gte: yearStart, $lte: yearEnd },
-        isPaid: true,
-        status: PAYMENT_STATUS.paid,
-        isDeleted: false,
-      },
-    },
-    {
-      $group: {
-        _id: { $month: '$createdAt' },
-        total: { $sum: '$amount' },
-        consultAmount: { $sum: '$consultAmount' },
-      },
-    },
-    { $sort: { _id: 1 } },
-  ])
-
-  const totalEarnings = monthlyDataRaw.reduce((sum, m) => sum + m.total, 0)
-  const consultAmount = monthlyDataRaw.reduce((sum, m) => sum + m.consultAmount, 0)
-
-  // ✅ সব 12 মাস দেখাবে, short name দিয়ে
-  const monthlyData = MONTHS.map((month, index) => {
-    const data = monthlyDataRaw.find((m: any) => m._id === index + 1)
-    return {
-      month,
-      total: data ? data.total : 0,
-    }
-  })
-
-  return { totalEarnings, consultAmount, monthlyData }
+  return {
+    totalEarnings: overview.totalEarnings,
+    grossBookingValue: overview.totalGrossBookingValue,
+    consultAmount: overview.consultAmount,
+    expertPayout: overview.totalExpertPayout,
+    platformCommission: overview.totalPlatformCommission,
+    platformVat: overview.totalPlatformVat,
+    platformTotalDeduction: overview.totalPlatformTotalDeduction,
+    monthlyData: overview.monthlyData.map((data) => ({
+      ...data,
+      total: data.grossBookingValue,
+    })),
+  }
 }
 
 export const getUserOverview = async (year: number, role?: string | null) => {
@@ -108,14 +155,11 @@ export const getUserOverview = async (year: number, role?: string | null) => {
     { $sort: { _id: 1 } },
   ])
 
-  // ✅ সব 12 মাস, short name
-  const userOverview = MONTHS.map((month, index) => {
+  return MONTHS.map((month, index) => {
     const data = monthlyUsers.find((m: any) => m._id === index + 1)
     return {
       month,
       count: data ? data.count : 0,
     }
   })
-
-  return userOverview
 }

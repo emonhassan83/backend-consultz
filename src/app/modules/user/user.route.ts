@@ -31,6 +31,13 @@ router.patch(
   UserControllers.useReferralCode,
 )
 
+router.post(
+  '/:userId/points-adjustment',
+  auth(USER_ROLE.admin),
+  zodValidationRequest(UserValidation.adjustPointsValidationSchema),
+  UserControllers.adjustUserPoints,
+)
+
 router.patch(
   '/change-status',
   auth(USER_ROLE.admin),

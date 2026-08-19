@@ -15,13 +15,15 @@ import {
   sendNewBookingToConsultant,
   sendPaymentSuccessToUser,
 } from '../../utils/emailNotify'
-import { Contents } from '../contents/contents.models'
 import { Chat } from '../chat/chat.models'
 import { getVatRateForCountry } from '../../utils/vatRate'
 import { CHAT_STATUS } from '../chat/chat.constants'
 import { TUser } from '../user/user.interface'
 import { sendNotification } from '../../utils/sentNotification'
 import { modeType } from '../notification/notification.interface'
+import { getGeneralSettingNumber } from '../contents/contents.utils'
+import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
+import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2026-06-24.dahlia',
@@ -71,13 +73,12 @@ const createPaymentIntent = async (payload: {
   )
 
   /* ========= 4. Calculate Amount with VAT Breakdown ========= */
-  const [platformFeeContent, consultant] = await Promise.all([
-    Contents.findOne({ key: 'platformFeePercentage' }).lean(),
+  const [platformFeePercentage, consultant] = await Promise.all([
+    getGeneralSettingNumber('platformFeePercentage', 20),
     User.findById(booking.consult).select('country isVatRegistered vatRegistrationNumber'),
   ])
 
   const PLATFORM_VAT_RATE = 0.2
-  const platformFeePercentage = platformFeeContent?.value || 0
 
   const isExpertVatRegistered = !!(
     consultant?.isVatRegistered && consultant?.vatRegistrationNumber
@@ -97,6 +98,7 @@ const createPaymentIntent = async (payload: {
     : 0
   
   const amount = parseFloat((consultationFee + expertVat).toFixed(2))
+  const grossBookingValue = amount
 
   // Platform breakdown
   const platformCommission = parseFloat(
@@ -104,9 +106,11 @@ const createPaymentIntent = async (payload: {
   )
   const platformVat = parseFloat((platformCommission * PLATFORM_VAT_RATE).toFixed(2))
   const platformTotal = parseFloat((platformCommission + platformVat).toFixed(2))
+  const platformTotalDeduction = platformTotal
 
   // Expert payout breakdown
   const consultAmount = parseFloat((amount - platformTotal).toFixed(2))
+  const expertPayout = consultAmount
   const expertVatOwed = parseFloat((expertVat - platformVat).toFixed(2))
   const expertNet = parseFloat((consultAmount - expertVatOwed).toFixed(2))
 
@@ -129,13 +133,17 @@ const createPaymentIntent = async (payload: {
     {
       account: userId,
       isExpertVatRegistered,
+      grossBookingValue,
       consultationFee,
       consultantVat: expertVat,
       amount,
+      platformFeePercentage,
       platformCommission,
       platformVat,
       platformTotal,
+      platformTotalDeduction,
       consultAmount,
+      expertPayout,
       expertVatOwed,
       expertNet,
       paymentIntentId: paymentIntent.id,
@@ -222,6 +230,16 @@ const confirmPayment = async (payload: {
         userId,
         { $inc: { points: 300 } },
         { session },
+      )
+      await PointsLogsService.createPointsLog(
+        {
+          user: new mongoose.Types.ObjectId(userId),
+          type: POINTS_LOG_TYPE.credit,
+          points: 300,
+          reason: 'First paid booking reward',
+          source: POINTS_LOG_SOURCE.reword,
+        },
+        session,
       )
     }
 
@@ -310,7 +328,11 @@ const confirmPayment = async (payload: {
 
 const getAllPaymentsFromDB = async (query: Record<string, any>) => {
   const paymentModel = new QueryBuilder(
-    Payment.find({ isDeleted: false, paymentStatus: PAYMENT_STATUS.paid }),
+    Payment.find({
+      isDeleted: false,
+      isPaid: true,
+      status: PAYMENT_STATUS.paid,
+    }),
     query,
   )
     .search([''])
@@ -319,8 +341,18 @@ const getAllPaymentsFromDB = async (query: Record<string, any>) => {
     .sort()
     .fields()
 
-  const data = await paymentModel.modelQuery
+  const payments = await paymentModel.modelQuery
   const meta = await paymentModel.countTotal()
+  const data = payments.map((payment: any) => {
+    const raw = payment.toObject ? payment.toObject() : payment
+    return {
+      ...raw,
+      grossBookingValue: raw.grossBookingValue ?? raw.amount ?? 0,
+      platformTotalDeduction:
+        raw.platformTotalDeduction ?? raw.platformTotal ?? 0,
+      expertPayout: raw.expertPayout ?? raw.consultAmount ?? 0,
+    }
+  })
 
   return {
     data,

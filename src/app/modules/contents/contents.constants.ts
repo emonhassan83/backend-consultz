@@ -8,6 +8,8 @@ export const GENERAL_KEYS = [
 ] as const;
 
 export const DEFAULT_GENERAL_CONTENTS: Partial<Record<(typeof GENERAL_KEYS)[number], unknown>> = {
+  paymentHoldDays: 7,
+  platformFeePercentage: 20,
   reschedulingTime: 60,
   cancellationTime: 60,
 }

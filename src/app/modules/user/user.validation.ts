@@ -280,6 +280,22 @@ const useReferralCodeValidationSchema = z.object({
   }),
 })
 
+const adjustPointsValidationSchema = z.object({
+  body: z.object({
+    type: z.enum(['credit', 'debit'], {
+      message: 'Points adjustment type must be credit or debit',
+    }),
+    points: z
+      .number({ message: 'Points amount is required!' })
+      .int({ message: 'Points amount must be a whole number' })
+      .positive({ message: 'Points amount must be greater than 0' }),
+    reason: z
+      .string({ message: 'Reason is required!' })
+      .trim()
+      .min(1, { message: 'Reason is required!' }),
+  }),
+})
+
 const updateVatInfoValidationSchema = z.object({
   body: z.object({
     country: z
@@ -302,6 +318,7 @@ export const UserValidation = {
   updateValidationSchema,
   changeStatusValidationSchema,
   useReferralCodeValidationSchema,
+  adjustPointsValidationSchema,
   updateNotifySettingsValidation,
   updateVatInfoValidationSchema,
 }

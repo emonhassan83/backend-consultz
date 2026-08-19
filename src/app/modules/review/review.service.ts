@@ -8,6 +8,8 @@ import { User } from '../user/user.model'
 import { Booking } from '../booking/booking.models'
 import { sendNotification } from '../../utils/sentNotification'
 import { modeType } from '../notification/notification.interface'
+import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
+import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
 
 const createReviews = async (
   payload: Omit<TReviews, 'user' | 'expert'>,
@@ -78,6 +80,16 @@ const createReviews = async (
       // Reward #1: Expert gets 200 points for each 5-star review
       if (payload.rating === 5) {
         expert.points = (expert.points || 0) + 200;
+        await PointsLogsService.createPointsLog(
+          {
+            user: expert._id,
+            type: POINTS_LOG_TYPE.credit,
+            points: 200,
+            reason: '5-star review reward',
+            source: POINTS_LOG_SOURCE.reword,
+          },
+          session,
+        );
 
         // Send push notification to expert (if enabled)
         if (expert.fcmToken && expert.pushNotify?.points) {
@@ -110,6 +122,16 @@ const createReviews = async (
 
       if (recentAvg >= 4.7 && recentCount >= 1) { // at least 1 review in 30 days
         expert.points = (expert.points || 0) + 500;
+        await PointsLogsService.createPointsLog(
+          {
+            user: expert._id,
+            type: POINTS_LOG_TYPE.credit,
+            points: 500,
+            reason: 'High rating streak reward',
+            source: POINTS_LOG_SOURCE.reword,
+          },
+          session,
+        );
 
         // Send bonus notification
         if (expert.fcmToken && expert.pushNotify?.points) {
@@ -142,6 +164,16 @@ const createReviews = async (
       reviewer._id,
       { $inc: { points: totalPointsAwarded } },
       { returnDocument: 'after', session }
+    );
+    await PointsLogsService.createPointsLog(
+      {
+        user: reviewer._id,
+        type: POINTS_LOG_TYPE.credit,
+        points: totalPointsAwarded,
+        reason: 'Verified review submission reward',
+        source: POINTS_LOG_SOURCE.reword,
+      },
+      session,
     );
 
     // 8. Send push notification to reviewer (if enabled)

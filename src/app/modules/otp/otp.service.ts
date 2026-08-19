@@ -13,6 +13,8 @@ import { USER_ROLE, USER_STATUS } from '../user/user.constant'
 import { sendExpertPendingEmail } from '../user/user.utils'
 import { sendNotification } from '../../utils/sentNotification'
 import { modeType } from '../notification/notification.interface'
+import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
+import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
 
 const verifyWithEmail = async (token: string, otp: string | number) => {
   if (!token) {
@@ -140,6 +142,16 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
     },
     { returnDocument: 'after' },
   )
+
+  if (pointsToAdd > 0) {
+    await PointsLogsService.createPointsLog({
+      user: user._id,
+      type: POINTS_LOG_TYPE.credit,
+      points: pointsToAdd,
+      reason: 'Phone number verification reward',
+      source: POINTS_LOG_SOURCE.reword,
+    })
+  }
 
   // Push notification for points
   if (pointsToAdd > 0 && user.fcmToken && user.pushNotify?.points) {

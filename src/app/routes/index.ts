@@ -25,6 +25,7 @@ import { WithdrawRoutes } from '../modules/withdraw/withdraw.route'
 import { CallingRoutes } from '../modules/calling/calling.route'
 import { MetaRoutes } from '../modules/meta/meta.route'
 import { SupportRoutes } from '../modules/support/support.route'
+import { PointsLogsRoutes } from '../modules/pointsLogs/pointsLogs.route'
 
 const router = Router()
 
@@ -124,6 +125,10 @@ const moduleRoutes = [
   {
     path: '/supports',
     route: SupportRoutes,
+  },
+  {
+    path: '/points-logs',
+    route: PointsLogsRoutes,
   },
   {
     path: '/categories',
