@@ -73,7 +73,6 @@ const getAllMyFeed = catchAsync(async (req, res) => {
   const query = {
     ...req.query,
     author: req.user._id,
-    status: FEED_STATUS.active,
   }
   
   const result = await FeedService.getAllFeedsFromDB(
@@ -138,6 +137,21 @@ const changeFeedStatus = catchAsync(async (req, res) => {
   })
 })
 
+const moderateFeed = catchAsync(async (req, res) => {
+  const result = await FeedService.moderateFeedFromDB(
+    req.params.id as string,
+    req.user._id,
+    req.body,
+  )
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Feed moderation action completed successfully!',
+    data: result,
+  })
+})
+
 const deleteAFeed = catchAsync(async (req, res) => {
   const result = await FeedService.deleteAFeedFromDB(req.params.id as string)
 
@@ -158,5 +172,6 @@ export const FeedControllers = {
   getAFeed,
   updateFeed,
   changeFeedStatus,
+  moderateFeed,
   deleteAFeed,
 }

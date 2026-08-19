@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { FEED_MODERATION_ACTION } from './feed.constant'
 
 const createValidationSchema = z.object({
   body: z.object({
@@ -20,8 +21,24 @@ const changeStatusValidationSchema = z.object({
   }),
 })
 
+const moderationActionValidationSchema = z.object({
+  body: z.object({
+    action: z.enum(
+      Object.values(FEED_MODERATION_ACTION) as [string, ...string[]],
+      {
+        message: 'Invalid moderation action',
+      },
+    ),
+    reason: z
+      .string({ message: 'Reason is required' })
+      .trim()
+      .min(1, { message: 'Reason is required' }),
+  }),
+})
+
 export const FeedValidation = {
   createValidationSchema,
   updateValidationSchema,
-  changeStatusValidationSchema
+  changeStatusValidationSchema,
+  moderationActionValidationSchema,
 }

@@ -8,6 +8,9 @@ import { Feed } from '../feed/feed.model'
 import { Report } from './report.models'
 import { FEED_STATUS } from '../feed/feed.constant'
 import mongoose from 'mongoose'
+import { sendContentModerationNotification } from '../feed/feed.utils'
+import { TUser } from '../user/user.interface'
+import { Appeal } from '../appeal/appeal.model'
 
 const createReport = async (payload: IReport, userId: string) => {
   const { feed: feedId } = payload
@@ -18,7 +21,10 @@ const createReport = async (payload: IReport, userId: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Author not found!')
   }
 
-  const feed = await Feed.findById(feedId)
+  const feed = await Feed.findById(feedId).populate(
+    'author',
+    'firstName lastName email fcmToken pushNotify emailNotify',
+  )
   if (!feed || feed.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, `Feed not found!`)
   }
@@ -44,6 +50,14 @@ const createReport = async (payload: IReport, userId: string) => {
   if (!report) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Report creation failed!')
   }
+
+  const feedAuthor = feed.author as unknown as TUser
+  await sendContentModerationNotification(
+    'reported',
+    feedAuthor,
+    feed,
+    payload.reason,
+  )
 
   return report
 }
@@ -74,7 +88,7 @@ const getAllReport = async (query: Record<string, any>) => {
 }
 
 const getReportById = async (id: string) => {
-  const result = await Report.findById(id).populate([
+  const result: any = await Report.findById(id).populate([
     { path: 'author', select: 'firstName lastName photoUrl expertise' },
     {
       path: 'feed',
@@ -88,7 +102,15 @@ const getReportById = async (id: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Report history not found!')
   }
 
-  return result
+  const appeals = await Appeal.find({ feed: result.feed?._id || result.feed })
+    .populate('user', 'firstName lastName email photoUrl')
+    .sort({ createdAt: -1 })
+    .lean()
+
+  return {
+    ...result.toObject(),
+    appeals,
+  }
 }
 
 const updateReport = async (id: string, payload: Partial<IReport>) => {
@@ -141,7 +163,7 @@ const changeStatusReport = async (
     const feed = await Feed.findOne({
       _id: (report.feed).toString(),
       isDeleted: false,
-    })
+    }).populate('author', 'firstName lastName email fcmToken pushNotify emailNotify')
 
     if (!feed) {
       throw new AppError(httpStatus.NOT_FOUND, 'Reported feed not found')
@@ -152,6 +174,13 @@ const changeStatusReport = async (
       feed.status = FEED_STATUS.restrict
       await feed.save()
     }
+
+    await sendContentModerationNotification(
+      'restricted',
+      feed.author as unknown as TUser,
+      feed,
+      'Report approved by admin',
+    )
   }
 
   return report

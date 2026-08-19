@@ -16,6 +16,13 @@ export const messages = {
   feed: {
     active: 'Your post is now live!',
     restricted: 'Your post has been restricted.',
+    reported: 'Your post has been reported.',
+    reinstated: 'Your post has been reinstated.',
+    removed: 'Your post has been removed.',
+    warning: 'Content warning issued.',
+    suspended: 'Your account has been suspended.',
+    appealApproved: 'Your appeal has been approved.',
+    appealRejected: 'Your appeal has been rejected.',
   },
   comment: {
     add: 'Comment posted in the feed',

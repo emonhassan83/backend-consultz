@@ -1,4 +1,5 @@
 import httpStatus from 'http-status'
+import { Types } from 'mongoose'
 import AppError from '../../errors/AppError'
 import QueryBuilder from '../../builder/QueryBuilder'
 import { TFeed } from './feed.interface'
@@ -9,14 +10,21 @@ import { uploadToS3 } from '../../utils/s3'
 import {
   enrichFeedWithUserInfo,
   generateFeedFilePath,
+  getAppealSubmittedStatusBatch,
   getReportedStatusBatch,
   getReportsForFeed,
   notifyFollowersOnNewPost,
+  sendContentModerationNotification,
   sendFeedNotificationToUser,
 } from './feed.utils'
-import { FEED_STATUS, TFeedStatus } from './feed.constant'
+import {
+  FEED_MODERATION_ACTION,
+  FEED_STATUS,
+  TFeedModerationAction,
+  TFeedStatus,
+} from './feed.constant'
 import { TUser } from '../user/user.interface'
-import { USER_ROLE } from '../user/user.constant'
+import { USER_ROLE, USER_STATUS } from '../user/user.constant'
 import { BlockProfile } from '../blockProfile/blockProfile.models'
 
 const createFeedIntoDB = async (
@@ -193,6 +201,9 @@ const getAllFeedsFromDB = async (
   const reportedMap = feedIds.length > 0
     ? await getReportedStatusBatch(feedIds)
     : new Map();
+  const appealSubmittedMap = feedIds.length > 0
+    ? await getAppealSubmittedStatusBatch(feedIds, currentUserId)
+    : new Map();
 
   // ── Enrich feeds ──────────────────────────────────────────────────────────
   const enrichedFeedList = await Promise.all(
@@ -201,6 +212,8 @@ const getAllFeedsFromDB = async (
       return {
         ...enriched,
         isReported: reportedMap.get(feed._id.toString()) || false,
+        hasAppealsSubmmit:
+          appealSubmittedMap.get(feed._id.toString()) || false,
       };
     }),
   );
@@ -298,7 +311,7 @@ const changeFeedStatus = async (
     { _id: id, isDeleted: false },
     { $set: { status } },
     { returnDocument: 'after', runValidators: true },
-  )
+  ).populate('author', 'firstName lastName email fcmToken pushNotify emailNotify status')
 
   if (!updatedFeed) {
     throw new AppError(httpStatus.NOT_FOUND, 'Feed post not found or deleted')
@@ -316,6 +329,93 @@ const changeFeedStatus = async (
   }
 
   return updatedFeed
+}
+
+const moderateFeedFromDB = async (
+  id: string,
+  adminId: string,
+  payload: { action: TFeedModerationAction; reason: string },
+) => {
+  const feed = await Feed.findOne({ _id: id, isDeleted: false }).populate(
+    'author',
+    'firstName lastName email fcmToken pushNotify emailNotify status',
+  )
+
+  if (!feed) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Feed post not found or deleted')
+  }
+
+  const author = feed.author as unknown as TUser
+
+  switch (payload.action) {
+    case FEED_MODERATION_ACTION.restrict:
+      feed.status = FEED_STATUS.restrict
+      await sendContentModerationNotification(
+        'restricted',
+        author,
+        feed,
+        payload.reason,
+      )
+      break
+
+    case FEED_MODERATION_ACTION.activate:
+      feed.status = FEED_STATUS.active
+      await sendContentModerationNotification(
+        'reinstated',
+        author,
+        feed,
+        payload.reason,
+      )
+      break
+
+    case FEED_MODERATION_ACTION.remove:
+      feed.isDeleted = true
+      await sendContentModerationNotification(
+        'removed',
+        author,
+        feed,
+        payload.reason,
+      )
+      break
+
+    case FEED_MODERATION_ACTION.warn_user:
+      await sendContentModerationNotification(
+        'warning',
+        author,
+        feed,
+        payload.reason,
+      )
+      break
+
+    case FEED_MODERATION_ACTION.suspend_user:
+      await User.findByIdAndUpdate(author._id, {
+        status: USER_STATUS.blocked,
+      })
+      await sendContentModerationNotification(
+        'suspended',
+        author,
+        feed,
+        payload.reason,
+      )
+      break
+
+    default:
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid moderation action')
+  }
+
+  feed.moderationActions = [
+    ...(feed.moderationActions || []),
+    {
+      action: payload.action,
+      reason: payload.reason,
+      admin: new Types.ObjectId(adminId),
+      createdAt: new Date(),
+    },
+  ] as any
+
+  await feed.save()
+
+  return feed
 }
 
 const deleteAFeedFromDB = async (id: string) => {
@@ -345,5 +445,6 @@ export const FeedService = {
   getAFeedFromDB,
   updateFeedFromDB,
   changeFeedStatus,
+  moderateFeedFromDB,
   deleteAFeedFromDB,
 }

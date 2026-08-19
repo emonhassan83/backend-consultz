@@ -29,6 +29,17 @@ const feedSchema = new Schema<TFeed>(
       enum: Object.values(FEED_STATUS),
       default: FEED_STATUS.active,
     },
+    moderationActions: {
+      type: [
+        {
+          action: { type: String, required: true },
+          reason: { type: String, required: true },
+          admin: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
     isDeleted: { type: Boolean, default: false },
   },
   {

@@ -26,6 +26,7 @@ import { CallingRoutes } from '../modules/calling/calling.route'
 import { MetaRoutes } from '../modules/meta/meta.route'
 import { SupportRoutes } from '../modules/support/support.route'
 import { PointsLogsRoutes } from '../modules/pointsLogs/pointsLogs.route'
+import { AppealRoutes } from '../modules/appeal/appeal.route'
 
 const router = Router()
 
@@ -57,6 +58,10 @@ const moduleRoutes = [
   {
     path: '/reports',
     route: ReportRoutes,
+  },
+  {
+    path: '/appeals',
+    route: AppealRoutes,
   },
   {
     path: '/content-meta',

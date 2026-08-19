@@ -11,6 +11,10 @@ import { Feed } from './feed.model';
 import { getMessaging } from 'firebase-admin/messaging'
 import { Notification } from '../notification/notification.model';
 import { Report } from '../report/report.models';
+import emailSender from '../../utils/emailSender';
+import { REPORT_STATUS } from '../report/report.constant';
+import { Appeal } from '../appeal/appeal.model';
+import { APPEAL_STATUS } from '../appeal/appeal.constant';
 
 /**
  * Batch check if any report exists for multiple feeds
@@ -24,7 +28,10 @@ export const getReportedStatusBatch = async (
 
   const normalizedIds = feedIds.map(id => new Types.ObjectId(id.toString()));
 
-  const query: any = { feed: { $in: normalizedIds } };
+  const query: any = {
+    feed: { $in: normalizedIds },
+    status: { $ne: REPORT_STATUS.denied },
+  };
 
   // যদি শুধু current user এর report চাও (optional)
   if (currentUserId) {
@@ -32,14 +39,59 @@ export const getReportedStatusBatch = async (
   }
 
   const reports = await Report.find(query)
-    .select('feed')
+    .select('_id feed status')
     .lean();
 
-  const reportedSet = new Set(reports.map(r => r.feed.toString()));
+  const approvedAppeals = normalizedIds.length
+    ? await Appeal.find({
+        feed: { $in: normalizedIds },
+        status: APPEAL_STATUS.approved,
+      })
+        .select('feed')
+        .lean()
+    : [];
+
+  const approvedAppealFeedSet = new Set(
+    approvedAppeals.map((appeal) => appeal.feed.toString()),
+  );
+
+  const reportedSet = new Set(
+    reports
+      .filter((report) => !approvedAppealFeedSet.has(report.feed.toString()))
+      .map((report) => report.feed.toString()),
+  );
 
   const result = new Map<string, boolean>();
   normalizedIds.forEach(id => {
     result.set(id.toString(), reportedSet.has(id.toString()));
+  });
+
+  return result;
+};
+
+export const getAppealSubmittedStatusBatch = async (
+  feedIds: string[] | Types.ObjectId[],
+  userId: string,
+): Promise<Map<string, boolean>> => {
+  if (feedIds.length === 0) return new Map();
+
+  const normalizedIds = feedIds.map((id) => new Types.ObjectId(id.toString()));
+
+  const appeals = await Appeal.find({
+    feed: { $in: normalizedIds },
+    user: new Types.ObjectId(userId),
+    status: { $in: [APPEAL_STATUS.pending, APPEAL_STATUS.approved] },
+  })
+    .select('feed')
+    .lean();
+
+  const appealedFeedSet = new Set(
+    appeals.map((appeal) => appeal.feed.toString()),
+  );
+
+  const result = new Map<string, boolean>();
+  normalizedIds.forEach((id) => {
+    result.set(id.toString(), appealedFeedSet.has(id.toString()));
   });
 
   return result;
@@ -207,6 +259,107 @@ export const sendFeedNotificationToUser = async (
 
   await sendNotification([user.fcmToken], notifyPayload);
 };
+
+export type TModerationEvent =
+  | 'reported'
+  | 'restricted'
+  | 'reinstated'
+  | 'removed'
+  | 'warning'
+  | 'suspended'
+  | 'appealApproved'
+  | 'appealRejected'
+
+const moderationCopy: Record<
+  TModerationEvent,
+  { subject: string; message: string; description: (reason?: string) => string }
+> = {
+  reported: {
+    subject: 'Your post has been reported',
+    message: messages.feed.reported,
+    description: (reason) =>
+      `Your post has been reported and is now waiting for admin review. Reason: ${reason || 'Not provided'}. Your post remains live unless an admin restricts it.`,
+  },
+  restricted: {
+    subject: 'Your post has been restricted',
+    message: messages.feed.restricted,
+    description: (reason) =>
+      `Your post has been restricted after review. Reason: ${reason || 'Not provided'}. You can submit an appeal from your restricted post.`,
+  },
+  reinstated: {
+    subject: 'Your post has been reinstated',
+    message: messages.feed.reinstated,
+    description: (reason) =>
+      `Your post has been reinstated and is visible again. Reason: ${reason || 'Admin review completed'}.`,
+  },
+  removed: {
+    subject: 'Your post has been removed',
+    message: messages.feed.removed,
+    description: (reason) =>
+      `Your post has been removed. Reason: ${reason || 'Not provided'}.`,
+  },
+  warning: {
+    subject: 'Content warning issued',
+    message: messages.feed.warning,
+    description: (reason) =>
+      `A warning has been issued for your post. Reason: ${reason || 'Not provided'}.`,
+  },
+  suspended: {
+    subject: 'Your account has been suspended',
+    message: messages.feed.suspended,
+    description: (reason) =>
+      `Your account has been suspended following content moderation review. Reason: ${reason || 'Not provided'}.`,
+  },
+  appealApproved: {
+    subject: 'Your appeal has been approved',
+    message: messages.feed.appealApproved,
+    description: (reason) =>
+      `Your appeal has been approved. Your post has been reinstated. Reason: ${reason || 'Admin review completed'}.`,
+  },
+  appealRejected: {
+    subject: 'Your appeal has been rejected',
+    message: messages.feed.appealRejected,
+    description: (reason) =>
+      `Your appeal has been rejected. Your post remains restricted. Reason: ${reason || 'Admin review completed'}.`,
+  },
+}
+
+export const sendContentModerationNotification = async (
+  event: TModerationEvent,
+  user: TUser,
+  feed: TFeed,
+  reason?: string,
+) => {
+  const copy = moderationCopy[event]
+  const description = copy.description(reason)
+
+  if (user?.fcmToken && canSendPushNotification(user, 'post')) {
+    await sendNotification([user.fcmToken], {
+      receiver: user._id,
+      message: copy.message,
+      description,
+      reference: feed._id,
+      modelType: modeType.Feed,
+    })
+  }
+
+  if (user?.email) {
+    await emailSender(
+      user.email,
+      copy.subject,
+      `
+        <div style="font-family: Arial, sans-serif; color: #222; line-height: 1.6;">
+          <h2>${copy.subject}</h2>
+          <p>${description}</p>
+          <p><strong>Appeal route:</strong> If your post is restricted, open the restricted post in the app and submit an appeal with your reason and optional evidence file URL.</p>
+          <p>Best regards,<br/>Consultz Team</p>
+        </div>
+      `,
+    ).catch((err) =>
+      console.error(`Moderation email failed (user ${user._id}):`, err),
+    )
+  }
+}
 
 // file upload utils
 export const getFileExtension = (file: Express.Multer.File) => {

@@ -1,5 +1,5 @@
 import { Model, Types } from 'mongoose'
-import { TFeedStatus } from './feed.constant'
+import { TFeedModerationAction, TFeedStatus } from './feed.constant'
 
 export type TFeed = {
   _id?: string
@@ -8,6 +8,12 @@ export type TFeed = {
   description: string
   contentMeta: Types.ObjectId | string
   status: TFeedStatus
+  moderationActions?: {
+    action: TFeedModerationAction
+    reason: string
+    admin: Types.ObjectId
+    createdAt: Date
+  }[]
   isDeleted?: boolean
 }
 

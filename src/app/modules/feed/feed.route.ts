@@ -36,6 +36,13 @@ router.patch(
   FeedControllers.changeFeedStatus,
 )
 
+router.patch(
+  '/:id/moderation',
+  auth(USER_ROLE.admin),
+  zodValidationRequest(FeedValidation.moderationActionValidationSchema),
+  FeedControllers.moderateFeed,
+)
+
 router.delete('/:id', auth(USER_ROLE.expert), FeedControllers.deleteAFeed)
 
 router.get(
