@@ -1,5 +1,8 @@
 import { Types } from 'mongoose'
-import { TPaymentStatus } from './payment.constant'
+import {
+  TPaymentSettlementStatus,
+  TPaymentStatus,
+} from './payment.constant'
 
 export type TPayment = {
   _id: string
@@ -30,6 +33,11 @@ export type TPayment = {
   expertNet: number             // Expert's net earnings after HMRC (consultAmount - expertVatOwed)
 
   status: TPaymentStatus
+  settlementStatus: TPaymentSettlementStatus
+  holdUntil?: Date
+  holdDaysSnapshot?: number
+  clearedAt?: Date
+  withdrawnAt?: Date
   isPaid: boolean
   isDeleted: boolean
   createdAt?: Date

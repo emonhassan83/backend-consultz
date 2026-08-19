@@ -16,6 +16,7 @@ import {
 } from './booking.utils'
 import QueryBuilder from '../../builder/QueryBuilder'
 import { Payment } from '../payment/payment.model'
+import { PAYMENT_SETTLEMENT_STATUS } from '../payment/payment.constant'
 import { Contents } from '../contents/contents.models'
 import Stripe from 'stripe'
 import config from '../../config'
@@ -40,6 +41,7 @@ import {
 } from './bookingRules.utils'
 import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
 import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
+import { getGeneralSettingNumber } from '../contents/contents.utils'
 
 const getEntityId = (entity: any): string =>
   (entity?._id || entity)?.toString()
@@ -82,6 +84,22 @@ const ACTIVE_BOOKING_STATUSES = [
   BOOKING_STATUS.running,
   BOOKING_STATUS.completed,
 ]
+
+const getSessionCompletionBaseTime = (booking: any) => {
+  if (booking.sessionStartedAt && booking.sessionDuration) {
+    return dayjs(booking.sessionStartedAt)
+      .add(booking.sessionDuration, 'minute')
+      .toDate()
+  }
+
+  return (
+    booking.endAt ||
+    booking.bufferEndAt ||
+    booking.startAt ||
+    booking.updatedAt ||
+    new Date()
+  )
+}
 
 const isIntervalOverlapping = (
   startA: Date,
@@ -1234,15 +1252,45 @@ const completedBooking = async (
       )
     }
 
+    const holdDays = await getGeneralSettingNumber('paymentHoldDays', 7)
+    const sessionCompletedAt = getSessionCompletionBaseTime(updatedBooking)
+    const holdUntil = dayjs(sessionCompletedAt).add(holdDays, 'day').toDate()
+
+    const paymentRecord = await Payment.findOneAndUpdate(
+      {
+        booking: bookingId,
+        isPaid: true,
+        isDeleted: false,
+      },
+      {
+        settlementStatus: PAYMENT_SETTLEMENT_STATUS.held,
+        holdUntil,
+        holdDaysSnapshot: holdDays,
+        clearedAt: null,
+        withdrawnAt: null,
+      },
+      { returnDocument: 'after', session },
+    )
+
+    if (!paymentRecord) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Paid payment record not found for this booking.',
+      )
+    }
+
     // âœ… Fetch consultAmount from Payment model
-    const paymentRecord = await Payment.findOne({
+    const paymentRecordForAmount = await Payment.findOne({
       booking: bookingId,
       isDeleted: false,
     })
       .session(session)
       .lean()
 
-    const consultAmount = paymentRecord?.consultAmount ?? updatedBooking.price
+    const consultAmount =
+      paymentRecordForAmount?.expertPayout ??
+      paymentRecordForAmount?.consultAmount ??
+      updatedBooking.price
 
     // Award 100 points to the USER
     const booker = await User.findById(updatedBooking.user).session(session)
@@ -1330,10 +1378,6 @@ const completedBooking = async (
       }
 
       if (consultant.emailNotify?.booking) {
-        const paymentHoldDaysContent = await Contents.findOne({ key: 'paymentHoldDays' })
-          .session(session)
-          .lean()
-        const holdDays = paymentHoldDaysContent?.value || 7
         // âœ… consultAmount pass à¦•à¦°à§à¦¨
         await sendSessionCompletedToConsultant(
           consultant,

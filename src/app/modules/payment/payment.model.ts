@@ -1,7 +1,7 @@
 import { model, Schema } from 'mongoose'
 import { TPayment } from './payment.interface'
 import { generateCryptoString } from '../../utils/generateCryptoString'
-import { PAYMENT_STATUS } from './payment.constant'
+import { PAYMENT_SETTLEMENT_STATUS, PAYMENT_STATUS } from './payment.constant'
 
 const paymentSchema = new Schema<TPayment>(
   {
@@ -38,6 +38,15 @@ const paymentSchema = new Schema<TPayment>(
       enum: Object.values(PAYMENT_STATUS),
       default: PAYMENT_STATUS.unpaid,
     },
+    settlementStatus: {
+      type: String,
+      enum: Object.values(PAYMENT_SETTLEMENT_STATUS),
+      default: PAYMENT_SETTLEMENT_STATUS.pending_session,
+    },
+    holdUntil: { type: Date, default: null },
+    holdDaysSnapshot: { type: Number, default: null },
+    clearedAt: { type: Date, default: null },
+    withdrawnAt: { type: Date, default: null },
     paymentIntentId: {
       type: String,
       default: null,

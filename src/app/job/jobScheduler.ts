@@ -1,17 +1,16 @@
 import cron from 'node-cron'
-import { dailyWithdrawTransferJob } from './dailyWithdrawTransfer.job'
+import { autoMarkNotRespondedJob } from './autoMarkNotResponded.job'
 import { dailyReviewReminderJob } from './dailyReviewReminder.job'
+import { dailyWithdrawTransferJob } from './dailyWithdrawTransfer.job'
 import { expertReliabilityRewardJob } from './expertReliabilityReward.job'
 import { expertResponseTimeRewardJob } from './expertResponseTimeReward.job'
-import { timeSensitiveNotificationsJob } from './timeSensitiveNotifications.job'
-import { autoMarkNotRespondedJob } from './autoMarkNotResponded.job'
-import { sessionCompleteCheckJob } from './sessionCompleteCheck.job'
+import { paymentSettlementClearJob } from './paymentSettlementClear.job'
 import { pendingBookingReminderJob } from './pendingBookingReminder.job'
+import { sessionCompleteCheckJob } from './sessionCompleteCheck.job'
+import { timeSensitiveNotificationsJob } from './timeSensitiveNotifications.job'
 
-// All cron schedules run in UTC — booking-level timezones are handled inside each job
 const CRON_TIMEZONE = 'UTC'
 
-// Running-flag guards prevent overlapping executions if a job runs longer than its interval
 let withdrawJobRunning = false
 let reviewReminderJobRunning = false
 let reliabilityRewardJobRunning = false
@@ -20,156 +19,124 @@ let timeSensitiveJobRunning = false
 let notRespondedJobRunning = false
 let sessionCompleteJobRunning = false
 let pendingBookingReminderJobRunning = false
+let paymentSettlementClearJobRunning = false
+
+const scheduleGuardedJob = (
+  schedule: string,
+  isRunningGetter: () => boolean,
+  setRunning: (value: boolean) => void,
+  job: () => Promise<void>,
+  errorLabel: string,
+) => {
+  cron.schedule(
+    schedule,
+    async () => {
+      if (isRunningGetter()) return
+      setRunning(true)
+      try {
+        await job()
+      } catch (err) {
+        console.error(`${errorLabel}:`, err)
+      } finally {
+        setRunning(false)
+      }
+    },
+    { timezone: CRON_TIMEZONE },
+  )
+}
 
 export const initializeCronJobs = () => {
-  console.log('🕒 Starting background jobs...')
+  console.log('Starting background jobs...')
 
-  // 1. Daily withdraw transfer — runs at midnight UTC
-  // Processes all pending/hold withdrawals and transfers via Stripe
-  cron.schedule(
+  scheduleGuardedJob(
     '0 0 * * *',
-    async () => {
-      if (withdrawJobRunning) return
-      withdrawJobRunning = true
-      try {
-        await dailyWithdrawTransferJob()
-      } catch (err) {
-        console.error('❌ Withdraw transfer job error:', err)
-      } finally {
-        withdrawJobRunning = false
-      }
+    () => withdrawJobRunning,
+    (value) => {
+      withdrawJobRunning = value
     },
-    { timezone: CRON_TIMEZONE },
+    dailyWithdrawTransferJob,
+    'Withdraw transfer job error',
   )
 
-  // 2. Daily review reminder — runs at midnight UTC
-  // Reminds users to leave a review for sessions completed 24–48 hours ago
-  cron.schedule(
+  scheduleGuardedJob(
     '0 0 * * *',
-    async () => {
-      if (reviewReminderJobRunning) return
-      reviewReminderJobRunning = true
-      try {
-        await dailyReviewReminderJob()
-      } catch (err) {
-        console.error('❌ Review reminder job error:', err)
-      } finally {
-        reviewReminderJobRunning = false
-      }
+    () => reviewReminderJobRunning,
+    (value) => {
+      reviewReminderJobRunning = value
     },
-    { timezone: CRON_TIMEZONE },
+    dailyReviewReminderJob,
+    'Review reminder job error',
   )
 
-  // 3. Expert reliability reward — runs at midnight UTC
-  // Awards 300 points to experts with zero no-shows in the last 30 days
-  cron.schedule(
+  scheduleGuardedJob(
     '0 0 * * *',
-    async () => {
-      if (reliabilityRewardJobRunning) return
-      reliabilityRewardJobRunning = true
-      try {
-        await expertReliabilityRewardJob()
-      } catch (err) {
-        console.error('❌ Reliability reward job error:', err)
-      } finally {
-        reliabilityRewardJobRunning = false
-      }
+    () => reliabilityRewardJobRunning,
+    (value) => {
+      reliabilityRewardJobRunning = value
     },
-    { timezone: CRON_TIMEZONE },
+    expertReliabilityRewardJob,
+    'Reliability reward job error',
   )
 
-  // 4. Expert response time reward — runs every Sunday at midnight UTC
-  // Awards 50 points to experts with 80%+ fast responses this week
-  cron.schedule(
+  scheduleGuardedJob(
     '0 0 * * 0',
-    async () => {
-      if (responseTimeRewardJobRunning) return
-      responseTimeRewardJobRunning = true
-      try {
-        await expertResponseTimeRewardJob()
-      } catch (err) {
-        console.error('❌ Response time reward job error:', err)
-      } finally {
-        responseTimeRewardJobRunning = false
-      }
+    () => responseTimeRewardJobRunning,
+    (value) => {
+      responseTimeRewardJobRunning = value
     },
-    { timezone: CRON_TIMEZONE },
+    expertResponseTimeRewardJob,
+    'Response time reward job error',
   )
 
-  // 5. Time-sensitive notifications — runs every minute
-  // Sends 10-min reminders and join-call notifications per booking timezone
-  cron.schedule(
+  scheduleGuardedJob(
     '* * * * *',
-    async () => {
-      if (timeSensitiveJobRunning) return
-      timeSensitiveJobRunning = true
-      try {
-        await timeSensitiveNotificationsJob()
-      } catch (err) {
-        console.error('❌ Time-sensitive notifications job error:', err)
-      } finally {
-        timeSensitiveJobRunning = false
-      }
+    () => timeSensitiveJobRunning,
+    (value) => {
+      timeSensitiveJobRunning = value
     },
-    { timezone: CRON_TIMEZONE },
+    timeSensitiveNotificationsJob,
+    'Time-sensitive notifications job error',
   )
 
-  // 6. Auto-mark not responded — runs every minute
-  // Expires pending bookings after a 5-minute grace period and marks missed
-  // confirmed sessions after their scheduled duration.
-  // Also frees the slot and issues a Stripe refund
-  cron.schedule(
+  scheduleGuardedJob(
     '* * * * *',
-    async () => {
-      if (notRespondedJobRunning) return
-      notRespondedJobRunning = true
-      try {
-        await autoMarkNotRespondedJob()
-      } catch (err) {
-        console.error('❌ Auto-mark not responded job error:', err)
-      } finally {
-        notRespondedJobRunning = false
-      }
+    () => notRespondedJobRunning,
+    (value) => {
+      notRespondedJobRunning = value
     },
-    { timezone: CRON_TIMEZONE },
+    autoMarkNotRespondedJob,
+    'Auto-mark not responded job error',
   )
 
-  // 7. Session complete check — runs every minute
-  // Auto-completes running bookings whose sessionDuration has elapsed
-  // and creates a withdraw request for the expert (fallback for missed socket events)
-  cron.schedule(
+  scheduleGuardedJob(
     '* * * * *',
-    async () => {
-      if (sessionCompleteJobRunning) return
-      sessionCompleteJobRunning = true
-      try {
-        await sessionCompleteCheckJob()
-      } catch (err) {
-        console.error('❌ Session complete check job error:', err)
-      } finally {
-        sessionCompleteJobRunning = false
-      }
+    () => sessionCompleteJobRunning,
+    (value) => {
+      sessionCompleteJobRunning = value
     },
-    { timezone: CRON_TIMEZONE },
+    sessionCompleteCheckJob,
+    'Session complete check job error',
   )
 
-  // 8. Pending booking reminder — checks every minute
-  // Each pending booking is reminded at most once every 10 minutes.
-  cron.schedule(
+  scheduleGuardedJob(
     '* * * * *',
-    async () => {
-      if (pendingBookingReminderJobRunning) return
-      pendingBookingReminderJobRunning = true
-      try {
-        await pendingBookingReminderJob()
-      } catch (err) {
-        console.error('❌ Pending booking reminder job error:', err)
-      } finally {
-        pendingBookingReminderJobRunning = false
-      }
+    () => pendingBookingReminderJobRunning,
+    (value) => {
+      pendingBookingReminderJobRunning = value
     },
-    { timezone: CRON_TIMEZONE },
+    pendingBookingReminderJob,
+    'Pending booking reminder job error',
   )
 
-  console.log('✅ All background jobs initialized successfully')
+  scheduleGuardedJob(
+    '* * * * *',
+    () => paymentSettlementClearJobRunning,
+    (value) => {
+      paymentSettlementClearJobRunning = value
+    },
+    paymentSettlementClearJob,
+    'Payment settlement clear job error',
+  )
+
+  console.log('All background jobs initialized successfully')
 }

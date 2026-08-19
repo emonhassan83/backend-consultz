@@ -7,7 +7,7 @@ import { paymentNotifyToAdmin, paymentNotifyToUser } from './payment.utils'
 import config from '../../config'
 import { Booking } from '../booking/booking.models'
 import mongoose from 'mongoose'
-import { PAYMENT_STATUS } from './payment.constant'
+import { PAYMENT_SETTLEMENT_STATUS, PAYMENT_STATUS } from './payment.constant'
 import { BOOKING_STATUS } from '../booking/booking.constants'
 import { User } from '../user/user.model'
 import { sendBookingsNotification } from '../booking/booking.utils'
@@ -194,6 +194,7 @@ const confirmPayment = async (payload: {
       {
         isPaid: true,
         status: PAYMENT_STATUS.paid,
+        settlementStatus: PAYMENT_SETTLEMENT_STATUS.pending_session,
       },
       { returnDocument: 'after', session },
     )
@@ -394,7 +395,11 @@ const refundPayment = async (payload: any) => {
     // Find and update payment status
     const payment = await Payment.findOneAndUpdate(
       { paymentIntentId: payload.intendId },
-      { status: PAYMENT_STATUS.refunded, isPaid: false },
+      {
+        status: PAYMENT_STATUS.refunded,
+        settlementStatus: PAYMENT_SETTLEMENT_STATUS.refunded,
+        isPaid: false,
+      },
       { returnDocument: 'after', session },
     )
     if (!payment || payment?.isDeleted) {

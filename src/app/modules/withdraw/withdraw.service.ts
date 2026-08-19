@@ -14,6 +14,74 @@ import { Booking } from '../booking/booking.models'
 import { Payment } from '../payment/payment.model'
 import { sendWithdrawStatusChangeEmail } from '../../utils/emailNotify'
 import dayjs from 'dayjs'
+import {
+  PAYMENT_SETTLEMENT_STATUS,
+  PAYMENT_STATUS as PAYMENT_COLLECTION_STATUS,
+} from '../payment/payment.constant'
+
+const getExpertWithdrawalBalances = async (userId: string) => {
+  const bookings = await Booking.find({
+    consult: userId,
+    isDeleted: false,
+  })
+    .select('_id')
+    .lean()
+
+  const bookingIds = bookings.map((booking) => booking._id)
+
+  if (bookingIds.length === 0) {
+    return {
+      availableBalance: 0,
+      pendingBalance: 0,
+      pendingClearsOn: null as Date | null,
+    }
+  }
+
+  const payments = await Payment.find({
+    booking: { $in: bookingIds },
+    isPaid: true,
+    status: PAYMENT_COLLECTION_STATUS.paid,
+    isDeleted: false,
+    settlementStatus: {
+      $in: [
+        PAYMENT_SETTLEMENT_STATUS.cleared,
+        PAYMENT_SETTLEMENT_STATUS.held,
+      ],
+    },
+  } as any)
+    .select('expertPayout consultAmount amount settlementStatus holdUntil')
+    .lean()
+
+  let availableBalance = 0
+  let pendingBalance = 0
+  let pendingClearsOn: Date | null = null
+
+  for (const payment of payments) {
+    const amount =
+      payment.expertPayout || payment.consultAmount || payment.amount || 0
+
+    if (payment.settlementStatus === PAYMENT_SETTLEMENT_STATUS.cleared) {
+      availableBalance += amount
+      continue
+    }
+
+    if (payment.settlementStatus === PAYMENT_SETTLEMENT_STATUS.held) {
+      pendingBalance += amount
+      if (
+        payment.holdUntil &&
+        (!pendingClearsOn || payment.holdUntil < pendingClearsOn)
+      ) {
+        pendingClearsOn = payment.holdUntil
+      }
+    }
+  }
+
+  return {
+    availableBalance: Number(availableBalance.toFixed(2)),
+    pendingBalance: Number(pendingBalance.toFixed(2)),
+    pendingClearsOn,
+  }
+}
 
 // Test purpose-এ withdraw request তৈরি
 const addWithdraw = async (payload: { booking: string }, userId: string) => {
@@ -44,6 +112,7 @@ const addWithdraw = async (payload: { booking: string }, userId: string) => {
     const payment = await Payment.findOne({
       booking: (booking._id).toString(),
       isPaid: true,
+      status: PAYMENT_COLLECTION_STATUS.paid,
       isDeleted: false,
     }).session(session)
     if (!payment) {
@@ -53,8 +122,22 @@ const addWithdraw = async (payload: { booking: string }, userId: string) => {
       )
     }
 
+    if (payment.settlementStatus === PAYMENT_SETTLEMENT_STATUS.held) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        `Funds are still on hold until ${payment.holdUntil?.toISOString() || 'the configured hold period ends'}`,
+      )
+    }
+
+    if (payment.settlementStatus !== PAYMENT_SETTLEMENT_STATUS.cleared) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Funds are not cleared for withdrawal yet',
+      )
+    }
+
     // consultAmount find
-    const consultAmount = payment.consultAmount || payment.amount
+    const consultAmount = payment.expertPayout || payment.consultAmount || payment.amount
     if (consultAmount <= 0) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
@@ -84,10 +167,15 @@ const addWithdraw = async (payload: { booking: string }, userId: string) => {
           booking: (booking._id).toString(),
           amount: consultAmount,
           status: WITHDRAW_STATUS.proceed,
+          proceedAt: new Date(),
         },
       ],
       { session },
     )
+
+    payment.settlementStatus = PAYMENT_SETTLEMENT_STATUS.withdrawn
+    payment.withdrawnAt = new Date()
+    await payment.save({ session })
 
     await session.commitTransaction()
 
@@ -139,6 +227,7 @@ const getConsultWithdrawsFromDB = async (
     : new Date().getFullYear()
 
   const thisMonthWithdraw = await getThisMonthWithdraw(userId)
+  const balances = await getExpertWithdrawalBalances(userId)
 
   const withdrawOverview = await getWithdrawMonthlyOverview(userId, selectedYear)
 
@@ -176,7 +265,12 @@ const getConsultWithdrawsFromDB = async (
 
   return {
     meta,
-    result: { thisMonthWithdraw, withdrawOverview, withdrawList: result },
+    result: {
+      ...balances,
+      thisMonthWithdraw,
+      withdrawOverview,
+      withdrawList: result,
+    },
   }
 }
 

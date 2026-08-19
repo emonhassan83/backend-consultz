@@ -7,6 +7,7 @@ import mongoose from 'mongoose'
 import Stripe from 'stripe'
 import { Booking } from '../modules/booking/booking.models'
 import { Payment } from '../modules/payment/payment.model'
+import { PAYMENT_SETTLEMENT_STATUS } from '../modules/payment/payment.constant'
 import { User } from '../modules/user/user.model'
 import { BOOKING_STATUS, PAYMENT_STATUS } from '../modules/booking/booking.constants'
 import { sendBookingsNotification } from '../modules/booking/booking.utils'
@@ -144,7 +145,10 @@ const runAutoMarkNotRespondedJobOnce = async (): Promise<void> => {
             )
             await Payment.updateOne(
               { _id: capturedPayment._id },
-              { status: PAYMENT_STATUS.refunded },
+              {
+                status: PAYMENT_STATUS.refunded,
+                settlementStatus: PAYMENT_SETTLEMENT_STATUS.refunded,
+              },
             )
             refundProcessed = true
             console.log(`Refund processed for booking ${capturedBooking._id}`)

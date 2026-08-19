@@ -14,6 +14,7 @@ const withdrawSchema = new Schema<TWithdraw>(
       default: WITHDRAW_STATUS.proceed,
     },
     proceedAt: { type: Date },
+    isDeleted: { type: Boolean, default: false },
   },
   {
     timestamps: true,
