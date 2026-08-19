@@ -102,7 +102,7 @@ const createPaymentIntent = async (payload: {
 
   // Platform breakdown
   const platformCommission = parseFloat(
-    ((consultationFee * platformFeePercentage) / 100).toFixed(2),
+    ((grossBookingValue * platformFeePercentage) / 100).toFixed(2),
   )
   const platformVat = parseFloat((platformCommission * PLATFORM_VAT_RATE).toFixed(2))
   const platformTotal = parseFloat((platformCommission + platformVat).toFixed(2))
