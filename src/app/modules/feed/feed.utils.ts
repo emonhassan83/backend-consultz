@@ -12,7 +12,6 @@ import { getMessaging } from 'firebase-admin/messaging'
 import { Notification } from '../notification/notification.model';
 import { Report } from '../report/report.models';
 import emailSender from '../../utils/emailSender';
-import { REPORT_STATUS } from '../report/report.constant';
 import { Appeal } from '../appeal/appeal.model';
 import { APPEAL_STATUS } from '../appeal/appeal.constant';
 
@@ -30,7 +29,6 @@ export const getReportedStatusBatch = async (
 
   const query: any = {
     feed: { $in: normalizedIds },
-    status: { $ne: REPORT_STATUS.denied },
   };
 
   // যদি শুধু current user এর report চাও (optional)
@@ -39,7 +37,7 @@ export const getReportedStatusBatch = async (
   }
 
   const reports = await Report.find(query)
-    .select('_id feed status')
+    .select('_id feed')
     .lean();
 
   const approvedAppeals = normalizedIds.length

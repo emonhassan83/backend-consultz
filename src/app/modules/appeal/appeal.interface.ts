@@ -3,6 +3,7 @@ import { TAppealStatus } from './appeal.constant'
 
 export type TAppeal = {
   _id?: Types.ObjectId
+  report: Types.ObjectId
   feed: Types.ObjectId
   user: Types.ObjectId
   reason: string

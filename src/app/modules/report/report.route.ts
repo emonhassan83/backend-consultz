@@ -14,30 +14,10 @@ router.post(
   ReportController.createReport,
 )
 
-router.put(
-  '/:id',
-  auth(USER_ROLE.consult, USER_ROLE.expert),
-  validateRequest(ReportValidation.updateValidationSchema),
-  ReportController.updateReport,
-)
-
-router.patch(
-  '/:id',
-  auth(USER_ROLE.admin),
-  validateRequest(ReportValidation.changeStatusValidationSchema),
-  ReportController.changeStatusReport,
-)
-
 router.delete(
   '/:id',
   auth(USER_ROLE.consult, USER_ROLE.expert),
   ReportController.deleteReport,
-)
-
-router.get(
-  '/my-report',
-  auth(USER_ROLE.consult, USER_ROLE.expert),
-  ReportController.getMyReport,
 )
 
 router.get(

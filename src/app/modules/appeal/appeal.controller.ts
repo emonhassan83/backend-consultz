@@ -14,8 +14,11 @@ const createAppeal = catchAsync(async (req, res) => {
   })
 })
 
-const getAllAppeals = catchAsync(async (req, res) => {
-  const result = await AppealService.getAllAppealsFromDB(req.query)
+const getAppealsByFeed = catchAsync(async (req, res) => {
+  const result = await AppealService.getAppealsByFeedFromDB(
+    req.params.feedId as string,
+    req.query,
+  )
 
   sendResponse(res, {
     success: true,
@@ -26,22 +29,7 @@ const getAllAppeals = catchAsync(async (req, res) => {
   })
 })
 
-const decideAppeal = catchAsync(async (req, res) => {
-  const result = await AppealService.decideAppealIntoDB(
-    req.params.id as string,
-    req.body,
-  )
-
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: 'Appeal decision updated successfully!',
-    data: result,
-  })
-})
-
 export const AppealController = {
   createAppeal,
-  getAllAppeals,
-  decideAppeal,
+  getAppealsByFeed,
 }

@@ -1,19 +1,20 @@
 # Planning 1, 2, 3 API Changes
 
-Tiny summary of backend API/data changes added for finance, points, moderation, appeal, payment hold, and withdrawals.
+Short summary of backend API/data changes for finance, points, moderation, appeal, payment hold, and withdrawals.
 
 ## Planning 1 — Finance + Points Logs
 
 ### Payments / Dashboard
 
-- Payment records now expose clearer finance fields:
+- Payment records expose clearer finance fields:
   - `grossBookingValue`
   - `platformFeePercentage`
   - `platformCommission`
   - `platformVat`
   - `platformTotalDeduction`
   - `expertPayout`
-- Admin dashboard/meta responses now include the same finance breakdown so cards and charts can read from consistent totals.
+- Admin dashboard/meta responses use the same finance breakdown so cards and charts can read from consistent totals.
+- Platform commission is calculated from gross booking value using `platformFeePercentage` from General Settings.
 
 Affected APIs:
 
@@ -65,33 +66,54 @@ Logs are created for manual adjustment and reward points.
 
 ### Reports
 
-Creating a report no longer directly hides/restricts the post. The post stays live until admin action.
+- Creating a report does not directly hide/restrict a post.
+- The post stays live until admin moderation action.
+- Report no longer has a `status` field.
+- Reports are stored as review/evidence records only.
+
+Active report APIs:
 
 ```http
 POST /reports
-PATCH /reports/:id
 GET /reports
 GET /reports/:id
 GET /reports/feed/:feedId
+DELETE /reports/:id
 ```
 
-Report details now include related appeals for that feed.
+Removed report APIs:
+
+```http
+GET /reports/my-report
+PUT /reports/:id
+PATCH /reports/:id
+```
+
+`GET /reports/:id` now returns the report with appeals created against that specific report:
+
+```ts
+appeals: Appeal[]
+```
 
 ### Appeals
 
-Experts appeal by `feed` id, not by report id.
+- Expert appeals are created against a specific `report`.
+- Backend resolves the related `feed` from that report.
+- Only the post author can submit an appeal.
+- There is no appeal decision/status-change API in this version.
+
+Active appeal APIs:
 
 ```http
 POST /appeals
-GET /appeals
-PATCH /appeals/:id/decision
+GET /appeals/feed/:feedId
 ```
 
 Create appeal payload:
 
 ```json
 {
-  "feed": "64f123456789abcdef123456",
+  "report": "64f123456789abcdef123456",
   "reason": "This report is false.",
   "files": [
     "https://example.com/proof-1.png"
@@ -99,26 +121,23 @@ Create appeal payload:
 }
 ```
 
-Decision payload:
-
-```json
-{
-  "status": "approved",
-  "note": "We reviewed your appeal and restored the post."
-}
-```
-
-Allowed decision status:
+Appeal record fields:
 
 ```ts
-approved | rejected
+report: ObjectId
+feed: ObjectId
+user: ObjectId
+reason: string
+files: string[]
+status: 'pending'
 ```
 
-If appeal is approved:
+Notes:
 
-- feed becomes `active`
-- related unresolved reports become `denied`
-- author receives notification/email
+- `report` is required in create appeal payload.
+- `feed` is saved automatically from the report.
+- `GET /appeals/feed/:feedId` returns appeals for a post/feed.
+- `GET /reports/:id` returns only appeals under that report.
 
 ### Feed Moderation
 
@@ -156,7 +175,7 @@ hasAppealsSubmmit: boolean
 
 ### Payment Settlement State
 
-Payment records now include:
+Payment records include:
 
 ```ts
 settlementStatus:
@@ -194,14 +213,14 @@ holdUntil = sessionEnd + paymentHoldDays
 
 ### Withdrawals
 
-Withdrawals are now allowed only from cleared payments.
+Withdrawals are allowed only from cleared payments.
 
 ```http
 POST /withdraw
 GET /withdraw/my-withdraws
 ```
 
-`GET /withdraw/my-withdraws` now includes:
+`GET /withdraw/my-withdraws` includes:
 
 ```ts
 availableBalance: number

@@ -4,19 +4,21 @@ import AppError from '../../errors/AppError'
 import { Feed } from '../feed/feed.model'
 import { FEED_STATUS } from '../feed/feed.constant'
 import { Report } from '../report/report.models'
-import { REPORT_STATUS } from '../report/report.constant'
-import { sendContentModerationNotification } from '../feed/feed.utils'
-import { TUser } from '../user/user.interface'
 import { APPEAL_STATUS } from './appeal.constant'
 import { TAppeal } from './appeal.interface'
 import { Appeal } from './appeal.model'
 
 const createAppealIntoDB = async (
-  payload: Pick<TAppeal, 'feed' | 'reason' | 'files'>,
+  payload: Pick<TAppeal, 'report' | 'reason' | 'files'>,
   userId: string,
 ) => {
+  const report = await Report.findById(payload.report)
+  if (!report) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Report not found!')
+  }
+
   const feed: any = await Feed.findOne({
-    _id: payload.feed,
+    _id: report.feed,
     isDeleted: false,
   } as any).populate('author', 'firstName lastName email fcmToken pushNotify emailNotify')
 
@@ -39,20 +41,8 @@ const createAppealIntoDB = async (
     )
   }
 
-  const unresolvedReport = await Report.findOne({
-    feed: payload.feed,
-    status: { $ne: REPORT_STATUS.denied },
-  })
-
-  if (!unresolvedReport) {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      'No active report found for this feed',
-    )
-  }
-
   const existingPendingAppeal = await Appeal.findOne({
-    feed: payload.feed,
+    report: payload.report,
     user: userId,
     status: APPEAL_STATUS.pending,
   })
@@ -60,12 +50,13 @@ const createAppealIntoDB = async (
   if (existingPendingAppeal) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
-      'You already have a pending appeal for this feed',
+      'You already have a pending appeal for this report',
     )
   }
 
   const appeal = await Appeal.create({
-    feed: payload.feed,
+    report: payload.report,
+    feed: report.feed,
     user: userId,
     reason: payload.reason,
     files: payload.files,
@@ -75,10 +66,19 @@ const createAppealIntoDB = async (
   return appeal
 }
 
-const getAllAppealsFromDB = async (query: Record<string, unknown>) => {
+const getAppealsByFeedFromDB = async (
+  feedId: string,
+  query: Record<string, unknown>,
+) => {
+  const feed = await Feed.findOne({ _id: feedId, isDeleted: false })
+  if (!feed) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Feed post not found!')
+  }
+
   const appealQuery = new QueryBuilder(
-    Appeal.find().populate([
+    Appeal.find({ feed: feedId }).populate([
       { path: 'user', select: 'firstName lastName email photoUrl' },
+      { path: 'report', select: 'reason createdAt author' },
       {
         path: 'feed',
         populate: {
@@ -100,59 +100,7 @@ const getAllAppealsFromDB = async (query: Record<string, unknown>) => {
   return { data, meta }
 }
 
-const decideAppealIntoDB = async (
-  id: string,
-  payload: { status: 'approved' | 'rejected'; note?: string },
-) => {
-  const appeal = await Appeal.findById(id)
-  if (!appeal) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Appeal not found!')
-  }
-
-  if (appeal.status !== APPEAL_STATUS.pending) {
-    throw new AppError(httpStatus.BAD_REQUEST, `Appeal already ${appeal.status}`)
-  }
-
-  const feed: any = await Feed.findOne({
-    _id: appeal.feed,
-    isDeleted: false,
-  } as any).populate('author', 'firstName lastName email fcmToken pushNotify emailNotify')
-
-  if (!feed) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Feed post not found!')
-  }
-
-  appeal.status = payload.status
-
-  if (payload.status === APPEAL_STATUS.approved) {
-    feed.status = FEED_STATUS.active
-    await feed.save()
-    await Report.updateMany(
-      { feed: appeal.feed, status: { $ne: REPORT_STATUS.denied } },
-      { status: REPORT_STATUS.denied },
-    )
-    await sendContentModerationNotification(
-      'appealApproved',
-      feed.author as unknown as TUser,
-      feed,
-      payload.note || appeal.reason,
-    )
-  } else {
-    await sendContentModerationNotification(
-      'appealRejected',
-      feed.author as unknown as TUser,
-      feed,
-      payload.note || appeal.reason,
-    )
-  }
-
-  await appeal.save()
-
-  return appeal
-}
-
 export const AppealService = {
   createAppealIntoDB,
-  getAllAppealsFromDB,
-  decideAppealIntoDB,
+  getAppealsByFeedFromDB,
 }

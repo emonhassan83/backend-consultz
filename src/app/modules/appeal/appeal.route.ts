@@ -14,13 +14,6 @@ router.post(
   AppealController.createAppeal,
 )
 
-router.get('/', auth(USER_ROLE.admin), AppealController.getAllAppeals)
-
-router.patch(
-  '/:id/decision',
-  auth(USER_ROLE.admin),
-  validateRequest(AppealValidation.decisionAppealValidationSchema),
-  AppealController.decideAppeal,
-)
+router.get('/feed/:feedId', auth(USER_ROLE.admin), AppealController.getAppealsByFeed)
 
 export const AppealRoutes = router

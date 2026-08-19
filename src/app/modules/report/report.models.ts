@@ -1,6 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
 import { IReport, IReportModel } from './report.interface';
-import { REPORT_STATUS } from './report.constant';
 
 const reportSchema: Schema<IReport> = new Schema(
   {
@@ -17,11 +16,6 @@ const reportSchema: Schema<IReport> = new Schema(
     reason: {
       type: String,
       required: true,
-    },
-    status: {
-      type: String,
-      enum: Object.values(REPORT_STATUS),
-      default: REPORT_STATUS.pending,
     },
   },
   { timestamps: true },
