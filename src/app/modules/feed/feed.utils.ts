@@ -285,10 +285,10 @@ const moderationCopy: Record<
       `Your post has been restricted after review. Reason: ${reason || 'Not provided'}. You can submit an appeal from your restricted post.`,
   },
   reinstated: {
-    subject: 'Your post has been reinstated',
+    subject: 'Your post has been activated',
     message: messages.feed.reinstated,
     description: (reason) =>
-      `Your post has been reinstated and is visible again. Reason: ${reason || 'Admin review completed'}.`,
+      `Your post has been activated and is visible again. Reason: ${reason || 'Admin review completed'}.`,
   },
   removed: {
     subject: 'Your post has been removed',
@@ -312,7 +312,7 @@ const moderationCopy: Record<
     subject: 'Your appeal has been approved',
     message: messages.feed.appealApproved,
     description: (reason) =>
-      `Your appeal has been approved. Your post has been reinstated. Reason: ${reason || 'Admin review completed'}.`,
+      `Your appeal has been approved. Your post has been activated. Reason: ${reason || 'Admin review completed'}.`,
   },
   appealRejected: {
     subject: 'Your appeal has been rejected',

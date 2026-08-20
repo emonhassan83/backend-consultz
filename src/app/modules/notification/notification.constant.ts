@@ -17,7 +17,7 @@ export const messages = {
     active: 'Your post is now live!',
     restricted: 'Your post has been restricted.',
     reported: 'Your post has been reported.',
-    reinstated: 'Your post has been reinstated.',
+    reinstated: 'Your post has been activated.',
     removed: 'Your post has been removed.',
     warning: 'Content warning issued.',
     suspended: 'Your account has been suspended.',
