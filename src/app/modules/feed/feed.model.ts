@@ -1,6 +1,6 @@
 import { Schema, model } from 'mongoose'
 import { TFeed, TFeedModel } from './feed.interface'
-import { FEED_STATUS } from './feed.constant'
+import { FEED_MODERATION_ACTION, FEED_STATUS } from './feed.constant'
 
 const feedSchema = new Schema<TFeed>(
   {
@@ -29,17 +29,12 @@ const feedSchema = new Schema<TFeed>(
       enum: Object.values(FEED_STATUS),
       default: FEED_STATUS.active,
     },
-    moderationActions: {
-      type: [
-        {
-          action: { type: String, required: true },
-          reason: { type: String, required: true },
-          admin: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-          createdAt: { type: Date, default: Date.now },
-        },
-      ],
-      default: [],
+    moderationStatus: {
+      type: String,
+      enum: Object.values(FEED_MODERATION_ACTION),
+      default: null,
     },
+    reason: { type: String, default: null },
     isDeleted: { type: Boolean, default: false },
   },
   {

@@ -23,10 +23,10 @@ const changeStatusValidationSchema = z.object({
 
 const moderationActionValidationSchema = z.object({
   body: z.object({
-    action: z.enum(
+    moderationStatus: z.enum(
       Object.values(FEED_MODERATION_ACTION) as [string, ...string[]],
       {
-        message: 'Invalid moderation action',
+        message: 'Invalid moderation status',
       },
     ),
     reason: z

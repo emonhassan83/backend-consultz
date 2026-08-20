@@ -225,7 +225,6 @@ const getAllUsersFromDB = async (
   const mustMatch: QueryFilter<TUser> = {
     isDeleted: false,
     role: { $ne: USER_ROLE.admin },
-    status: USER_STATUS.active,
   }
 
   // Optional conditions — যেকোনো একটা match করলেই চলবে

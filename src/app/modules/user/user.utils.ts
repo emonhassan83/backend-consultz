@@ -151,7 +151,7 @@ export const getTotalBookingsBatch = async (
 };
 
 export const sendUserStatusNotifYToAdmin = async (
-  status: 'active' | 'blocked' | 'pending',
+  status: 'active' | 'blocked' | 'pending' | 'warning',
   user: TUser,
 ) => {
   const admin = await findAdmin()
@@ -180,7 +180,7 @@ export const sendUserStatusNotifYToAdmin = async (
 }
 
 export const sendUserStatusNotifYToUser = async (
-  status: 'active' | 'blocked' | 'pending',
+  status: 'active' | 'blocked' | 'pending' | 'warning',
   user: TUser,
 ) => {
   if (!user || !user?.fcmToken) return

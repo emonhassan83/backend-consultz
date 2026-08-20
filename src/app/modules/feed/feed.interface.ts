@@ -8,12 +8,8 @@ export type TFeed = {
   description: string
   contentMeta: Types.ObjectId | string
   status: TFeedStatus
-  moderationActions?: {
-    action: TFeedModerationAction
-    reason: string
-    admin: Types.ObjectId
-    createdAt: Date
-  }[]
+  moderationStatus?: TFeedModerationAction
+  reason?: string
   isDeleted?: boolean
 }
 

@@ -24,6 +24,7 @@ export const REGISTER_WITH = {
 export const USER_STATUS = {
   pending: 'pending',
   active: 'active',
+  warning: 'warning',
   blocked: 'blocked',
 } as const
 

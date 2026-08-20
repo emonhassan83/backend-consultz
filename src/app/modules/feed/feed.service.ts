@@ -333,8 +333,8 @@ const changeFeedStatus = async (
 
 const moderateFeedFromDB = async (
   id: string,
-  adminId: string,
-  payload: { action: TFeedModerationAction; reason: string },
+  _adminId: string,
+  payload: { moderationStatus: TFeedModerationAction; reason: string },
 ) => {
   const feed = await Feed.findOne({ _id: id, isDeleted: false }).populate(
     'author',
@@ -347,7 +347,7 @@ const moderateFeedFromDB = async (
 
   const author = feed.author as unknown as TUser
 
-  switch (payload.action) {
+  switch (payload.moderationStatus) {
     case FEED_MODERATION_ACTION.restrict:
       feed.status = FEED_STATUS.restrict
       await sendContentModerationNotification(
@@ -369,6 +369,7 @@ const moderateFeedFromDB = async (
       break
 
     case FEED_MODERATION_ACTION.remove:
+      feed.status = FEED_STATUS.restrict
       feed.isDeleted = true
       await sendContentModerationNotification(
         'removed',
@@ -379,6 +380,9 @@ const moderateFeedFromDB = async (
       break
 
     case FEED_MODERATION_ACTION.warn_user:
+      await User.findByIdAndUpdate(author._id, {
+        status: USER_STATUS.warning,
+      })
       await sendContentModerationNotification(
         'warning',
         author,
@@ -391,6 +395,7 @@ const moderateFeedFromDB = async (
       await User.findByIdAndUpdate(author._id, {
         status: USER_STATUS.blocked,
       })
+      feed.status = FEED_STATUS.restrict
       await sendContentModerationNotification(
         'suspended',
         author,
@@ -403,15 +408,8 @@ const moderateFeedFromDB = async (
       throw new AppError(httpStatus.BAD_REQUEST, 'Invalid moderation action')
   }
 
-  feed.moderationActions = [
-    ...(feed.moderationActions || []),
-    {
-      action: payload.action,
-      reason: payload.reason,
-      admin: new Types.ObjectId(adminId),
-      createdAt: new Date(),
-    },
-  ] as any
+  feed.moderationStatus = payload.moderationStatus
+  feed.reason = payload.reason
 
   await feed.save()
 
