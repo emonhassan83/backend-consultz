@@ -15,9 +15,9 @@ router.post(
 )
 
 router.get(
-  '/my-feed-reports',
-  auth(USER_ROLE.expert),
-  ReportController.getMyFeedReports,
+  '/feed/:feedId',
+  auth(USER_ROLE.admin, USER_ROLE.expert),
+  ReportController.getReportsByFeed,
 )
 
 router.delete(

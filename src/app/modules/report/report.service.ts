@@ -76,7 +76,7 @@ const attachAppealSubmittedStatus = async (reports: any[], userId: string) => {
 
   return reports.map((report) => ({
     ...report,
-    isAppealSubmitted: appealedReportSet.has(report._id.toString()),
+    isAppalSubmit: appealedReportSet.has(report._id.toString()),
   }))
 }
 
@@ -106,28 +106,29 @@ const getAllReport = async (query: Record<string, any>) => {
   return { data, meta }
 }
 
-const getMyFeedReports = async (
+const getReportsByFeed = async (
+  feedId: string,
   query: Record<string, any>,
   userId: string,
+  role?: string,
 ) => {
-  const myFeeds = await Feed.find({
-    author: userId,
-    isDeleted: false,
-  })
-    .select('_id')
-    .lean()
+  const feed = await Feed.findOne({ _id: feedId, isDeleted: false }).select(
+    'author',
+  )
 
-  const myFeedIds = myFeeds.map((feed) => feed._id)
+  if (!feed) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Feed post not found!')
+  }
+
+  if (role !== 'admin' && feed.author.toString() !== userId.toString()) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You can only view reports for your own feed',
+    )
+  }
 
   const reportModel = new QueryBuilder(
-    Report.find({
-      $or: [
-        { feedAuthor: new mongoose.Types.ObjectId(userId) },
-        { feed: { $in: myFeedIds } },
-      ],
-    }).populate([
-      { path: 'author', select: 'firstName lastName photoUrl expertise' },
-      { path: 'feedAuthor', select: 'firstName lastName photoUrl expertise' },
+    Report.find({ feed: feedId }).populate([
       {
         path: 'feed',
         populate: {
@@ -177,7 +178,7 @@ const getReportById = async (id: string, userId?: string) => {
   return {
     ...result.toObject(),
     appeals,
-    isAppealSubmitted: userId
+    isAppalSubmit: userId
       ? Boolean(await Appeal.exists({ report: id, user: userId }))
       : false,
   }
@@ -243,7 +244,7 @@ const deleteReportByFeedId = async (feedId: string, userId: string) => {
 export const ReportService = {
   createReport,
   getAllReport,
-  getMyFeedReports,
+  getReportsByFeed,
   getReportById,
   deleteReportByFeedId,
   deleteReport,

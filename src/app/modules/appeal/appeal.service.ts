@@ -2,7 +2,6 @@ import httpStatus from 'http-status'
 import QueryBuilder from '../../builder/QueryBuilder'
 import AppError from '../../errors/AppError'
 import { Feed } from '../feed/feed.model'
-import { FEED_STATUS } from '../feed/feed.constant'
 import { Report } from '../report/report.models'
 import { APPEAL_STATUS } from './appeal.constant'
 import { TAppeal } from './appeal.interface'
@@ -31,13 +30,6 @@ const createAppealIntoDB = async (
     throw new AppError(
       httpStatus.FORBIDDEN,
       'Only the post author can appeal this feed',
-    )
-  }
-
-  if (feed.status !== FEED_STATUS.restrict) {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      'Appeal can only be submitted for restricted posts',
     )
   }
 

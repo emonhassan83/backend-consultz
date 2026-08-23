@@ -50,17 +50,6 @@ export const getReportedStatusBatch = async (
   return result;
 };
 
-/**
- * Get all reports for a single feed
- */
-export const getReportsForFeed = async (feedId: string) => {
-  return await Report.find({ feed: feedId })
-    .populate('author', 'firstName lastName photoUrl')
-    .select('author reason createdAt')
-    .sort({ createdAt: -1 })
-    .lean();
-};
-
 // Utility to check isLiked
 export const enrichFeedWithUserInfo = async (feed: any, userId: string) => {
   const authorId = feed.author?._id?.toString();

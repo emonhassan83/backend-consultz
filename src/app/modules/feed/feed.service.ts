@@ -11,7 +11,6 @@ import {
   enrichFeedWithUserInfo,
   generateFeedFilePath,
   getReportedStatusBatch,
-  getReportsForFeed,
   notifyFollowersOnNewPost,
   sendContentModerationNotification,
   sendFeedNotificationToUser,
@@ -25,6 +24,7 @@ import {
 import { TUser } from '../user/user.interface'
 import { USER_ROLE, USER_STATUS } from '../user/user.constant'
 import { BlockProfile } from '../blockProfile/blockProfile.models'
+import { Report } from '../report/report.models'
 
 const createFeedIntoDB = async (
   payload: TFeed,
@@ -197,6 +197,9 @@ const getAllFeedsFromDB = async (
 
   // ── Batch isReported check ────────────────────────────────────────────────
   const feedIds = feedList.map((f: any) => f._id.toString());
+  const foundReportedMap = feedIds.length > 0
+    ? await getReportedStatusBatch(feedIds)
+    : new Map();
   const reportedMap = feedIds.length > 0
     ? await getReportedStatusBatch(feedIds, currentUserId)
     : new Map();
@@ -207,6 +210,7 @@ const getAllFeedsFromDB = async (
       const enriched = await enrichFeedWithUserInfo(feed, currentUserId);
       return {
         ...enriched,
+        isFoundReported: foundReportedMap.get(feed._id.toString()) || false,
         isReported: reportedMap.get(feed._id.toString()) || false,
       };
     }),
@@ -237,12 +241,15 @@ const getAFeedFromDB = async (id: string, userId: string) => {
   const deeplink = `consultz://feed/${id}`
 
   // Get all reports for this feed
-  const reportList = await getReportsForFeed(id)
+  const [isFoundReported, isReported] = await Promise.all([
+    Report.exists({ feed: id }),
+    Report.exists({ feed: id, author: userId }),
+  ])
 
   return {
     ...enrichedFeed,
-    isReported: reportList.length > 0,
-    reportList, // ← All reports with reason, status, author
+    isFoundReported: Boolean(isFoundReported),
+    isReported: Boolean(isReported),
     deeplink,
   }
 }
