@@ -12,8 +12,6 @@ import { getMessaging } from 'firebase-admin/messaging'
 import { Notification } from '../notification/notification.model';
 import { Report } from '../report/report.models';
 import emailSender from '../../utils/emailSender';
-import { Appeal } from '../appeal/appeal.model';
-import { APPEAL_STATUS } from '../appeal/appeal.constant';
 
 /**
  * Batch check if any report exists for multiple feeds
@@ -40,56 +38,13 @@ export const getReportedStatusBatch = async (
     .select('_id feed')
     .lean();
 
-  const approvedAppeals = normalizedIds.length
-    ? await Appeal.find({
-        feed: { $in: normalizedIds },
-        status: APPEAL_STATUS.approved,
-      })
-        .select('feed')
-        .lean()
-    : [];
-
-  const approvedAppealFeedSet = new Set(
-    approvedAppeals.map((appeal) => appeal.feed.toString()),
-  );
-
   const reportedSet = new Set(
-    reports
-      .filter((report) => !approvedAppealFeedSet.has(report.feed.toString()))
-      .map((report) => report.feed.toString()),
+    reports.map((report) => report.feed.toString()),
   );
 
   const result = new Map<string, boolean>();
   normalizedIds.forEach(id => {
     result.set(id.toString(), reportedSet.has(id.toString()));
-  });
-
-  return result;
-};
-
-export const getAppealSubmittedStatusBatch = async (
-  feedIds: string[] | Types.ObjectId[],
-  userId: string,
-): Promise<Map<string, boolean>> => {
-  if (feedIds.length === 0) return new Map();
-
-  const normalizedIds = feedIds.map((id) => new Types.ObjectId(id.toString()));
-
-  const appeals = await Appeal.find({
-    feed: { $in: normalizedIds },
-    user: new Types.ObjectId(userId),
-    status: { $in: [APPEAL_STATUS.pending, APPEAL_STATUS.approved] },
-  })
-    .select('feed')
-    .lean();
-
-  const appealedFeedSet = new Set(
-    appeals.map((appeal) => appeal.feed.toString()),
-  );
-
-  const result = new Map<string, boolean>();
-  normalizedIds.forEach((id) => {
-    result.set(id.toString(), appealedFeedSet.has(id.toString()));
   });
 
   return result;
@@ -260,6 +215,7 @@ export const sendFeedNotificationToUser = async (
 
 export type TModerationEvent =
   | 'reported'
+  | 'reportWithdrawn'
   | 'restricted'
   | 'reinstated'
   | 'removed'
@@ -277,6 +233,12 @@ const moderationCopy: Record<
     message: messages.feed.reported,
     description: (reason) =>
       `Your post has been reported and is now waiting for admin review. Reason: ${reason || 'Not provided'}. Your post remains live unless an admin restricts it.`,
+  },
+  reportWithdrawn: {
+    subject: 'A report on your post has been removed',
+    message: messages.feed.reportWithdrawn,
+    description: (reason) =>
+      `A report on your post has been removed. ${reason || 'The reporter deleted their report.'}`,
   },
   restricted: {
     subject: 'Your post has been restricted',

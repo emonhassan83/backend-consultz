@@ -10,7 +10,6 @@ import { uploadToS3 } from '../../utils/s3'
 import {
   enrichFeedWithUserInfo,
   generateFeedFilePath,
-  getAppealSubmittedStatusBatch,
   getReportedStatusBatch,
   getReportsForFeed,
   notifyFollowersOnNewPost,
@@ -199,10 +198,7 @@ const getAllFeedsFromDB = async (
   // ── Batch isReported check ────────────────────────────────────────────────
   const feedIds = feedList.map((f: any) => f._id.toString());
   const reportedMap = feedIds.length > 0
-    ? await getReportedStatusBatch(feedIds)
-    : new Map();
-  const appealSubmittedMap = feedIds.length > 0
-    ? await getAppealSubmittedStatusBatch(feedIds, currentUserId)
+    ? await getReportedStatusBatch(feedIds, currentUserId)
     : new Map();
 
   // ── Enrich feeds ──────────────────────────────────────────────────────────
@@ -212,8 +208,6 @@ const getAllFeedsFromDB = async (
       return {
         ...enriched,
         isReported: reportedMap.get(feed._id.toString()) || false,
-        hasAppealsSubmmit:
-          appealSubmittedMap.get(feed._id.toString()) || false,
       };
     }),
   );

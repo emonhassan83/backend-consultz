@@ -27,24 +27,40 @@ const getAllReport = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-const getReportsByFeed = catchAsync(async (req: Request, res: Response) => {
-  const query = {
-    ...req.query,
-    feed: req.params.feedId,
-  }
-  const result = await ReportService.getAllReport(query);
+const getMyFeedReports = catchAsync(async (req: Request, res: Response) => {
+  const result = await ReportService.getMyFeedReports(
+    req.query,
+    req.user._id as string,
+  );
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Report histories fetched successfully',
+    message: 'My feed report histories fetched successfully',
     meta: result.meta,
     data: result.data,
   });
 });
 
+const deleteReportByFeedId = catchAsync(async (req: Request, res: Response) => {
+  const result = await ReportService.deleteReportByFeedId(
+    req.params.feedId as string,
+    req.user._id as string,
+  );
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Feed reports deleted successfully',
+    data: result,
+  });
+});
+
 const getReportById = catchAsync(async (req: Request, res: Response) => {
-  const result = await ReportService.getReportById(req.params.id as string);
+  const result = await ReportService.getReportById(
+    req.params.id as string,
+    req.user?._id as string,
+  );
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -68,7 +84,8 @@ const deleteReport = catchAsync(async (req: Request, res: Response) => {
 export const ReportController = {
   createReport,
   getAllReport,
-  getReportsByFeed,
+  getMyFeedReports,
+  deleteReportByFeedId,
   getReportById,
   deleteReport,
 };

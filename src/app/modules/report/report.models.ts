@@ -13,6 +13,11 @@ const reportSchema: Schema<IReport> = new Schema(
       refPath: 'Feed',
       required: true,
     },
+    feedAuthor: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
     reason: {
       type: String,
       required: true,

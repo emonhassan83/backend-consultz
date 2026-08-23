@@ -4,6 +4,7 @@ export interface IReport {
   _id: Types.ObjectId;
   author: Types.ObjectId;
   feed: Types.ObjectId;
+  feedAuthor: Types.ObjectId;
   reason: string;
 }
 

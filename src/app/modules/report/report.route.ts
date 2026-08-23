@@ -14,16 +14,22 @@ router.post(
   ReportController.createReport,
 )
 
+router.get(
+  '/my-feed-reports',
+  auth(USER_ROLE.expert),
+  ReportController.getMyFeedReports,
+)
+
+router.delete(
+  '/feed/:feedId',
+  auth(USER_ROLE.expert, USER_ROLE.consult),
+  ReportController.deleteReportByFeedId,
+)
+
 router.delete(
   '/:id',
   auth(USER_ROLE.consult, USER_ROLE.expert),
   ReportController.deleteReport,
-)
-
-router.get(
-  '/feed/:feedId',
-  auth(USER_ROLE.admin),
-  ReportController.getReportsByFeed,
 )
 
 router.get('/', auth(USER_ROLE.admin), ReportController.getAllReport)
