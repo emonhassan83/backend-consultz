@@ -14,6 +14,6 @@ router.post(
   AppealController.createAppeal,
 )
 
-router.get('/feed/:feedId', auth(USER_ROLE.admin), AppealController.getAppealsByFeed)
+router.get('/feed/:feedId', auth(USER_ROLE.admin, USER_ROLE.expert), AppealController.getAppealsByFeed)
 
 export const AppealRoutes = router

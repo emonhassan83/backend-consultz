@@ -62,14 +62,7 @@ const getAppealsByFeedFromDB = async (
 
   const appealQuery = new QueryBuilder(
     Appeal.find({ feed: feedId }).populate([
-      { path: 'user', select: 'firstName lastName email photoUrl' },
-      {
-        path: 'feed',
-        populate: {
-          path: 'author',
-          select: 'firstName lastName email photoUrl',
-        },
-      },
+      { path: 'user', select: 'firstName lastName email photoUrl' }
     ]),
     query,
   )
