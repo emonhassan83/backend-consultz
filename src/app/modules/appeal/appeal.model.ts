@@ -4,7 +4,6 @@ import { APPEAL_STATUS } from './appeal.constant'
 
 const appealSchema = new Schema<TAppeal>(
   {
-    report: { type: Schema.Types.ObjectId, ref: 'Report', required: true },
     feed: { type: Schema.Types.ObjectId, ref: 'Feed', required: true },
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     reason: { type: String, required: true, trim: true },

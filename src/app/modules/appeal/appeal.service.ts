@@ -2,22 +2,16 @@ import httpStatus from 'http-status'
 import QueryBuilder from '../../builder/QueryBuilder'
 import AppError from '../../errors/AppError'
 import { Feed } from '../feed/feed.model'
-import { Report } from '../report/report.models'
 import { APPEAL_STATUS } from './appeal.constant'
 import { TAppeal } from './appeal.interface'
 import { Appeal } from './appeal.model'
 
 const createAppealIntoDB = async (
-  payload: Pick<TAppeal, 'report' | 'reason' | 'files'>,
+  payload: Pick<TAppeal, 'feed' | 'reason' | 'files'>,
   userId: string,
 ) => {
-  const report = await Report.findById(payload.report)
-  if (!report) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Report not found!')
-  }
-
   const feed: any = await Feed.findOne({
-    _id: report.feed,
+    _id: payload.feed,
     isDeleted: false,
   } as any).populate('author', 'firstName lastName email fcmToken pushNotify emailNotify')
 
@@ -34,7 +28,7 @@ const createAppealIntoDB = async (
   }
 
   const existingPendingAppeal = await Appeal.findOne({
-    report: payload.report,
+    feed: payload.feed,
     user: userId,
     status: APPEAL_STATUS.pending,
   })
@@ -42,13 +36,12 @@ const createAppealIntoDB = async (
   if (existingPendingAppeal) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
-      'You already have a pending appeal for this report',
+      'You already have a pending appeal for this feed',
     )
   }
 
   const appeal = await Appeal.create({
-    report: payload.report,
-    feed: report.feed,
+    feed: payload.feed,
     user: userId,
     reason: payload.reason,
     files: payload.files,
@@ -70,7 +63,6 @@ const getAppealsByFeedFromDB = async (
   const appealQuery = new QueryBuilder(
     Appeal.find({ feed: feedId }).populate([
       { path: 'user', select: 'firstName lastName email photoUrl' },
-      { path: 'report', select: 'reason createdAt author' },
       {
         path: 'feed',
         populate: {

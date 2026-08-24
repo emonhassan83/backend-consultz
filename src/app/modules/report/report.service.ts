@@ -62,21 +62,23 @@ const createReport = async (payload: IReport, userId: string) => {
 const attachAppealSubmittedStatus = async (reports: any[], userId: string) => {
   if (!reports.length) return reports
 
-  const reportIds = reports.map((report) => report._id)
+  const feedIds = reports.map((report) => report.feed?._id || report.feed)
   const appeals = await Appeal.find({
-    report: { $in: reportIds },
+    feed: { $in: feedIds },
     user: new mongoose.Types.ObjectId(userId),
   })
-    .select('report')
+    .select('feed')
     .lean()
 
-  const appealedReportSet = new Set(
-    appeals.map((appeal) => appeal.report.toString()),
+  const appealedFeedSet = new Set(
+    appeals.map((appeal) => appeal.feed.toString()),
   )
 
   return reports.map((report) => ({
     ...report,
-    isAppalSubmit: appealedReportSet.has(report._id.toString()),
+    isAppalSubmit: appealedFeedSet.has(
+      (report.feed?._id || report.feed).toString(),
+    ),
   }))
 }
 
@@ -170,7 +172,8 @@ const getReportById = async (id: string, userId?: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Report history not found!')
   }
 
-  const appeals = await Appeal.find({ report: id })
+  const feedId = result.feed?._id || result.feed
+  const appeals = await Appeal.find({ feed: feedId })
     .populate('user', 'firstName lastName email photoUrl')
     .sort({ createdAt: -1 })
     .lean()
@@ -179,7 +182,7 @@ const getReportById = async (id: string, userId?: string) => {
     ...result.toObject(),
     appeals,
     isAppalSubmit: userId
-      ? Boolean(await Appeal.exists({ report: id, user: userId }))
+      ? Boolean(await Appeal.exists({ feed: feedId, user: userId }))
       : false,
   }
 }
@@ -220,11 +223,9 @@ const deleteReportByFeedId = async (feedId: string, userId: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Feed post not found!')
   }
 
-  const reportIds = reports.map((report) => report._id)
-
   const [reportResult, appealResult] = await Promise.all([
-    Report.deleteMany({ _id: { $in: reportIds }, author: userId }),
-    Appeal.deleteMany({ report: { $in: reportIds } }),
+    Report.deleteMany({ feed: feedId, author: userId }),
+    Appeal.deleteMany({ feed: feedId, user: userId }),
   ])
 
   await sendContentModerationNotification(

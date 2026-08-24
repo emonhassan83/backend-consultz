@@ -25,6 +25,7 @@ import { TUser } from '../user/user.interface'
 import { USER_ROLE, USER_STATUS } from '../user/user.constant'
 import { BlockProfile } from '../blockProfile/blockProfile.models'
 import { Report } from '../report/report.models'
+import { Appeal } from '../appeal/appeal.model'
 
 const createFeedIntoDB = async (
   payload: TFeed,
@@ -413,6 +414,10 @@ const moderateFeedFromDB = async (
   feed.reason = payload.reason
 
   await feed.save()
+  await Promise.all([
+    Report.deleteMany({ feed: id }),
+    Appeal.deleteMany({ feed: id }),
+  ])
 
   return feed
 }
