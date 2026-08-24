@@ -17,15 +17,13 @@ const createAppeal = catchAsync(async (req, res) => {
 const getAppealsByFeed = catchAsync(async (req, res) => {
   const result = await AppealService.getAppealsByFeedFromDB(
     req.params.feedId as string,
-    req.query,
   )
 
   sendResponse(res, {
     success: true,
     statusCode: httpStatus.OK,
-    message: 'Appeals retrieved successfully!',
-    meta: result.meta,
-    data: result.data,
+    message: 'Appeal retrieved successfully!',
+    data: result,
   })
 })
 

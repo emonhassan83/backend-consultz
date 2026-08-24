@@ -1,5 +1,4 @@
 import httpStatus from 'http-status'
-import QueryBuilder from '../../builder/QueryBuilder'
 import AppError from '../../errors/AppError'
 import { Feed } from '../feed/feed.model'
 import { APPEAL_STATUS } from './appeal.constant'
@@ -53,28 +52,15 @@ const createAppealIntoDB = async (
 
 const getAppealsByFeedFromDB = async (
   feedId: string,
-  query: Record<string, unknown>,
 ) => {
   const feed = await Feed.findOne({ _id: feedId, isDeleted: false })
   if (!feed) {
     throw new AppError(httpStatus.NOT_FOUND, 'Feed post not found!')
   }
 
-  const appealQuery = new QueryBuilder(
-    Appeal.find({ feed: feedId }).populate([
-      { path: 'user', select: 'firstName lastName email photoUrl' }
-    ]),
-    query,
-  )
-    .filter()
-    .sort()
-    .paginate()
-    .fields()
-
-  const data = await appealQuery.modelQuery
-  const meta = await appealQuery.countTotal()
-
-  return { data, meta }
+  return await Appeal.findOne({ feed: feedId })
+    .populate([{ path: 'user', select: 'firstName lastName email photoUrl' }])
+    .sort({ createdAt: -1 })
 }
 
 export const AppealService = {
