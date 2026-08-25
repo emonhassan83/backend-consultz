@@ -94,7 +94,7 @@ const addWithdraw = async (payload: { booking: string }, userId: string) => {
     if (!user || user.isDeleted) {
       throw new AppError(
         httpStatus.FORBIDDEN,
-        'Only consultants can create withdrawal requests',
+        'Only experts can create withdrawal requests',
       )
     }
 
@@ -181,7 +181,7 @@ const addWithdraw = async (payload: { booking: string }, userId: string) => {
 
     return {
       withdraw,
-      message: `Withdrawal request of $${consultAmount} created successfully (pending)`,
+      message: `Withdrawal request of £${consultAmount} created successfully (pending)`,
     }
   } catch (error) {
     await session.abortTransaction()

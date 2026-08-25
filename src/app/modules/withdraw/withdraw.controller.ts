@@ -1,5 +1,4 @@
 import catchAsync from '../../utils/catchAsync'
-import httpStatus from 'http-status'
 import sendResponse from '../../utils/sendResponse'
 import { WithdrawService } from './withdraw.service'
 
