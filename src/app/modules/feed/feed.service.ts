@@ -242,15 +242,27 @@ const getAFeedFromDB = async (id: string, userId: string) => {
   const deeplink = `consultz://feed/${id}`
 
   // Get all reports for this feed
-  const [isFoundReported, isReported] = await Promise.all([
+  const [isFoundReported, isReported, reports, appeals] = await Promise.all([
     Report.exists({ feed: id }),
     Report.exists({ feed: id, author: userId }),
+    Report.find({ feed: id })
+      .select('_id reason author createdAt')
+      .populate('author', '_id firstName lastName photoUrl')
+      .sort({ createdAt: -1 })
+      .lean(),
+    Appeal.find({ feed: id })
+      .select('user reason files createdAt')
+      .populate('user', '_id firstName lastName photoUrl')
+      .sort({ createdAt: -1 })
+      .lean(),
   ])
 
   return {
     ...enrichedFeed,
     isFoundReported: Boolean(isFoundReported),
     isReported: Boolean(isReported),
+    reports,
+    appeals,
     deeplink,
   }
 }
