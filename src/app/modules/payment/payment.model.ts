@@ -12,7 +12,7 @@ const paymentSchema = new Schema<TPayment>(
     },
     account: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     booking: { type: Schema.Types.ObjectId, ref: 'Booking', required: true },
-    transactionId: { type: String, required: true },
+    transactionId: { type: String, default: null },
     isExpertVatRegistered: { type: Boolean, default: false },
 
     // What consultee pays

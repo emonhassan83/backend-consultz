@@ -9,7 +9,7 @@ export type TPayment = {
   id: string
   account: Types.ObjectId
   booking: Types.ObjectId
-  transactionId: string
+  transactionId?: string
   paymentIntentId: string
   isExpertVatRegistered: boolean
 

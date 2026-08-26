@@ -146,6 +146,7 @@ const createPaymentIntent = async (payload: {
       expertPayout,
       expertVatOwed,
       expertNet,
+      transactionId: paymentIntent.id,
       paymentIntentId: paymentIntent.id,
       status: PAYMENT_STATUS.unpaid,
     },
@@ -195,6 +196,8 @@ const confirmPayment = async (payload: {
         isPaid: true,
         status: PAYMENT_STATUS.paid,
         settlementStatus: PAYMENT_SETTLEMENT_STATUS.pending_session,
+        transactionId:
+          paymentIntent.latest_charge?.toString() || paymentIntent.id,
       },
       { returnDocument: 'after', session },
     )
