@@ -18,7 +18,6 @@ const fetchDashboardMetaData = async (
 ) => {
   const { revenue_year, earning_year } = query
 
-  // Total counts (consultants & experts)
   const totalConsultCount = await User.countDocuments({
     role: USER_ROLE.consult,
     status: USER_STATUS.active,
@@ -31,46 +30,40 @@ const fetchDashboardMetaData = async (
     isDeleted: false,
   })
 
-  // Year selection for revenue vs commission
   const selectedRevenueYear = revenue_year
     ? parseInt(revenue_year as string, 10) || new Date().getFullYear()
     : new Date().getFullYear()
 
-  // Year selection for earning overview
   const selectedEarningYear = earning_year
     ? parseInt(earning_year as string, 10) || new Date().getFullYear()
     : new Date().getFullYear()
 
-  // Revenue vs Commission data (separate year)
   const revenueVsCommissionData =
     await getRevenueVsCommission(selectedRevenueYear)
 
-  // Earning overview (separate year)
   const earningOverviewData = await getEarningOverview(selectedEarningYear)
   const platformFeePercentage = await getGeneralSettingNumber(
     'platformFeePercentage',
     20,
   )
 
-  // Latest user find
   const latestUsers = await User.find({
-    role: { $ne: USER_ROLE.admin }, // exclude admins
+    role: { $ne: USER_ROLE.admin },
     isDeleted: false,
     status: USER_STATUS.active,
   })
-    .sort({ createdAt: -1 }) // newest first
+    .sort({ createdAt: -1 })
     .limit(3)
     .select(
       '_id firstName lastName email phoneNumber photoUrl status createdAt role',
     )
     .lean()
 
-  // Latest notification find
   const notifications = await Notification.find({
     receiver: userId,
     isDeleted: false,
   })
-    .sort({ createdAt: -1 }) // newest first
+    .sort({ createdAt: -1 })
     .limit(3)
     .select('message description')
     .lean()
@@ -99,19 +92,16 @@ const analysisReportingMetaData = async (
 ) => {
   const { year, role } = query
 
-  // Validate role (only consult or expert allowed)
   const validRoles = [USER_ROLE.consult, USER_ROLE.expert]
   const selectedRole =
-    role && validRoles.includes(role as any) ? (role as string) : null // null means both consult & expert
+    role && validRoles.includes(role as any) ? (role as string) : null
 
-  // Year selection
   const selectedYear = year
     ? parseInt(year as string, 10) || new Date().getFullYear()
     : new Date().getFullYear()
 
-  // Latest payout (4 newest withdrawals)
   const latestPayout = await Withdraw.find()
-    .sort({ createdAt: -1 }) // newest first
+    .sort({ createdAt: -1 })
     .limit(4)
     .populate([
       { path: 'user', select: '_id firstName lastName email' },
@@ -119,17 +109,15 @@ const analysisReportingMetaData = async (
     ])
     .lean()
 
-  // Latest notifications for this user (admin or whoever)
   const notifications = await Notification.find({
     receiver: userId,
     isDeleted: false,
   })
-    .sort({ createdAt: -1 }) // newest first
+    .sort({ createdAt: -1 })
     .limit(3)
     .select('message description date read')
     .lean()
 
-  // User overview: monthly registration count for selected year & role
   const userOverview = await getUserOverview(selectedYear, selectedRole)
 
   return {
@@ -141,52 +129,43 @@ const analysisReportingMetaData = async (
 
 const paymentTransactionMetaData = async (
   query: Record<string, unknown>,
-  userId: string,   // admin-এর ID
+  _userId: string,
 ) => {
-  const { year, ...restQuery } = query;
+  const { year, ...restQuery } = query
 
   const selectedYear = year
     ? parseInt(year as string, 10) || new Date().getFullYear()
-    : new Date().getFullYear();
+    : new Date().getFullYear()
 
-  // 1. Earning Overview
-  const earningOverviewData = await getEarningOverview(selectedYear);
-  const platformFeePercentage = await getGeneralSettingNumber(
-    'platformFeePercentage',
-    20,
-  );
+  const yearStart = new Date(selectedYear, 0, 1)
+  const yearEnd = new Date(selectedYear, 11, 31, 23, 59, 59, 999)
 
-  // 2. Notifications
-  const notifications = await Notification.find({
-    receiver: userId,
-    isDeleted: false,
-  })
-    .sort({ createdAt: -1 })
-    .limit(3)
-    .select('message description date read')
-    .lean();
-
-  // ====================== PAYMENT LIST DEBUG ======================
-  console.log('Payment Query Filters:', {
+  const baseFilter = {
     isDeleted: false,
     isPaid: true,
     status: PAYMENT_STATUS.paid,
-  });
+    createdAt: { $gte: yearStart, $lte: yearEnd },
+  }
+
+  const summaryFilter: Record<string, unknown> = { ...baseFilter }
+  const excludedFields = ['searchTerm', 'sort', 'limit', 'page', 'fields']
+
+  Object.entries(restQuery).forEach(([key, value]) => {
+    if (!excludedFields.includes(key)) {
+      summaryFilter[key] = value
+    }
+  })
 
   const paymentQuery = new QueryBuilder(
-    Payment.find({
-      isDeleted: false,
-      isPaid: true,
-      status: PAYMENT_STATUS.paid,
-    }).populate([
+    Payment.find(baseFilter).populate([
       {
         path: 'booking',
         select:
-          'sessionType sessionDuration price timezone date startTime endTime localDate localStartTime localEndTime startAt endAt',
+          '_id date startTime endTime startAt endAt sessionType sessionDuration price timezone localDate localStartTime localEndTime',
       },
       {
         path: 'account',
-        select: 'firstName lastName photoUrl',
+        select: '_id firstName lastName photoUrl',
       },
     ]),
     restQuery,
@@ -195,29 +174,58 @@ const paymentTransactionMetaData = async (
     .filter()
     .sort()
     .paginate()
-    .fields();
+    .fields()
 
-  const paymentList = await paymentQuery.modelQuery;
-  const paymentMeta = await paymentQuery.countTotal();
+  const [paymentList, paymentMeta, summary] = await Promise.all([
+    paymentQuery.modelQuery,
+    paymentQuery.countTotal(),
+    Payment.aggregate([
+      { $match: summaryFilter },
+      {
+        $group: {
+          _id: null,
+          grossBookingValue: {
+            $sum: { $ifNull: ['$grossBookingValue', '$amount'] },
+          },
+          platformTotalDeduction: {
+            $sum: { $ifNull: ['$platformTotalDeduction', '$platformTotal'] },
+          },
+          expertPayout: {
+            $sum: { $ifNull: ['$expertPayout', '$consultAmount'] },
+          },
+        },
+      },
+    ]),
+  ])
+
+  const summaryData = summary[0] || {
+    grossBookingValue: 0,
+    platformTotalDeduction: 0,
+    expertPayout: 0,
+  }
+
+  const normalizedPaymentList = paymentList.map((payment: any) => {
+    const raw = payment.toObject ? payment.toObject() : payment
+
+    return {
+      ...raw,
+      grossBookingValue: raw.grossBookingValue ?? raw.amount ?? 0,
+      platformTotalDeduction:
+        raw.platformTotalDeduction ?? raw.platformTotal ?? 0,
+      expertPayout: raw.expertPayout ?? raw.consultAmount ?? 0,
+    }
+  })
 
   return {
     meta: paymentMeta,
-
     data: {
-      platformFeePercentage,
-      totalEarnings: earningOverviewData.totalEarnings,
-      grossBookingValue: earningOverviewData.grossBookingValue,
-      consultAmount: earningOverviewData.consultAmount || 0,
-      platformCommission: earningOverviewData.platformCommission,
-      platformVat: earningOverviewData.platformVat,
-      platformTotalDeduction: earningOverviewData.platformTotalDeduction,
-      expertPayout: earningOverviewData.expertPayout,
-      // earningOverview: earningOverviewData.monthlyData,
-      paymentList,
-      notifications,
+      grossBookingValue: summaryData.grossBookingValue,
+      platformTotalDeduction: summaryData.platformTotalDeduction,
+      expertPayout: summaryData.expertPayout,
+      paymentList: normalizedPaymentList,
     },
-  };
-};
+  }
+}
 
 export const MetaService = {
   fetchDashboardMetaData,
