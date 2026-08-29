@@ -65,6 +65,11 @@ router.put(
 )
 
 router.delete(
+  '/:id',
+  auth(USER_ROLE.admin),
+  UserControllers.deleteUserProfile,
+)
+router.delete(
   '/delete-profile',
   auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult),
   UserControllers.deleteMyProfile,

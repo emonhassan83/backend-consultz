@@ -285,6 +285,17 @@ const deleteMyProfile = catchAsync(async (req, res) => {
   })
 })
 
+const deleteUserProfile = catchAsync(async (req, res) => {
+  const result = await UserService.deleteAUserFromDB(req?.params?.id as string)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'User delete successfully!',
+    data: result,
+  })
+})
+
 // Update VAT Info
 const updateVatInfo = catchAsync(async (req, res) => {
   const result = await UserService.updateVatInfoFromDB(req?.user?._id, req.body)
@@ -316,5 +327,6 @@ export const UserControllers = {
   updateMyProfile,
   changeUserNotify,
   deleteMyProfile,
+  deleteUserProfile,
   updateVatInfo,
 }
