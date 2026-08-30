@@ -286,7 +286,10 @@ const deleteMyProfile = catchAsync(async (req, res) => {
 })
 
 const deleteUserProfile = catchAsync(async (req, res) => {
-  const result = await UserService.deleteAUserFromDB(req?.params?.id as string)
+  const result = await UserService.deleteUserProfileByAdminFromDB(
+    req.params.id as string,
+    req.user._id as string,
+  )
 
   sendResponse(res, {
     success: true,

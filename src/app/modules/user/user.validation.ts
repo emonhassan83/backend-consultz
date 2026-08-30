@@ -1,5 +1,10 @@
+import { Types } from 'mongoose'
 import { z } from 'zod'
 import { DAY_MAP, USER_STATUS } from './user.constant'
+
+const objectIdSchema = z.string().refine((val) => Types.ObjectId.isValid(val), {
+  message: 'Invalid ObjectId format',
+})
 
 // Allowed session types & their fixed durations
 const SESSION_TYPES = {
@@ -296,6 +301,12 @@ const adjustPointsValidationSchema = z.object({
   }),
 })
 
+const deleteUserProfileValidationSchema = z.object({
+  params: z.object({
+    id: objectIdSchema,
+  }),
+})
+
 const updateVatInfoValidationSchema = z.object({
   body: z.object({
     country: z
@@ -320,5 +331,6 @@ export const UserValidation = {
   useReferralCodeValidationSchema,
   adjustPointsValidationSchema,
   updateNotifySettingsValidation,
+  deleteUserProfileValidationSchema,
   updateVatInfoValidationSchema,
 }

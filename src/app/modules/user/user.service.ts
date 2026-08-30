@@ -1244,14 +1244,7 @@ const updateLocationFromDB = async (
   return result
 }
 
-const deleteAUserFromDB = async (userId: string) => {
-  //* Check if the user exists
-  const user = await User.findById(userId).select('_id')
-  if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
-  }
-
-  // Use `Promise.all` to execute updates in parallel
+const softDeleteUserFromDB = async (userId: string) => {
   const result = await User.findByIdAndUpdate(
     userId,
     { isDeleted: true },
@@ -1265,6 +1258,46 @@ const deleteAUserFromDB = async (userId: string) => {
   }
 
   return result
+}
+
+const deleteAUserFromDB = async (userId: string) => {
+  if (!Types.ObjectId.isValid(userId)) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid user id')
+  }
+
+  const user = await User.findById(userId).select('_id isDeleted')
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+  }
+
+  return softDeleteUserFromDB(userId)
+}
+
+const deleteUserProfileByAdminFromDB = async (
+  targetUserId: string,
+  adminId: string,
+) => {
+  if (!Types.ObjectId.isValid(targetUserId)) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid user id')
+  }
+
+  if (targetUserId === adminId.toString()) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Use delete-profile endpoint to delete your own account',
+    )
+  }
+
+  const user = await User.findById(targetUserId).select('_id role isDeleted')
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+  }
+
+  if (user.role === USER_ROLE.admin) {
+    throw new AppError(httpStatus.FORBIDDEN, 'Admin accounts cannot be deleted')
+  }
+
+  return softDeleteUserFromDB(targetUserId)
 }
 
 /**
@@ -1400,6 +1433,7 @@ export const UserService = {
   updateUserInfoFromDB,
   updateLocationFromDB,
   deleteAUserFromDB,
+  deleteUserProfileByAdminFromDB,
   updateVatInfoFromDB,
   adjustUserPointsFromDB,
 }
