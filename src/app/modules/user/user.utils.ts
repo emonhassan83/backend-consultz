@@ -1,4 +1,5 @@
-import { Types } from 'mongoose';
+import httpStatus from 'http-status'
+import { ClientSession, Types } from 'mongoose'
 import { Follow } from '../connection/connection.models'
 import { modeType } from '../notification/notification.interface'
 import { messages } from '../notification/notification.constant'
@@ -8,9 +9,33 @@ import { sendNotification } from '../../utils/sentNotification'
 import { TUserStatus, USER_ROLE, USER_STATUS } from './user.constant'
 import emailSender from '../../utils/emailSender'
 import config from '../../config'
-import { BOOKING_STATUS } from '../booking/booking.constants';
-import { Booking } from '../booking/booking.models';
-import { User } from './user.model';
+import { BOOKING_STATUS } from '../booking/booking.constants'
+import { Booking } from '../booking/booking.models'
+import { User } from './user.model'
+import AppError from '../../errors/AppError'
+import { Feed } from '../feed/feed.model'
+import { ContentMeta } from '../contentMeta/contentMeta.model'
+import { Comments } from '../comments/comments.models'
+import { Reply } from '../reply/reply.models'
+import { Report } from '../report/report.models'
+import { Appeal } from '../appeal/appeal.model'
+import { Withdraw } from '../withdraw/withdraw.model'
+import { WITHDRAW_STATUS } from '../withdraw/withdraw.constant'
+import { BlockProfile } from '../blockProfile/blockProfile.models'
+import { Reviews } from '../review/review.models'
+import { Notification } from '../notification/notification.model'
+import { PointsLog } from '../pointsLogs/pointsLogs.model'
+
+const ACTIVE_BOOKING_STATUSES_FOR_PROFILE_DELETE = [
+  BOOKING_STATUS.pending,
+  BOOKING_STATUS.confirmed,
+  BOOKING_STATUS.running,
+]
+
+const PENDING_WITHDRAW_STATUSES = [
+  WITHDRAW_STATUS.proceed,
+  WITHDRAW_STATUS.hold,
+]
 
 export const calculateProfileSetupProgress = (user: any): number => {
   if (!user || !user.role) {
@@ -300,6 +325,179 @@ export const sendExpertPendingEmail = async (user: TUser) => {
   )
 }
 
+
+export const assertUserCanDeleteProfile = async (userId: string) => {
+  const userObjectId = new Types.ObjectId(userId)
+
+  const [activeBooking, pendingWithdraw] = await Promise.all([
+    Booking.exists({
+      isDeleted: false,
+      status: { $in: ACTIVE_BOOKING_STATUSES_FOR_PROFILE_DELETE },
+      $or: [{ user: userObjectId }, { consult: userObjectId }],
+    }),
+    Withdraw.exists({
+      user: userObjectId,
+      isDeleted: false,
+      status: { $in: PENDING_WITHDRAW_STATUSES },
+    }),
+  ])
+
+  if (activeBooking) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Cannot delete profile while active bookings exist',
+    )
+  }
+
+  if (pendingWithdraw) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Cannot delete profile while pending withdrawals exist',
+    )
+  }
+}
+
+export const removeUserContentData = async (
+  userId: string,
+  session: ClientSession,
+) => {
+  const userObjectId = new Types.ObjectId(userId)
+
+  const feeds = await Feed.find({ author: userObjectId })
+    .select('_id contentMeta')
+    .session(session)
+  const feedIds = feeds.map((feed) => feed._id)
+  const contentMetaIds = feeds
+    .map((feed) => feed.contentMeta?.toString())
+    .filter((contentMetaId): contentMetaId is string => Boolean(contentMetaId))
+
+  if (feedIds.length > 0) {
+    const feedComments = await Comments.find({ content: { $in: feedIds } })
+      .select('_id')
+      .session(session)
+    const feedCommentIds = feedComments.map((comment) => comment._id)
+
+    await Promise.all([
+      feedCommentIds.length > 0
+        ? Reply.deleteMany({ replyRef: { $in: feedCommentIds } }).session(
+            session,
+          )
+        : Promise.resolve(),
+      Comments.deleteMany({ content: { $in: feedIds } }).session(session),
+      Report.deleteMany({ feed: { $in: feedIds } }).session(session),
+      Appeal.deleteMany({ feed: { $in: feedIds } }).session(session),
+      Feed.deleteMany({ _id: { $in: feedIds } }).session(session),
+    ])
+  }
+
+  if (contentMetaIds.length > 0) {
+    await ContentMeta.deleteMany({ _id: { $in: contentMetaIds } }).session(
+      session,
+    )
+  }
+
+  const userCommentsFilter: Record<string, unknown> = { user: userObjectId }
+  if (feedIds.length > 0) {
+    userCommentsFilter.content = { $nin: feedIds }
+  }
+
+  const userCommentsOnOthers = await Comments.find(userCommentsFilter).session(
+    session,
+  )
+
+  for (const comment of userCommentsOnOthers) {
+    const replyCount = await Reply.countDocuments({
+      replyRef: comment._id,
+    }).session(session)
+
+    await Reply.deleteMany({ replyRef: comment._id }).session(session)
+    await ContentMeta.updateOne(
+      { content: comment.content },
+      { $inc: { comment: -(1 + replyCount) } },
+      { session },
+    )
+  }
+
+  if (userCommentsOnOthers.length > 0) {
+    await Comments.deleteMany({
+      _id: { $in: userCommentsOnOthers.map((comment) => comment._id) },
+    }).session(session)
+  }
+
+  const userReplies = await Reply.find({ user: userObjectId }).session(session)
+
+  for (const reply of userReplies) {
+    if (!reply.replyRef) {
+      continue
+    }
+
+    const parentComment = await Comments.findById(reply.replyRef).session(
+      session,
+    )
+    if (!parentComment) {
+      continue
+    }
+
+    await Comments.updateOne(
+      { _id: parentComment._id },
+      { $pull: { reply: reply._id } },
+      { session },
+    )
+    await ContentMeta.updateOne(
+      { content: parentComment.content },
+      { $inc: { comment: -1 } },
+      { session },
+    )
+  }
+
+  if (userReplies.length > 0) {
+    await Reply.deleteMany({ user: userObjectId }).session(session)
+  }
+
+  await Promise.all([
+    Report.deleteMany({
+      $or: [{ author: userObjectId }, { feedAuthor: userObjectId }],
+    }).session(session),
+    Appeal.deleteMany({ user: userObjectId }).session(session),
+  ])
+
+  const likedContentMetas = await ContentMeta.find({
+    likeBy: userId,
+  }).session(session)
+
+  for (const contentMeta of likedContentMetas) {
+    const hasLiked = contentMeta.likeBy?.some(
+      (likedById) => likedById.toString() === userId,
+    )
+
+    if (!hasLiked) {
+      continue
+    }
+
+    await ContentMeta.updateOne(
+      { _id: contentMeta._id },
+      {
+        $pull: { likeBy: userId },
+        $inc: { like: -1 },
+      },
+      { session },
+    )
+  }
+
+  await Promise.all([
+    Follow.deleteMany({
+      $or: [{ follower: userObjectId }, { following: userObjectId }],
+    }).session(session),
+    BlockProfile.deleteMany({
+      $or: [{ blocker: userObjectId }, { blocked: userObjectId }],
+    }).session(session),
+    Reviews.deleteMany({
+      $or: [{ user: userObjectId }, { expert: userObjectId }],
+    }).session(session),
+    Notification.deleteMany({ receiver: userObjectId }).session(session),
+    PointsLog.deleteMany({ user: userObjectId }).session(session),
+  ])
+}
 
 export const sendSlotRegenerationNotification = async (expertId: string) => {
   const expert = await User.findById(expertId);

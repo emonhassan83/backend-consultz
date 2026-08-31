@@ -11,10 +11,12 @@ import {
   USER_STATUS,
 } from './user.constant'
 import {
+  assertUserCanDeleteProfile,
   calculateProfileSetupProgress,
   generateUserStatusEmail,
   getFollowingStatusBatch,
   getTotalBookingsBatch,
+  removeUserContentData,
   sendUserStatusNotifYToAdmin,
 } from './user.utils'
 import mongoose, { QueryFilter, Types } from 'mongoose'
@@ -1245,19 +1247,34 @@ const updateLocationFromDB = async (
 }
 
 const softDeleteUserFromDB = async (userId: string) => {
-  const result = await User.findByIdAndUpdate(
-    userId,
-    { isDeleted: true },
-    { new: true },
-  ).select(
-    '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto status createdAt',
-  )
+  await assertUserCanDeleteProfile(userId)
 
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Failed to update user status!')
+  const session = await mongoose.startSession()
+  session.startTransaction()
+
+  try {
+    await removeUserContentData(userId, session)
+
+    const result = await User.findByIdAndUpdate(
+      userId,
+      { isDeleted: true },
+      { new: true, session },
+    ).select(
+      '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto status createdAt',
+    )
+
+    if (!result) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Failed to update user status!')
+    }
+
+    await session.commitTransaction()
+    return result
+  } catch (error) {
+    await session.abortTransaction()
+    throw error
+  } finally {
+    session.endSession()
   }
-
-  return result
 }
 
 const deleteAUserFromDB = async (userId: string) => {
