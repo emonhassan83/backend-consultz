@@ -1,6 +1,6 @@
 import { Calling } from './calling.model'
 import { User } from '../user/user.model'
-import { generate32BitUid, generateAgoraToken } from './calling.utils'
+import { generateAgoraUidFromUserId, generateAgoraToken } from './calling.utils'
 import AppError from '../../errors/AppError'
 import httpStatus from 'http-status'
 import mongoose from 'mongoose'
@@ -56,11 +56,42 @@ const startCalling = async (userId: string, payload: ICalling) => {
       throw new AppError(httpStatus.NOT_FOUND, 'Receiver not found')
     }
 
-    /* 4. Create unique channel */
-    const channelName = `booking_${booking._id}_${Date.now()}`
+    const activeCall = await Calling.findOne({
+      booking: booking._id as any,
+      status: {
+        $in: [
+          CALLING_STATUS.pending,
+          CALLING_STATUS.ringing,
+          CALLING_STATUS.accepted,
+        ],
+      },
+      isDeleted: false,
+    }).session(session)
+
+    if (activeCall) {
+      const existingUid = generateAgoraUidFromUserId(userId)
+      const existingTokenData = generateAgoraToken({
+        channelName: activeCall.channelName,
+        uid: existingUid,
+      })
+
+      await session.commitTransaction()
+
+      return {
+        callId: activeCall._id,
+        channelName: activeCall.channelName,
+        token: existingTokenData.token,
+        uid: existingUid,
+        expireAt: existingTokenData.expireAt,
+        isVideo: activeCall.isVideo,
+      }
+    }
+
+    /* 4. Create stable channel */
+    const channelName = `booking_${booking._id}`
 
     /* 5. Generate token */
-    const uid = generate32BitUid()
+    const uid = generateAgoraUidFromUserId(userId)
     const tokenData = generateAgoraToken({
       channelName,
       uid,
@@ -108,7 +139,9 @@ const startCalling = async (userId: string, payload: ICalling) => {
       isVideo: payload.isVideo,
     }
   } catch (error) {
-    await session.abortTransaction()
+    if (session.inTransaction()) {
+      await session.abortTransaction()
+    }
     throw error
   } finally {
     session.endSession()
@@ -137,7 +170,7 @@ const generateCallToken = async (
     throw new AppError(httpStatus.FORBIDDEN, 'Unauthorized')
   }
 
-  const uid = generate32BitUid()
+  const uid = generateAgoraUidFromUserId(userId)
 
   const tokenData = generateAgoraToken({
     channelName: call.channelName,

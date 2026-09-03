@@ -13,7 +13,7 @@ import {
   PAYMENT_STATUS,
 } from '../../../modules/booking/booking.constants'
 import {
-  generate32BitUid,
+  generateAgoraUidFromUserId,
   generateAgoraToken,
 } from '../../../modules/calling/calling.utils'
 import { CALLING_STATUS } from '../../../modules/calling/calling.constant'
@@ -70,10 +70,53 @@ const callStart = eventHandler<TCallStartPayload>(
         throw new AppError(httpStatus.NOT_FOUND, 'Receiver not found')
       }
 
-      const channelName = `booking_${booking._id}_${Date.now()}`
+      const activeCall = await Calling.findOne({
+        booking: booking._id as any,
+        status: {
+          $in: [
+            CALLING_STATUS.pending,
+            CALLING_STATUS.ringing,
+            CALLING_STATUS.accepted,
+          ],
+        },
+        isDeleted: false,
+      }).session(session)
 
-      const callerUid = generate32BitUid()
-      const receiverUid = generate32BitUid()
+      if (activeCall) {
+        const callerUid =
+          activeCall.participants?.find(
+            (participant: any) =>
+              participant.user?.toString() === caller._id.toString(),
+          )?.agoraUid || generateAgoraUidFromUserId(caller._id.toString())
+
+        const callerTokenData = generateAgoraToken({
+          channelName: activeCall.channelName,
+          uid: callerUid,
+        })
+
+        await session.commitTransaction()
+
+        return callbackFn(callback, {
+          success: true,
+          message: 'Active call already exists for this booking',
+          data: {
+            callId: activeCall._id,
+            channelName: activeCall.channelName,
+            token: callerTokenData.token,
+            uid: callerUid,
+            expireAt: callerTokenData.expireAt,
+            isVideo: activeCall.isVideo,
+            bookingId: booking._id.toString(),
+            expertId: booking.consult.toString(),
+            userId: booking.user.toString(),
+          },
+        })
+      }
+
+      const channelName = `booking_${booking._id}`
+
+      const callerUid = generateAgoraUidFromUserId(caller._id.toString())
+      const receiverUid = generateAgoraUidFromUserId(receiver._id.toString())
 
       const callerTokenData = generateAgoraToken({
         channelName,
@@ -188,7 +231,9 @@ const callStart = eventHandler<TCallStartPayload>(
         })
       }
     } catch (error: any) {
-      await session.abortTransaction()
+      if (session.inTransaction()) {
+        await session.abortTransaction()
+      }
       console.error('callStart error:', error.message)
       callbackFn(callback, { success: false, message: error.message })
     } finally {

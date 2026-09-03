@@ -1,8 +1,18 @@
 import { RtcTokenBuilder, RtcRole } from 'agora-access-token';
 import config from '../../config';
+import crypto from 'crypto';
+
+const MAX_SIGNED_32_BIT_INT = 0x7FFFFFFF;
 
 export const generate32BitUid = () => {
-  return Math.floor(Math.random() * 0xFFFFFFFF);
+  return Math.floor(Math.random() * MAX_SIGNED_32_BIT_INT) + 1;
+};
+
+export const generateAgoraUidFromUserId = (userId: string) => {
+  const hash = crypto.createHash('sha256').update(userId).digest();
+  const uid = hash.readUInt32BE(0) % MAX_SIGNED_32_BIT_INT;
+
+  return uid || 1;
 };
 
 export const generateAgoraToken = ({
