@@ -14,6 +14,10 @@ import {
   PAYMENT_STATUS,
 } from '../../../modules/booking/booking.constants'
 import AppError from '../../../errors/AppError'
+import {
+  generateAgoraToken,
+  generateAgoraUidFromUserId,
+} from '../../../modules/calling/calling.utils'
 
 type TCallInvitePayload = {
   callId: string
@@ -95,14 +99,20 @@ export const callInvite = eventHandler<TCallInvitePayload>(
         }
 
         if (user.deviceType === 'ios' && user.voipToken) {
+          const agoraUid =
+            participant.agoraUid || generateAgoraUidFromUserId(user._id.toString())
+          const tokenData = generateAgoraToken({
+            channelName: call.channelName,
+            uid: agoraUid,
+          })
           // iOS → VoIP Push
           await sendVoIPPush(user.voipToken, {
             call_id: call._id.toString(),
             caller_name: callPayload.callerName,
             caller_photo: callPayload.callerPhoto,
             channel_name: call.channelName,
-            agora_token: '',
-            agora_uid: 0,
+            agora_token: tokenData.token,
+            agora_uid: agoraUid,
             is_video: call.isVideo,
 
             // for rating: bookingId, expertID, userID

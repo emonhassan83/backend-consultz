@@ -38,7 +38,7 @@ export const sendVoIPPush = async (
   notification.topic = `${config.apns.bundleId}.voip`;   // খুব গুরুত্বপূর্ণ
   notification.expiry = Math.floor(Date.now() / 1000) + 3600; // 1 hour
   notification.priority = 10;
-  notification.pushType = 'alert';
+  notification.pushType = 'voip';
 
   // VoIP Payload
   notification.payload = {
@@ -52,7 +52,11 @@ export const sendVoIPPush = async (
     channel_name: callData.channel_name,
     agora_token: callData.agora_token,
     agora_uid: callData.agora_uid,
+    channelName: callData.channel_name,
+    token: callData.agora_token,
+    uid: callData.agora_uid,
     is_video: callData.is_video,
+    isVideo: callData.is_video,
     // extra info
     bookingId: callData.bookingId,
     expertId: callData.expertId,
