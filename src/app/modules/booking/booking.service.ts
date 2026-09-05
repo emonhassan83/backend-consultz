@@ -42,6 +42,7 @@ import {
 import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
 import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
 import { getGeneralSettingNumber } from '../contents/contents.utils'
+import { Reviews } from '../review/review.models'
 
 const getEntityId = (entity: any): string =>
   (entity?._id || entity)?.toString()
@@ -703,12 +704,17 @@ const getBookingsById = async (id: string, currentUserId: string) => {
   )
 
   const payment = await Payment.findOne({ booking: result._id.toString() }).lean()
+  const hasReviewSubmitted = !!(await Reviews.exists({
+    booking: result._id as any,
+    user: getEntityId(result.user) as any,
+  }))
 
   return {
     ...attachBookingDisplayFields(result.toObject()),
     unreadMessageCount,
     totalPay: payment?.amount || 0,
     vat: payment?.consultantVat || 0,
+    hasReviewSubmitted,
   }
 }
 
