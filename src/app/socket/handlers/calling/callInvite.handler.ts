@@ -106,7 +106,7 @@ export const callInvite = eventHandler<TCallInvitePayload>(
             uid: agoraUid,
           })
           // iOS → VoIP Push
-          await sendVoIPPush(user.voipToken, {
+          const voipResult = await sendVoIPPush(user.voipToken, {
             call_id: call._id.toString(),
             caller_name: callPayload.callerName,
             caller_photo: callPayload.callerPhoto,
@@ -120,6 +120,13 @@ export const callInvite = eventHandler<TCallInvitePayload>(
             expertId: booking.consult.toString(),
             userId: booking.user.toString(),
           })
+
+          if (!voipResult.success && voipResult.reason === 'BadDeviceToken') {
+            await User.updateOne(
+              { _id: user._id, voipToken: user.voipToken },
+              { $set: { voipToken: null } },
+            )
+          }
         } else if (user.fcmToken) {
           // Android / Fallback → FCM
           await sendDataMessageToToken(user.fcmToken, {

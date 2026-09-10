@@ -210,7 +210,7 @@ const callStart = eventHandler<TCallStartPayload>(
 
       if (receiver.deviceType === 'ios' && receiver.voipToken) {
         // iOS → VoIP Push
-        await sendVoIPPush(receiver.voipToken, {
+        const voipResult = await sendVoIPPush(receiver.voipToken, {
           call_id: calling._id.toString(),
           caller_name: callIncomingPayload.callerName,
           caller_photo: callIncomingPayload.callerPhoto,
@@ -224,6 +224,13 @@ const callStart = eventHandler<TCallStartPayload>(
           expertId: booking.consult.toString(),
           userId: booking.user.toString(),
         })
+
+        if (!voipResult.success && voipResult.reason === 'BadDeviceToken') {
+          await User.updateOne(
+            { _id: receiver._id, voipToken: receiver.voipToken },
+            { $set: { voipToken: null } },
+          )
+        }
       } else if (receiver.fcmToken) {
         // Android or fallback → FCM
         await sendDataMessageToToken(receiver.fcmToken, {

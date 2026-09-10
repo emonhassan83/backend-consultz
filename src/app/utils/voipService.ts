@@ -5,6 +5,11 @@ import path from 'path';
 import config from '../config';
 import { ObjectId } from 'mongoose';
 
+type TVoIPPushResult = {
+  success: boolean;
+  reason?: string;
+};
+
 const apnProvider = new apn.Provider({
   token: {
     key: fs.readFileSync(
@@ -32,7 +37,7 @@ export const sendVoIPPush = async (
     expertId: string | ObjectId,
     userId: string | ObjectId
   }
-): Promise<boolean> => {
+): Promise<TVoIPPushResult> => {
   const notification = new apn.Notification();
 
   notification.topic = `${config.apns.bundleId}.voip`;   // খুব গুরুত্বপূর্ণ
@@ -68,13 +73,16 @@ export const sendVoIPPush = async (
 
     if (response.sent.length > 0) {
       console.log(`[VoIP Push] ✅ Successfully sent to iOS device`);
-      return true;
+      return { success: true };
     } else {
       console.error('[VoIP Push] ❌ Failed:', response.failed);
-      return false;
+      return {
+        success: false,
+        reason: response.failed?.[0]?.response?.reason,
+      };
     }
   } catch (error: any) {
     console.error('[VoIP Push] Error:', error.message);
-    return false;
+    return { success: false, reason: error.message };
   }
 };

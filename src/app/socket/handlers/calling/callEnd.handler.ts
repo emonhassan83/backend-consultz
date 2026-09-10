@@ -1,67 +1,98 @@
 // src/app/socket/handlers/call/callEnd.handler.ts
-import { TSocket } from '../../interface/socket.interface';
-import eventHandler from '../../utils/eventHandler';
-import { Calling } from '../../../modules/calling/calling.model';
-import { User } from '../../../modules/user/user.model';
-import mongoose from 'mongoose';
-import httpStatus from 'http-status';
-import AppError from '../../../errors/AppError';
-import { CALLING_STATUS } from '../../../modules/calling/calling.constant';
-import { sendNotification } from '../../../utils/sentNotification';
-import { modeType } from '../../../modules/notification/notification.interface';
-import { callbackFn } from '../../../utils/CallbackFn';
+import httpStatus from 'http-status'
+import AppError from '../../../errors/AppError'
+import { CALLING_STATUS } from '../../../modules/calling/calling.constant'
+import { Calling } from '../../../modules/calling/calling.model'
+import { modeType } from '../../../modules/notification/notification.interface'
+import { User } from '../../../modules/user/user.model'
+import { callbackFn } from '../../../utils/CallbackFn'
+import { sendNotification } from '../../../utils/sentNotification'
+import { TSocket } from '../../interface/socket.interface'
+import eventHandler from '../../utils/eventHandler'
 
 type TCallEndPayload = {
-  callId: string;
-  duration?: string;
-};
+  callId: string
+  duration?: string
+}
+
+const terminalStatuses = [
+  CALLING_STATUS.ended,
+  CALLING_STATUS.completed,
+  CALLING_STATUS.cancelled,
+  CALLING_STATUS.missed,
+  CALLING_STATUS.rejected,
+]
 
 const callEnd = eventHandler<TCallEndPayload>(
   async (socket: TSocket, data, callback) => {
-    const userId = socket.auth._id.toString();
-    const { callId, duration: clientDuration } = data || {};
+    const userId = socket.auth._id.toString()
+    const { callId, duration: clientDuration } = data || {}
 
     if (!callId) {
-      return callbackFn(callback, { 
-        success: false, 
-        message: 'callId is required' 
-      });
+      return callbackFn(callback, {
+        success: false,
+        message: 'callId is required',
+      })
     }
 
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
     try {
-      // 1. Find call with authorization
-      const call = await Calling.findOne({
-        _id: callId,
-        $or: [{ caller: userId }, { receiver: userId }],
-        isDeleted: false,
-      }).session(session);
+      const now = new Date()
+
+      const call = await Calling.findOneAndUpdate(
+        {
+          _id: callId,
+          $or: [{ caller: userId }, { receiver: userId }],
+          status: { $nin: terminalStatuses },
+          isDeleted: false,
+        },
+        {
+          $set: {
+            status: CALLING_STATUS.ended,
+            endedAt: now,
+            duration: clientDuration,
+          },
+        },
+        { new: true },
+      )
 
       if (!call) {
-        throw new AppError(httpStatus.NOT_FOUND, 'Call session not found or unauthorized');
+        const existingCall = await Calling.findOne({
+          _id: callId,
+          $or: [{ caller: userId }, { receiver: userId }],
+          isDeleted: false,
+        })
+
+        if (!existingCall) {
+          throw new AppError(
+            httpStatus.NOT_FOUND,
+            'Call session not found or unauthorized',
+          )
+        }
+
+        if (terminalStatuses.includes(existingCall.status as any)) {
+          return callbackFn(callback, {
+            statusCode: httpStatus.OK,
+            success: true,
+            message: 'Call already ended',
+            data: {
+              callId: existingCall._id,
+              duration: existingCall.duration || clientDuration,
+              endedAt: existingCall.endedAt,
+            },
+          })
+        }
+
+        throw new AppError(httpStatus.BAD_REQUEST, 'Failed to end call')
       }
 
-      // 2. Calculate duration
-      const now = new Date();
-
-      // 3. Update call
-      call.status = CALLING_STATUS.ended;
-      call.endedAt = now;
-      call.duration = clientDuration;
-      await call.save({ session });
-
-
-      // 6. Notification to both users
       const [caller, receiver] = await Promise.all([
         User.findById(call.caller),
         User.findById(call.receiver),
-      ]);
+      ])
 
-      const tokens: string[] = [];
-      if (caller?.fcmToken) tokens.push(caller.fcmToken);
-      if (receiver?.fcmToken) tokens.push(receiver.fcmToken);
+      const tokens: string[] = []
+      if (caller?.fcmToken) tokens.push(caller.fcmToken)
+      if (receiver?.fcmToken) tokens.push(receiver.fcmToken)
 
       if (tokens.length > 0) {
         await sendNotification(tokens, {
@@ -70,30 +101,27 @@ const callEnd = eventHandler<TCallEndPayload>(
           description: `Your ${call.isVideo ? 'video' : 'voice'} call has ended. Duration: ${clientDuration}`,
           reference: call._id,
           modelType: modeType.Calling,
-        });
+        }).catch((err: any) =>
+          console.error(`Notification failed (call end): ${err.message}`),
+        )
       }
 
-      await session.commitTransaction();
-
-      // 8. Emit to all participants
-      const participants = [call.caller.toString(), call.receiver.toString()];
+      const participants = [call.caller.toString(), call.receiver.toString()]
 
       socket.to(participants).emit('callEnded', {
         callId: call._id,
         duration: clientDuration,
         endedAt: now,
-        status: CALLING_STATUS.completed,
-      });
+        status: CALLING_STATUS.ended,
+      })
 
-      // Caller নিজেও পায়
       socket.emit('callEnded', {
         callId: call._id,
         duration: clientDuration,
         endedAt: now,
-        status: CALLING_STATUS.completed,
-      });
+        status: CALLING_STATUS.ended,
+      })
 
-      // ✅ callbackFn দিয়ে response দাও (chat এর মতো)
       callbackFn(callback, {
         statusCode: httpStatus.OK,
         success: true,
@@ -102,21 +130,17 @@ const callEnd = eventHandler<TCallEndPayload>(
           callId: call._id,
           duration: clientDuration,
           endedAt: now,
-        }
-      });
-
+        },
+      })
     } catch (error: any) {
-      await session.abortTransaction();
-      console.error('❌ Call end error:', error.message);
+      console.error('Call end error:', error.message)
 
       callbackFn(callback, {
         success: false,
         message: error.message || 'Failed to end call',
-      });
-    } finally {
-      session.endSession();
+      })
     }
-  }
-);
+  },
+)
 
-export default callEnd;
+export default callEnd
