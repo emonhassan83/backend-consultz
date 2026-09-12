@@ -73,6 +73,7 @@ export interface TUser {
   registerWith: string
   needsPasswordChange: boolean
   passwordChangedAt?: Date
+  lastLogAt?: Date
   verification: {
     otp: string | number
     expiresAt: Date

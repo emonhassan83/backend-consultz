@@ -32,7 +32,7 @@ import { modeType } from '../notification/notification.interface'
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore'
 import { TUser } from '../user/user.interface'
 import { timeSensitiveNotificationsJob } from '../../job/timeSensitiveNotifications.job'
-import { USER_STATUS } from '../user/user.constant'
+import { USER_ROLE, USER_STATUS } from '../user/user.constant'
 import {
   buildBookingInterval,
   isMinNoticeSatisfied,
@@ -563,6 +563,34 @@ const getAllBookings = async (
   })
 
   return { data: enriched, meta }
+}
+
+const getExpertBooking = async (
+  expertId: string,
+  query: Record<string, any>,
+  currentUserId: string,
+) => {
+  if (!mongoose.Types.ObjectId.isValid(expertId)) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid expert id')
+  }
+
+  const expert = await User.findOne({
+    _id: expertId,
+    role: USER_ROLE.expert,
+    isDeleted: false,
+  }).select('_id')
+
+  if (!expert) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Expert not found')
+  }
+
+  return getAllBookings(
+    {
+      ...query,
+      consult: expertId,
+    },
+    currentUserId,
+  )
 }
 
 const getAllBookingsByDate = async (
@@ -1708,6 +1736,7 @@ export const bookingsService = {
   createBookings,
   getBookingCalender,
   getAllBookings,
+  getExpertBooking,
   getAllBookingsByDate,
   getBookingsById,
   deleteBookings,

@@ -2,8 +2,7 @@ import { USER_ROLE, USER_STATUS } from '../user/user.constant'
 import { User } from '../user/user.model'
 import { Notification } from '../notification/notification.model'
 import {
-  getEarningOverview,
-  getRevenueVsCommission,
+  getDashboardPaymentOverview,
   getUserOverview,
 } from './meta.utils'
 import { Withdraw } from '../withdraw/withdraw.model'
@@ -16,8 +15,6 @@ const fetchDashboardMetaData = async (
   query: Record<string, unknown>,
   userId: string,
 ) => {
-  const { revenue_year, earning_year } = query
-
   const totalConsultCount = await User.countDocuments({
     role: USER_ROLE.consult,
     status: USER_STATUS.active,
@@ -30,22 +27,11 @@ const fetchDashboardMetaData = async (
     isDeleted: false,
   })
 
-  const selectedRevenueYear = revenue_year
-    ? parseInt(revenue_year as string, 10) || new Date().getFullYear()
-    : new Date().getFullYear()
-
-  const selectedEarningYear = earning_year
-    ? parseInt(earning_year as string, 10) || new Date().getFullYear()
-    : new Date().getFullYear()
-
-  const revenueVsCommissionData =
-    await getRevenueVsCommission(selectedRevenueYear)
-
-  const earningOverviewData = await getEarningOverview(selectedEarningYear)
   const platformFeePercentage = await getGeneralSettingNumber(
     'platformFeePercentage',
     20,
   )
+  const paymentOverview = await getDashboardPaymentOverview(query)
 
   const latestUsers = await User.find({
     role: { $ne: USER_ROLE.admin },
@@ -72,15 +58,15 @@ const fetchDashboardMetaData = async (
     totalConsultCount,
     totalExpertCount,
     platformFeePercentage,
-    totalEarnings: earningOverviewData.totalEarnings,
-    grossBookingValue: earningOverviewData.grossBookingValue,
-    totalCommission: revenueVsCommissionData.totalCommission,
-    platformCommission: earningOverviewData.platformCommission,
-    platformVat: earningOverviewData.platformVat,
-    platformTotalDeduction: earningOverviewData.platformTotalDeduction,
-    expertPayout: earningOverviewData.expertPayout,
-    revenueVsCommission: revenueVsCommissionData.monthlyData,
-    earningOverview: earningOverviewData.monthlyData,
+    totalEarnings: paymentOverview.totalEarnings,
+    grossBookingValue: paymentOverview.grossBookingValue,
+    totalCommission: paymentOverview.totalCommission,
+    platformCommission: paymentOverview.platformCommission,
+    platformVat: paymentOverview.platformVat,
+    platformTotalDeduction: paymentOverview.platformTotalDeduction,
+    expertPayout: paymentOverview.expertPayout,
+    revenueVsCommission: paymentOverview.revenueVsCommission,
+    earningOverview: paymentOverview.earningOverview,
     notifications,
     latestUsers,
   }

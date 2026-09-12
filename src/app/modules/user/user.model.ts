@@ -165,6 +165,7 @@ const userSchema = new Schema<TUser, UserModel>(
     },
     needsPasswordChange: { type: Boolean, default: true },
     passwordChangedAt: { type: Date, default: null },
+    lastLogAt: { type: Date, default: null },
 
     verification: {
       otp: { type: Schema.Types.Mixed, default: 0 },

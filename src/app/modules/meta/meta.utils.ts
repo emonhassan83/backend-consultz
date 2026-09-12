@@ -1,8 +1,15 @@
-import { endOfYear, startOfYear } from 'date-fns'
+import dayjs from 'dayjs'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
+import timezone from 'dayjs/plugin/timezone'
+import utc from 'dayjs/plugin/utc'
 import { USER_ROLE, USER_STATUS } from '../user/user.constant'
 import { User } from '../user/user.model'
 import { PAYMENT_STATUS } from '../payment/payment.constant'
 import { Payment } from '../payment/payment.model'
+
+dayjs.extend(utc)
+dayjs.extend(timezone)
+dayjs.extend(customParseFormat)
 
 const MONTHS = [
   'jan',
@@ -19,14 +26,173 @@ const MONTHS = [
   'dec',
 ]
 
-const getPaymentFinancialOverview = async (year: number) => {
-  const yearStart = startOfYear(new Date(year, 0, 1))
-  const yearEnd = endOfYear(new Date(year, 11, 31))
+const MS_IN_DAY = 24 * 60 * 60 * 1000
 
-  const monthlyDataRaw = await Payment.aggregate([
+type TDashboardFilterType =
+  | 'last_7_days'
+  | 'last_30_days'
+  | 'this_quarter'
+  | 'monthly'
+  | 'weekly'
+  | 'custom'
+
+type TPaymentBucket = {
+  label: string
+  key: string
+  grossBookingValue: number
+  platformCommission: number
+  platformVat: number
+  platformTotalDeduction: number
+  expertPayout: number
+}
+
+const round2 = (value: number) => Number((value || 0).toFixed(2))
+
+const parsePositiveInt = (value: unknown, fallback: number) => {
+  const parsed = parseInt(String(value ?? ''), 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+const getDateLabel = (dateKey: string) => dayjs(dateKey).format('MMM DD')
+
+const getMonthLabel = (monthKey: string) => {
+  const monthIndex = parseInt(monthKey.slice(5, 7), 10) - 1
+  return MONTHS[monthIndex] || monthKey
+}
+
+const buildDayBuckets = (start: dayjs.Dayjs, end: dayjs.Dayjs) => {
+  const buckets: { key: string; label: string }[] = []
+  let cursor = start.startOf('day')
+  const last = end.startOf('day')
+
+  while (cursor.isSame(last) || cursor.isBefore(last)) {
+    const key = cursor.format('YYYY-MM-DD')
+    buckets.push({ key, label: getDateLabel(key) })
+    cursor = cursor.add(1, 'day')
+  }
+
+  return buckets
+}
+
+const buildMonthBuckets = (start: dayjs.Dayjs, end: dayjs.Dayjs) => {
+  const buckets: { key: string; label: string }[] = []
+  let cursor = start.startOf('month')
+  const last = end.startOf('month')
+
+  while (cursor.isSame(last) || cursor.isBefore(last)) {
+    const key = cursor.format('YYYY-MM')
+    buckets.push({ key, label: getMonthLabel(key) })
+    cursor = cursor.add(1, 'month')
+  }
+
+  return buckets
+}
+
+const resolveDashboardDateFilter = (query: Record<string, unknown>) => {
+  const filterType = query.filterType as TDashboardFilterType | undefined
+  const timezoneName = (query.timezone as string) || 'UTC'
+  const now = dayjs().tz(timezoneName)
+  const selectedYear = parsePositiveInt(
+    query.year || query.revenue_year || query.earning_year,
+    now.year(),
+  )
+
+  let start = dayjs.tz(`${selectedYear}-01-01`, 'YYYY-MM-DD', timezoneName)
+  let end = start.endOf('year')
+  let bucketType: 'day' | 'month' = 'month'
+
+  switch (filterType) {
+    case 'last_7_days':
+      start = now.subtract(6, 'day').startOf('day')
+      end = now.endOf('day')
+      bucketType = 'day'
+      break
+
+    case 'last_30_days':
+      start = now.subtract(29, 'day').startOf('day')
+      end = now.endOf('day')
+      bucketType = 'day'
+      break
+
+    case 'this_quarter': {
+      const quarterStartMonth = Math.floor(now.month() / 3) * 3
+      start = now.month(quarterStartMonth).startOf('month')
+      end = start.add(2, 'month').endOf('month')
+      bucketType = 'month'
+      break
+    }
+
+    case 'monthly': {
+      const month = Math.min(
+        Math.max(parsePositiveInt(query.month, now.month() + 1), 1),
+        12,
+      )
+      start = dayjs.tz(
+        `${selectedYear}-${String(month).padStart(2, '0')}-01`,
+        'YYYY-MM-DD',
+        timezoneName,
+      )
+      end = start.endOf('month')
+      bucketType = 'day'
+      break
+    }
+
+    case 'weekly': {
+      const weekStart = query.weekStart
+        ? dayjs.tz(String(query.weekStart), 'YYYY-MM-DD', timezoneName)
+        : now.startOf('week')
+      start = weekStart.startOf('day')
+      end = start.add(6, 'day').endOf('day')
+      bucketType = 'day'
+      break
+    }
+
+    case 'custom': {
+      const customStart = query.startDate
+        ? dayjs.tz(String(query.startDate), 'YYYY-MM-DD', timezoneName)
+        : start
+      const customEnd = query.endDate
+        ? dayjs.tz(String(query.endDate), 'YYYY-MM-DD', timezoneName)
+        : end
+      start = customStart.startOf('day')
+      end = customEnd.endOf('day')
+      const days = Math.floor((end.valueOf() - start.valueOf()) / MS_IN_DAY) + 1
+      bucketType = days <= 31 ? 'day' : 'month'
+      break
+    }
+
+    default:
+      break
+  }
+
+  if (end.isBefore(start)) {
+    end = start.endOf(bucketType)
+  }
+
+  const buckets =
+    bucketType === 'day'
+      ? buildDayBuckets(start, end)
+      : buildMonthBuckets(start, end)
+
+  return {
+    startDate: start.toDate(),
+    endDate: end.toDate(),
+    bucketType,
+    timezoneName,
+    buckets,
+  }
+}
+
+export const getDashboardPaymentOverview = async (
+  query: Record<string, unknown>,
+) => {
+  const filter = resolveDashboardDateFilter(query)
+  const dateFormat = filter.bucketType === 'day' ? '%Y-%m-%d' : '%Y-%m'
+
+  const rawBuckets = await Payment.aggregate([
     {
       $match: {
-        createdAt: { $gte: yearStart, $lte: yearEnd },
+        createdAt: { $gte: filter.startDate, $lte: filter.endDate },
         isPaid: true,
         status: PAYMENT_STATUS.paid,
         isDeleted: false,
@@ -34,7 +200,13 @@ const getPaymentFinancialOverview = async (year: number) => {
     },
     {
       $group: {
-        _id: { $month: '$createdAt' },
+        _id: {
+          $dateToString: {
+            format: dateFormat,
+            date: '$createdAt',
+            timezone: filter.timezoneName,
+          },
+        },
         grossBookingValue: {
           $sum: { $ifNull: ['$grossBookingValue', '$amount'] },
         },
@@ -51,87 +223,103 @@ const getPaymentFinancialOverview = async (year: number) => {
     { $sort: { _id: 1 } },
   ])
 
-  const monthlyData = MONTHS.map((month, index) => {
-    const data = monthlyDataRaw.find((m: any) => m._id === index + 1)
-    const grossBookingValue = data?.grossBookingValue || 0
-    const platformCommission = data?.platformCommission || 0
+  const bucketMap = new Map<string, TPaymentBucket>(
+    rawBuckets.map((bucket: any) => [
+      bucket._id,
+      {
+        key: bucket._id,
+        label:
+          filter.bucketType === 'day'
+            ? getDateLabel(bucket._id)
+            : getMonthLabel(bucket._id),
+        grossBookingValue: bucket.grossBookingValue || 0,
+        platformCommission: bucket.platformCommission || 0,
+        platformVat: bucket.platformVat || 0,
+        platformTotalDeduction: bucket.platformTotalDeduction || 0,
+        expertPayout: bucket.expertPayout || 0,
+      },
+    ]),
+  )
+
+  const buckets = filter.buckets.map((bucket) => {
+    const data = bucketMap.get(bucket.key)
 
     return {
-      month,
-      grossBookingValue,
-      revenue: grossBookingValue,
-      platformCommission,
-      commission: platformCommission,
-      platformVat: data?.platformVat || 0,
-      platformTotalDeduction: data?.platformTotalDeduction || 0,
-      expertPayout: data?.expertPayout || 0,
+      key: bucket.key,
+      label: bucket.label,
+      grossBookingValue: round2(data?.grossBookingValue || 0),
+      platformCommission: round2(data?.platformCommission || 0),
+      platformVat: round2(data?.platformVat || 0),
+      platformTotalDeduction: round2(data?.platformTotalDeduction || 0),
+      expertPayout: round2(data?.expertPayout || 0),
     }
   })
 
-  return {
-    totalGrossBookingValue: monthlyDataRaw.reduce(
-      (sum, m) => sum + m.grossBookingValue,
-      0,
-    ),
-    totalEarnings: monthlyDataRaw.reduce(
-      (sum, m) => sum + m.grossBookingValue,
-      0,
-    ),
-    totalPlatformCommission: monthlyDataRaw.reduce(
-      (sum, m) => sum + m.platformCommission,
-      0,
-    ),
-    totalCommission: monthlyDataRaw.reduce(
-      (sum, m) => sum + m.platformCommission,
-      0,
-    ),
-    totalPlatformVat: monthlyDataRaw.reduce((sum, m) => sum + m.platformVat, 0),
-    totalPlatformTotalDeduction: monthlyDataRaw.reduce(
-      (sum, m) => sum + m.platformTotalDeduction,
-      0,
-    ),
-    totalExpertPayout: monthlyDataRaw.reduce(
-      (sum, m) => sum + m.expertPayout,
-      0,
-    ),
-    consultAmount: monthlyDataRaw.reduce((sum, m) => sum + m.expertPayout, 0),
-    monthlyData,
-  }
-}
-
-export const getRevenueVsCommission = async (year: number) => {
-  const overview = await getPaymentFinancialOverview(year)
+  const totals = buckets.reduce(
+    (acc, bucket) => {
+      acc.grossBookingValue += bucket.grossBookingValue
+      acc.platformCommission += bucket.platformCommission
+      acc.platformVat += bucket.platformVat
+      acc.platformTotalDeduction += bucket.platformTotalDeduction
+      acc.expertPayout += bucket.expertPayout
+      return acc
+    },
+    {
+      grossBookingValue: 0,
+      platformCommission: 0,
+      platformVat: 0,
+      platformTotalDeduction: 0,
+      expertPayout: 0,
+    },
+  )
 
   return {
-    totalCommission: overview.totalCommission,
-    totalPlatformCommission: overview.totalPlatformCommission,
-    totalPlatformVat: overview.totalPlatformVat,
-    totalPlatformTotalDeduction: overview.totalPlatformTotalDeduction,
-    monthlyData: overview.monthlyData,
-  }
-}
-
-export const getEarningOverview = async (year: number) => {
-  const overview = await getPaymentFinancialOverview(year)
-
-  return {
-    totalEarnings: overview.totalEarnings,
-    grossBookingValue: overview.totalGrossBookingValue,
-    consultAmount: overview.consultAmount,
-    expertPayout: overview.totalExpertPayout,
-    platformCommission: overview.totalPlatformCommission,
-    platformVat: overview.totalPlatformVat,
-    platformTotalDeduction: overview.totalPlatformTotalDeduction,
-    monthlyData: overview.monthlyData.map((data) => ({
-      ...data,
-      total: data.grossBookingValue,
+    totalEarnings: round2(totals.grossBookingValue),
+    grossBookingValue: round2(totals.grossBookingValue),
+    totalCommission: round2(totals.platformCommission),
+    platformCommission: round2(totals.platformCommission),
+    platformVat: round2(totals.platformVat),
+    platformTotalDeduction: round2(totals.platformTotalDeduction),
+    expertPayout: round2(totals.expertPayout),
+    revenueVsCommission: buckets.map((bucket) => ({
+      month: bucket.label,
+      revenue: bucket.grossBookingValue,
+      commission: bucket.platformCommission,
+    })),
+    earningOverview: buckets.map((bucket) => ({
+      month: bucket.label,
+      total: bucket.grossBookingValue,
     })),
   }
 }
 
+export const getRevenueVsCommission = async (year: number) => {
+  const overview = await getDashboardPaymentOverview({ year })
+
+  return {
+    totalCommission: overview.totalCommission,
+    monthlyData: overview.revenueVsCommission,
+  }
+}
+
+export const getEarningOverview = async (year: number) => {
+  const overview = await getDashboardPaymentOverview({ year })
+
+  return {
+    totalEarnings: overview.totalEarnings,
+    grossBookingValue: overview.grossBookingValue,
+    consultAmount: overview.expertPayout,
+    expertPayout: overview.expertPayout,
+    platformCommission: overview.platformCommission,
+    platformVat: overview.platformVat,
+    platformTotalDeduction: overview.platformTotalDeduction,
+    monthlyData: overview.earningOverview,
+  }
+}
+
 export const getUserOverview = async (year: number, role?: string | null) => {
-  const yearStart = startOfYear(new Date(year, 0, 1))
-  const yearEnd = endOfYear(new Date(year, 11, 31))
+  const yearStart = dayjs.utc(`${year}-01-01`, 'YYYY-MM-DD').toDate()
+  const yearEnd = dayjs.utc(`${year}-12-31`, 'YYYY-MM-DD').endOf('day').toDate()
 
   const matchConditions: any = {
     createdAt: { $gte: yearStart, $lte: yearEnd },

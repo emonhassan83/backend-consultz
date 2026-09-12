@@ -91,6 +91,12 @@ router.get(
 )
 
 router.get(
+  '/expert/:expertId',
+  auth(USER_ROLE.admin),
+  bookingsController.getExpertBooking,
+)
+
+router.get(
   '/:id',
   auth(USER_ROLE.consult, USER_ROLE.expert, USER_ROLE.admin),
   bookingsController.getBookingsById,

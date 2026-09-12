@@ -47,6 +47,7 @@ const removeUndefinedFields = <T extends Record<string, any>>(payload: T): Parti
 }
 
 const loginUser = async (payload: TLoginUser) => {
+  const now = new Date()
   //* checking if the user is exist
   const user = await User.isUserExistsByEmail(payload.email)
   if (!user || user?.isDeleted) {
@@ -90,7 +91,7 @@ const loginUser = async (payload: TLoginUser) => {
   )
 
   //* 5. Prepare update object for FCM + location
-  const updateData: any = {}
+  const updateData: any = { lastLogAt: now }
 
   if (payload.fcmToken) updateData.fcmToken = payload.fcmToken;
   if (payload.voipToken) updateData.voipToken = payload.voipToken;
@@ -105,29 +106,31 @@ const loginUser = async (payload: TLoginUser) => {
   }
 
   //* 6. Update user document if needed
-  if (Object.keys(updateData).length > 0) {
-    await User.findByIdAndUpdate(user._id, updateData, { returnDocument: 'after' })
-  }
+  const updatedUser = await User.findByIdAndUpdate(user._id, updateData, {
+    returnDocument: 'after',
+  })
 
   return {
     accessToken,
     refreshToken,
     user: {
-      _id: user._id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      role: user.role,
-      isProfileSetup: user.isProfileSetup,
-      status: user.status,
-      registerWith: user.registerWith,
-      deviceType: payload.deviceType || user.deviceType,
-      timeZone: user.timeZone,
+      _id: updatedUser?._id || user._id,
+      firstName: updatedUser?.firstName || user.firstName,
+      lastName: updatedUser?.lastName || user.lastName,
+      email: updatedUser?.email || user.email,
+      role: updatedUser?.role || user.role,
+      isProfileSetup: updatedUser?.isProfileSetup ?? user.isProfileSetup,
+      status: updatedUser?.status || user.status,
+      registerWith: updatedUser?.registerWith || user.registerWith,
+      deviceType: updatedUser?.deviceType || payload.deviceType || user.deviceType,
+      timeZone: updatedUser?.timeZone || user.timeZone,
+      lastLogAt: updatedUser?.lastLogAt || now,
     },
   }
 }
 
 const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
+  const now = new Date()
   if (payload.role === 'admin') {
     throw new AppError(
       httpStatus.FORBIDDEN,
@@ -146,6 +149,7 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
     fcmToken: payload.fcmToken,
     voipToken: payload.voipToken,
     deviceType: payload.deviceType,
+    lastLogAt: now,
   })
 
   const createData: any = {
@@ -176,6 +180,7 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
           isDeleted: false,
           verification: { otp: 0, expiresAt: new Date(), status: true },
           expireAt: null,
+          lastLogAt: now,
         },
         { returnDocument: 'after' },
       )
@@ -191,8 +196,10 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
     }
 
     // Existing user update
-    await User.findByIdAndUpdate(user._id, updateData, { returnDocument: 'after' })
-    return generateTokens(user)
+    const updatedUser = await User.findByIdAndUpdate(user._id, updateData, {
+      returnDocument: 'after',
+    })
+    return generateTokens((updatedUser || user) as any)
   }
 
   // ================== NEW USER CREATION ==================
@@ -203,6 +210,7 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
     verification: { otp: 0, expiresAt: new Date(), status: true },
     expireAt: null,
     status: USER_STATUS.active,
+    lastLogAt: now,
   })
 
   if (!newUser) {
@@ -216,6 +224,7 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
 }
 
 const registerWithApple = async (payload: TAppleLoginPayload) => {
+  const now = new Date()
   if (payload.role === 'admin') {
     throw new AppError(
       httpStatus.FORBIDDEN,
@@ -234,6 +243,7 @@ const registerWithApple = async (payload: TAppleLoginPayload) => {
     fcmToken: payload.fcmToken,
     voipToken: payload.voipToken,
     deviceType: payload.deviceType,
+    lastLogAt: now,
   })
 
   const createData: any = {
@@ -265,6 +275,7 @@ const registerWithApple = async (payload: TAppleLoginPayload) => {
           isDeleted: false,
           verification: { otp: 0, expiresAt: new Date(), status: true },
           expireAt: null,
+          lastLogAt: now,
         },
         { returnDocument: 'after' },
       )
@@ -280,8 +291,10 @@ const registerWithApple = async (payload: TAppleLoginPayload) => {
     }
 
     // Existing user-এর role
-    await User.findByIdAndUpdate(user._id, updateData, { returnDocument: 'after' })
-    return generateTokens(user)
+    const updatedUser = await User.findByIdAndUpdate(user._id, updateData, {
+      returnDocument: 'after',
+    })
+    return generateTokens((updatedUser || user) as any)
   }
 
   // ================== NEW USER CREATION ==================
@@ -292,6 +305,7 @@ const registerWithApple = async (payload: TAppleLoginPayload) => {
     verification: { otp: 0, expiresAt: new Date(), status: true },
     expireAt: null,
     status: USER_STATUS.active,
+    lastLogAt: now,
   })
 
   if (!newUser) {

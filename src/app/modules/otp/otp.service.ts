@@ -17,6 +17,7 @@ import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
 import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
 
 const verifyWithEmail = async (token: string, otp: string | number) => {
+  const now = new Date()
   if (!token) {
     throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized')
   }
@@ -60,6 +61,7 @@ const verifyWithEmail = async (token: string, otp: string | number) => {
           status: true,
         },
         expireAt: null, // set null to prevent verify user deletion data
+        lastLogAt: now,
       },
     },
     { returnDocument: 'after' },
@@ -81,6 +83,7 @@ const verifyWithEmail = async (token: string, otp: string | number) => {
 }
 
 const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
+  const now = new Date()
   if (!token) {
     throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized')
   }
@@ -138,6 +141,7 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
         expireAt: null,
         points: newPoints,
         isPhoneOtpVerified: true,
+        lastLogAt: now,
       },
     },
     { returnDocument: 'after' },

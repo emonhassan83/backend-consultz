@@ -24,6 +24,7 @@ import { modeType } from '../notification/notification.interface'
 import { getGeneralSettingNumber } from '../contents/contents.utils'
 import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
 import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
+import { Calling } from '../calling/calling.model'
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2026-06-24.dahlia',
@@ -367,15 +368,45 @@ const getAllPaymentsFromDB = async (query: Record<string, any>) => {
 const getDashboardDataFromDB = async (query: Record<string, unknown>) => {}
 
 const getAPaymentsFromDB = async (id: string) => {
-  const payment = await Payment.findById(id).populate([
-    { path: 'reference', select: 'user status paymentStatus' },
-    { path: 'account', select: 'name email photoUrl contactNumber age' },
-  ])
+  const payment = await Payment.findById(id)
+    .populate([
+      {
+        path: 'booking',
+        select:
+          '_id user consult date startTime endTime startAt endAt sessionType sessionDuration price timezone localDate localStartTime localEndTime status paymentStatus',
+        populate: [
+          { path: 'user', select: '_id firstName lastName email photoUrl' },
+          { path: 'consult', select: '_id firstName lastName email photoUrl' },
+        ],
+      },
+      { path: 'account', select: '_id firstName lastName email photoUrl phoneNumber' },
+    ])
+    .lean()
   if (!payment || payment?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Payment not found!')
   }
 
-  return payment
+  const rawPayment: any = payment
+  const callLogs = await Calling.find({
+    booking: rawPayment.booking?._id || rawPayment.booking,
+    isDeleted: false,
+  })
+    .select('caller receiver status startedAt endedAt duration createdAt')
+    .populate([
+      { path: 'caller', select: '_id firstName lastName email photoUrl' },
+      { path: 'receiver', select: '_id firstName lastName email photoUrl' },
+    ])
+    .sort({ createdAt: -1 })
+    .lean()
+
+  return {
+    ...rawPayment,
+    grossBookingValue: rawPayment.grossBookingValue ?? rawPayment.amount ?? 0,
+    platformTotalDeduction:
+      rawPayment.platformTotalDeduction ?? rawPayment.platformTotal ?? 0,
+    expertPayout: rawPayment.expertPayout ?? rawPayment.consultAmount ?? 0,
+    callLogs,
+  }
 }
 
 const refundPayment = async (payload: any) => {

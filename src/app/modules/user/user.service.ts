@@ -21,7 +21,7 @@ import {
 } from './user.utils'
 import mongoose, { QueryFilter, Types } from 'mongoose'
 import { Booking } from '../booking/booking.models'
-import { BOOKING_STATUS } from '../booking/booking.constants'
+import { BOOKING_STATUS, PAYMENT_STATUS } from '../booking/booking.constants'
 import { validateVatNumber } from '../../utils/vatValidation'
 import { getVatRateForCountry } from '../../utils/vatRate'
 import { sendNotification } from '../../utils/sentNotification'
@@ -746,7 +746,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
   try {
     const user = await User.findById(viewedUserId)
       .select(
-        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education stripeAccountId isTopExpert pushNotify emailNotify isVatRegistered vatRegistrationNumber country status createdAt bookingRules',
+        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education stripeAccountId isTopExpert pushNotify emailNotify isVatRegistered vatRegistrationNumber country status createdAt bookingRules lastLogAt',
       )
       .lean()
 
@@ -779,15 +779,29 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       last7DaysFollowersCount,
       totalFollowersCount,
       totalFollowingCount,
+      cancellationBookings,
+      noShowBookings,
       // Pending booking count — field differs by role
       pendingBookingsCount,
     ] = await Promise.all([
       Booking.countDocuments({
         consult: viewedUserId,
         status: BOOKING_STATUS.completed,
+        paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
+        isDeleted: false,
       }),
 
-      Booking.countDocuments({ consult: viewedUserId }),
+      user.role === USER_ROLE.expert
+        ? Booking.countDocuments({
+          consult: new Types.ObjectId(viewedUserId),
+          paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
+          isDeleted: false,
+        })
+        : Booking.countDocuments({
+          user: new Types.ObjectId(viewedUserId),
+          paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
+          isDeleted: false,
+        }),
 
       ProfileView.countDocuments({
         viewedUser: viewedUserId,
@@ -824,6 +838,34 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       Follow.countDocuments({ following: viewedUserId }),
 
       Follow.countDocuments({ follower: viewedUserId }),
+
+      user.role === USER_ROLE.expert
+        ? Booking.countDocuments({
+          consult: new Types.ObjectId(viewedUserId),
+          status: BOOKING_STATUS.cancelled,
+          paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
+          isDeleted: false,
+        })
+        : Booking.countDocuments({
+          user: new Types.ObjectId(viewedUserId),
+          status: BOOKING_STATUS.cancelled,
+          paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
+          isDeleted: false,
+        }),
+
+      user.role === USER_ROLE.expert
+        ? Booking.countDocuments({
+          consult: new Types.ObjectId(viewedUserId),
+          status: BOOKING_STATUS.not_responded,
+          paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
+          isDeleted: false,
+        })
+        : Booking.countDocuments({
+          user: new Types.ObjectId(viewedUserId),
+          status: BOOKING_STATUS.not_responded,
+          paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
+          isDeleted: false,
+        }),
 
       // ✅ role = expert → consult field, role = consult/user → user field
       user.role === USER_ROLE.expert
@@ -862,7 +904,6 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
         },
         { $group: { _id: null, totalMinutes: { $sum: '$sessionDuration' } } },
       ])
-      console.log(totalMinutesResult);
 
       const totalMinutes: number = totalMinutesResult[0]?.totalMinutes || 0
       advisingTime = Number((totalMinutes).toFixed(2))
@@ -888,8 +929,10 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
     return {
       ...user,
       sessionDurations: sessionDurationsWithPrice,
-      totalBookings: completedBookingsCount,
+      totalBookings: totalBookingsCountAll,
       pendingBookings: pendingBookingsCount,
+      cancellationBookings,
+      noShowBookings,
       profileSetupProgress,
       advisingTime,
       avgAttendance,
@@ -900,6 +943,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       followerGrowthRate,
       followers: totalFollowersCount,
       following: totalFollowingCount,
+      lastLogAt: user.lastLogAt ?? null,
       isConnectedStripe: !!user.stripeAccountId,
       isVatRegisted: user.isVatRegistered ?? false,
       vatRegistrationNumber: user.vatRegistrationNumber ?? null,

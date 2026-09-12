@@ -67,6 +67,21 @@ const getAllBookings = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
+const getExpertBooking = catchAsync(async (req: Request, res: Response) => {
+  const result = await bookingsService.getExpertBooking(
+    req.params.expertId as string,
+    req.query,
+    req.user._id,
+  )
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Expert bookings fetched successfully',
+    meta: result.meta,
+    data: result.data,
+  })
+})
+
 const getExpertBookingsByDate = catchAsync(async (req: Request, res: Response) => {
   const result = await bookingsService.getAllBookingsByDate(req.query, req.user._id)
   sendResponse(res, {
@@ -199,6 +214,7 @@ export const bookingsController = {
   createBookings,
   getBookingCalender,
   getAllBookings,
+  getExpertBooking,
   getExpertBookingsByDate,
   getConsultBookingsByDate,
   getBookingsById,

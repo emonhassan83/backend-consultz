@@ -43,6 +43,7 @@ export const generateTokens = (user: TUser) => {
     registerWith: user.registerWith,
     deviceType: user.deviceType,
     timeZone: user.timeZone,
+    lastLogAt: user.lastLogAt,
   }
 
   const accessToken = createToken(

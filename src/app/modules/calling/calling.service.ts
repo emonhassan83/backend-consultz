@@ -91,10 +91,11 @@ const startCalling = async (userId: string, payload: ICalling) => {
     const channelName = `booking_${booking._id}`
 
     /* 5. Generate token */
-    const uid = generateAgoraUidFromUserId(userId)
+    const callerUid = generateAgoraUidFromUserId(caller._id.toString())
+    const receiverUid = generateAgoraUidFromUserId(receiver._id.toString())
     const tokenData = generateAgoraToken({
       channelName,
-      uid,
+      uid: callerUid,
     })
 
     /* 6. Save calling */
@@ -105,11 +106,27 @@ const startCalling = async (userId: string, payload: ICalling) => {
           receiver: receiver._id,
           booking: booking._id,
           channelName,
-          callId: uid,
+          callId: callerUid,
           isVideo: payload.isVideo,
           token: tokenData.token,
           tokenExpireAt: tokenData.expireAt,
           status: CALLING_STATUS.pending,
+          participants: [
+            {
+              user: caller._id,
+              role: 'caller',
+              status: CALLING_STATUS.pending,
+              agoraUid: callerUid,
+              joinedAt: new Date(),
+            },
+            {
+              user: receiver._id,
+              role: 'receiver',
+              status: CALLING_STATUS.pending,
+              agoraUid: receiverUid,
+              joinedAt: null,
+            },
+          ],
         },
       ] as any[],
       { session },
@@ -134,7 +151,7 @@ const startCalling = async (userId: string, payload: ICalling) => {
       callId: calling._id,
       channelName,
       token: tokenData.token,
-      uid,
+      uid: callerUid,
       expireAt: tokenData.expireAt,
       isVideo: payload.isVideo,
     }
