@@ -35,13 +35,32 @@ const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
 
 const formatRefunds = (refunds: any[] = []) =>
   refunds.map((refund) => ({
+    _id: refund._id,
     amount: refund.amount,
     reason: refund.reason,
     refundedBy: refund.refundedBy,
     status: refund.status,
     stripeRefundId: refund.stripeRefundId,
+    booking: refund.booking,
+    consultee: (refund.booking as any)?.user || refund.user,
+    expert: (refund.booking as any)?.consult || null,
+    cancelledBy: (refund.booking as any)?.cancelledBy || null,
     createdAt: refund.createdAt,
   }))
+
+const normalizeBookingPartyInfo = (booking: any) => {
+  if (!booking) return booking
+
+  const normalized = booking.toObject ? booking.toObject() : booking
+
+  return {
+    ...normalized,
+    id: normalized.id ?? null,
+    consultee: normalized.user || null,
+    expert: normalized.consult || null,
+    cancelledBy: normalized.cancelledBy || null,
+  }
+}
 
 const getRefundSummary = (refunds: any[] = []) => {
   const formattedRefunds = formatRefunds(refunds)
@@ -394,7 +413,18 @@ const getAllPaymentsFromDB = async (query: Record<string, any>) => {
           PAYMENT_STATUS.cancelled,
         ],
       },
-    }),
+    }).populate([
+      {
+        path: 'booking',
+        select:
+          '_id id user consult cancelledBy date startTime endTime startAt endAt sessionType sessionDuration price timezone localDate localStartTime localEndTime status paymentStatus',
+        populate: [
+          { path: 'user', select: '_id firstName lastName email photoUrl' },
+          { path: 'consult', select: '_id firstName lastName email photoUrl' },
+        ],
+      },
+      { path: 'account', select: '_id firstName lastName email photoUrl phoneNumber' },
+    ]),
     query,
   )
     .search([''])
@@ -416,6 +446,10 @@ const getAllPaymentsFromDB = async (query: Record<string, any>) => {
     const grossBookingValue = raw.grossBookingValue ?? raw.amount ?? 0
     return {
       ...raw,
+      booking: normalizeBookingPartyInfo(raw.booking),
+      consultee: raw.booking?.user || null,
+      expert: raw.booking?.consult || null,
+      cancelledBy: raw.booking?.cancelledBy || null,
       grossBookingValue,
       refundedAmount,
       netRevenueAfterRefund: grossBookingValue - refundedAmount,
@@ -440,7 +474,7 @@ const getAPaymentsFromDB = async (id: string) => {
       {
         path: 'booking',
         select:
-          '_id id user consult date startTime endTime startAt endAt sessionType sessionDuration price timezone localDate localStartTime localEndTime status paymentStatus',
+          '_id id user consult cancelledBy date startTime endTime startAt endAt sessionType sessionDuration price timezone localDate localStartTime localEndTime status paymentStatus',
         populate: [
           { path: 'user', select: '_id firstName lastName email photoUrl' },
           { path: 'consult', select: '_id firstName lastName email photoUrl' },
@@ -473,9 +507,10 @@ const getAPaymentsFromDB = async (id: string) => {
 
   return {
     ...rawPayment,
-    booking: rawPayment.booking
-      ? { ...rawPayment.booking, id: rawPayment.booking.id ?? null }
-      : rawPayment.booking,
+    booking: normalizeBookingPartyInfo(rawPayment.booking),
+    consultee: rawPayment.booking?.user || null,
+    expert: rawPayment.booking?.consult || null,
+    cancelledBy: rawPayment.booking?.cancelledBy || null,
     grossBookingValue,
     refundedAmount,
     netRevenueAfterRefund: grossBookingValue - refundedAmount,

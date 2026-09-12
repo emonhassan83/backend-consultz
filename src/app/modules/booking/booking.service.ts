@@ -822,10 +822,15 @@ const cancelBooking = async (
       ? 'A full refund has been initiated and will usually appear on the original payment method within 3 to 7 business days, depending on the bank or card provider.'
       : cancellationWarning
 
+    const cancelledByValue =
+      currentUserId.toString() === getEntityId(booking.user)
+        ? 'consultee'
+        : 'consultant'
+
     // Booking status canceled
     const cancelledBooking = await Booking.findByIdAndUpdate(
       bookingId,
-      { status: BOOKING_STATUS.cancelled },
+      { status: BOOKING_STATUS.cancelled, cancelledBy: cancelledByValue },
       { returnDocument: 'after', session },
     ).populate('user consult')
     if (!cancelledBooking) {
@@ -1264,7 +1269,7 @@ const declineBooking = async (
     // 4. Mark booking as declined
     const updatedBooking = await Booking.findByIdAndUpdate(
       bookingId,
-      { status: BOOKING_STATUS.declined },
+      { status: BOOKING_STATUS.declined, cancelledBy: 'consultant' },
       { returnDocument: 'after', session },
     ).populate('user consult')
 

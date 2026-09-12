@@ -15,13 +15,32 @@ import mongoose from 'mongoose'
 
 const formatRefunds = (refunds: any[] = []) =>
   refunds.map((refund) => ({
+    _id: refund._id,
     amount: refund.amount,
     reason: refund.reason,
     refundedBy: refund.refundedBy,
     status: refund.status,
     stripeRefundId: refund.stripeRefundId,
+    booking: refund.booking,
+    consultee: (refund.booking as any)?.user || refund.user,
+    expert: (refund.booking as any)?.consult || null,
+    cancelledBy: (refund.booking as any)?.cancelledBy || null,
     createdAt: refund.createdAt,
   }))
+
+const normalizeBookingPartyInfo = (booking: any) => {
+  if (!booking) return booking
+
+  const normalized = booking.toObject ? booking.toObject() : booking
+
+  return {
+    ...normalized,
+    id: normalized.id ?? null,
+    consultee: normalized.user || null,
+    expert: normalized.consult || null,
+    cancelledBy: normalized.cancelledBy || null,
+  }
+}
 
 const fetchDashboardMetaData = async (
   query: Record<string, unknown>,
@@ -211,7 +230,11 @@ const paymentTransactionMetaData = async (
       {
         path: 'booking',
         select:
-          '_id id date startTime endTime startAt endAt sessionType sessionDuration price timezone localDate localStartTime localEndTime',
+          '_id id user consult cancelledBy date startTime endTime startAt endAt sessionType sessionDuration price timezone localDate localStartTime localEndTime status paymentStatus',
+        populate: [
+          { path: 'user', select: '_id firstName lastName email photoUrl' },
+          { path: 'consult', select: '_id firstName lastName email photoUrl' },
+        ],
       },
       {
         path: 'account',
@@ -337,7 +360,10 @@ const paymentTransactionMetaData = async (
 
     return {
       ...raw,
-      booking: raw.booking ? { ...raw.booking, id: raw.booking.id ?? null } : raw.booking,
+      booking: normalizeBookingPartyInfo(raw.booking),
+      consultee: raw.booking?.user || null,
+      expert: raw.booking?.consult || null,
+      cancelledBy: raw.booking?.cancelledBy || null,
       grossBookingValue,
       refundedAmount,
       netRevenueAfterRefund: grossBookingValue - refundedAmount,

@@ -1,6 +1,8 @@
 import { Model, ObjectId, Types } from 'mongoose'
 import { TBookingStatus, TPaymentStatus, TSessionType } from './booking.constants'
 
+export type TBookingCancelledBy = 'consultee' | 'consultant' | 'system'
+
 export interface TBookings {
   _id?: ObjectId | string
   id?: string | null
@@ -34,6 +36,7 @@ export interface TBookings {
   localTime?: string
   
   status: TBookingStatus
+  cancelledBy?: TBookingCancelledBy | null
   isDeleted: boolean
   respondedAt?: Date
   is10MinReminderSent?: boolean

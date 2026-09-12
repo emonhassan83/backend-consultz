@@ -111,7 +111,11 @@ const runAutoMarkNotRespondedJobOnce = async (): Promise<void> => {
           paymentStatus: booking.paymentStatus,
           updatedAt: booking.updatedAt,
         },
-        { status: BOOKING_STATUS.not_responded, respondedAt: new Date() },
+        {
+          status: BOOKING_STATUS.not_responded,
+          cancelledBy: 'system',
+          respondedAt: new Date(),
+        },
         { session, new: true },
       )
 

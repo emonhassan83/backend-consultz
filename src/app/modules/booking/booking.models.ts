@@ -121,6 +121,11 @@ const bookingsSchema = new Schema<TBookings>(
       enum: Object.values(BOOKING_STATUS),
       default: BOOKING_STATUS.pending,
     },
+    cancelledBy: {
+      type: String,
+      enum: ['consultee', 'consultant', 'system'],
+      default: null,
+    },
     respondedAt: {
       type: Date,
     },

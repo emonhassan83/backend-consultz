@@ -1,9 +1,16 @@
 import { Schema, model } from 'mongoose'
 import { TWithdraw, TWithdrawModel } from './withdraw.interface'
 import { WITHDRAW_STATUS } from './withdraw.constant'
+import { generateCryptoString } from '../../utils/generateCryptoString'
 
 const withdrawSchema = new Schema<TWithdraw>(
   {
+    id: {
+      type: String,
+      unique: true,
+      sparse: true,
+      default: () => generateCryptoString(10),
+    },
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     booking: { type: Schema.Types.ObjectId, ref: 'Booking', required: true },
     amount: { type: Number, required: true },

@@ -192,20 +192,130 @@ const addWithdraw = async (payload: { booking: string }, userId: string) => {
 }
 
 const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
-  const WithdrawQuery = new QueryBuilder(
-    Withdraw.find().populate([
-      { path: 'user', select: 'firstName lastName email photoUrl' },
-    ]),
-    query,
-  )
-    .search([])
-    .filter()
-    .sort()
-    .paginate()
-    .fields()
+  const page = Number(query.page) || 1
+  const limit = Number(query.limit) || 10
+  const skip = (page - 1) * limit
+  const matchStage: Record<string, any> = { isDeleted: false }
 
-  const result = await WithdrawQuery.modelQuery
-  const meta = await WithdrawQuery.countTotal()
+  if (query.status) {
+    matchStage.status = query.status
+  }
+
+  const startDate = query.startDate || query.dateFrom
+  const endDate = query.endDate || query.dateTo
+
+  if (startDate || endDate) {
+    matchStage.createdAt = {}
+    if (startDate) {
+      matchStage.createdAt.$gte = dayjs(String(startDate)).startOf('day').toDate()
+    }
+    if (endDate) {
+      matchStage.createdAt.$lte = dayjs(String(endDate)).endOf('day').toDate()
+    }
+  }
+
+  const searchTerm = String(query.searchTerm || '').trim()
+  const searchRegex = searchTerm ? new RegExp(searchTerm, 'i') : null
+
+  const sortField = String(query.sort || '-createdAt')
+  const sortDirection = sortField.startsWith('-') ? -1 : 1
+  const sortKey = sortField.replace(/^-/, '') || 'createdAt'
+
+  const pipeline: any[] = [
+    { $match: matchStage },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'user',
+        foreignField: '_id',
+        as: 'user',
+      },
+    },
+    { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: 'bookings',
+        localField: 'booking',
+        foreignField: '_id',
+        as: 'booking',
+      },
+    },
+    { $unwind: { path: '$booking', preserveNullAndEmptyArrays: true } },
+    {
+      $addFields: {
+        withdrawObjectId: { $toString: '$_id' },
+        bookingObjectId: { $toString: '$booking._id' },
+      },
+    },
+  ]
+
+  if (searchRegex) {
+    pipeline.push({
+      $match: {
+        $or: [
+          { id: searchRegex },
+          { withdrawObjectId: searchRegex },
+          { 'booking.id': searchRegex },
+          { bookingObjectId: searchRegex },
+          { 'user.firstName': searchRegex },
+          { 'user.lastName': searchRegex },
+          { 'user.email': searchRegex },
+        ],
+      },
+    })
+  }
+
+  pipeline.push(
+    {
+      $project: {
+        id: 1,
+        user: {
+          _id: '$user._id',
+          firstName: '$user.firstName',
+          lastName: '$user.lastName',
+          email: '$user.email',
+          photoUrl: '$user.photoUrl',
+        },
+        booking: {
+          _id: '$booking._id',
+          id: { $ifNull: ['$booking.id', null] },
+          sessionType: '$booking.sessionType',
+          date: '$booking.date',
+          startTime: '$booking.startTime',
+          endTime: '$booking.endTime',
+          localDate: '$booking.localDate',
+          localStartTime: '$booking.localStartTime',
+          localEndTime: '$booking.localEndTime',
+          status: '$booking.status',
+          paymentStatus: '$booking.paymentStatus',
+        },
+        amount: 1,
+        stripeTransferId: 1,
+        status: 1,
+        proceedAt: 1,
+        isDeleted: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    },
+    { $sort: { [sortKey]: sortDirection } },
+    {
+      $facet: {
+        data: [{ $skip: skip }, { $limit: limit }],
+        meta: [{ $count: 'total' }],
+      },
+    },
+  )
+
+  const aggregateResult = await Withdraw.aggregate(pipeline)
+  const result = aggregateResult[0]?.data || []
+  const total = aggregateResult[0]?.meta?.[0]?.total || 0
+  const meta = {
+    page,
+    limit,
+    total,
+    totalPage: Math.ceil(total / limit),
+  }
 
   return {
     meta,
@@ -248,7 +358,7 @@ const getConsultWithdrawsFromDB = async (
       .populate([
         {
           path: 'booking',
-          select: 'sessionType user',
+          select: 'id sessionType user',
           populate: { path: 'user', select: 'firstName lastName' },
         },
       ])

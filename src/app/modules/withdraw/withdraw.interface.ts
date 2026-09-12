@@ -3,6 +3,7 @@ import { TWithdrawStatus } from './withdraw.constant'
 
 export type TWithdraw = {
   _id?: string
+  id?: string
   user: Types.ObjectId
   booking: Types.ObjectId
   amount: number

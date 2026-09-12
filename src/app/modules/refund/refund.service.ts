@@ -59,6 +59,14 @@ const getRefundHistoryByPayments = async (paymentIds: unknown[]) => {
 
   const refunds = await Refund.find({ payment: { $in: ids } })
     .populate({ path: 'user', select: '_id firstName lastName email photoUrl' })
+    .populate({
+      path: 'booking',
+      select: '_id id user consult cancelledBy status paymentStatus date startTime endTime localDate localStartTime localEndTime',
+      populate: [
+        { path: 'user', select: '_id firstName lastName email photoUrl' },
+        { path: 'consult', select: '_id firstName lastName email photoUrl' },
+      ],
+    })
     .sort({ createdAt: -1 })
     .lean()
 
