@@ -38,6 +38,9 @@ export type TPayment = {
   holdDaysSnapshot?: number
   clearedAt?: Date
   withdrawnAt?: Date
+  authorizedAt?: Date
+  authorizationExpiresAt?: Date
+  capturedAt?: Date
   isPaid: boolean
   isDeleted: boolean
   createdAt?: Date

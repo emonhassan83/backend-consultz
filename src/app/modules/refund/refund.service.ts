@@ -38,6 +38,15 @@ type TRefundPayload = TFullRefundPayload & {
   amount?: number
 }
 
+type TReleaseOrRefundPayload = {
+  paymentId?: string
+  payment?: any
+  reason: string
+  refundedBy: TRefundBy
+  session?: ClientSession
+  idempotencyKey?: string
+}
+
 const toObjectId = (value: unknown) =>
   new Types.ObjectId(String((value as any)?._id || value))
 
@@ -286,6 +295,119 @@ const createRefund = async ({
 const createFullRefund = (payload: TFullRefundPayload) =>
   createRefund({ ...payload, type: 'full' })
 
+const releaseAuthorization = async ({
+  payment,
+  reason,
+  session,
+  idempotencyKey,
+}: {
+  payment: any
+  reason: string
+  session?: ClientSession
+  idempotencyKey?: string
+}) => {
+  if (!payment?.paymentIntentId) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Stripe payment intent ID is missing for this payment',
+    )
+  }
+
+  try {
+    const intent = await stripe.paymentIntents.retrieve(payment.paymentIntentId)
+
+    if (intent.status === 'requires_capture') {
+      if (idempotencyKey) {
+        await stripe.paymentIntents.cancel(
+          payment.paymentIntentId,
+          { cancellation_reason: 'requested_by_customer' },
+          { idempotencyKey },
+        )
+      } else {
+        await stripe.paymentIntents.cancel(payment.paymentIntentId, {
+          cancellation_reason: 'requested_by_customer',
+        })
+      }
+    } else if (intent.status !== 'canceled') {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        `Payment authorization cannot be released because Stripe status is ${intent.status}`,
+      )
+    }
+  } catch (error: any) {
+    if (error instanceof AppError) throw error
+    console.error('Payment authorization release failed:', error?.message || error)
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      error?.message || 'Payment authorization release failed',
+    )
+  }
+
+  const updateOptions = session ? { session } : {}
+
+  await Promise.all([
+    Payment.findByIdAndUpdate(
+      payment._id,
+      {
+        status: PAYMENT_STATUS.cancelled,
+        settlementStatus: PAYMENT_SETTLEMENT_STATUS.authorization_released,
+        isPaid: false,
+      },
+      updateOptions,
+    ),
+    Booking.findByIdAndUpdate(
+      payment.booking,
+      { paymentStatus: BOOKING_PAYMENT_STATUS.cancelled },
+      updateOptions,
+    ),
+  ])
+
+  return {
+    type: 'authorization_released',
+    amount: payment.amount || 0,
+    reason,
+    refund: null,
+  }
+}
+
+const releaseOrRefundPayment = async ({
+  paymentId,
+  payment: providedPayment,
+  reason,
+  refundedBy,
+  session,
+  idempotencyKey,
+}: TReleaseOrRefundPayload) => {
+  const payment =
+    providedPayment ||
+    (session
+      ? await Payment.findOne({ _id: paymentId, isDeleted: false }).session(session)
+      : await Payment.findOne({ _id: paymentId, isDeleted: false }))
+
+  if (!payment || payment.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Payment not found')
+  }
+
+  if (payment.status === PAYMENT_STATUS.authorized) {
+    return releaseAuthorization({ payment, reason, session, idempotencyKey })
+  }
+
+  const result = await createFullRefund({
+    payment,
+    reason,
+    refundedBy,
+    session,
+    idempotencyKey,
+  })
+
+  return {
+    type: 'refund',
+    amount: result.refund.amount,
+    refund: result.refund,
+    stripeRefund: result.stripeRefund,
+  }
+}
+
 const adminRefundPayment = async (
   paymentId: string,
   payload: TAdminRefundPayload,
@@ -317,6 +439,7 @@ const adminRefundPayment = async (
 export const RefundService = {
   createRefund,
   createFullRefund,
+  releaseOrRefundPayment,
   adminRefundPayment,
   getRefundHistoryByPayments,
 }

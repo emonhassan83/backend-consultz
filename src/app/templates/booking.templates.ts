@@ -371,6 +371,36 @@ export const notRespondedToUserTemplate = (
 // ─────────────────────────────────────────────────────────────────────────────
 // 9. Not responded → consultant
 // ─────────────────────────────────────────────────────────────────────────────
+export const notRespondedAuthorizationReleasedToUserTemplate = (
+  user: TUser,
+  consult: TUser,
+  booking: TBookings,
+): string => {
+  const sessionInfo = getBookingSessionInfo(booking)
+
+  const body = `
+    ${para(`We're sorry to inform you that your booking with <strong>${consult.firstName} ${consult.lastName}</strong> has been automatically cancelled because the consultant did not respond within the required time.`)}
+
+    ${infoBlock([
+      { label: 'Consultant', value: `${consult.firstName} ${consult.lastName}` },
+      { label: 'Session', value: sessionInfo },
+      { label: 'Session Type', value: booking.sessionType },
+      { label: 'Amount Authorized', value: `Â£${booking.price}` },
+      { label: 'Status', value: 'Cancelled - Consultant Not Responded' },
+    ])}
+
+    ${noticeBlock(
+      'The payment authorization has been released. No refund is required because the payment was not captured.',
+      'info',
+    )}
+
+    ${para("We sincerely apologise. The consultant's reliability score has been affected as a result of this missed session.")}
+    ${para('You are welcome to rebook with another consultant at any time. If you need further assistance, please contact our support team.')}
+  `
+
+  return baseLayout('Your Booking Has Been Cancelled', user.firstName, body)
+}
+
 export const notRespondedToConsultantTemplate = (
   consult: TUser,
   user: TUser,
@@ -402,6 +432,7 @@ export const paymentSuccessToUserTemplate = (
   const sessionInfo = getBookingSessionInfo(booking)
 
   const isPaymentObject = typeof payment === 'object' && payment !== null
+  const isAuthorizedPayment = isPaymentObject && payment.status === 'authorized'
   const subtotal = isPaymentObject ? payment.consultationFee : booking.price
   const vatAmount = isPaymentObject ? payment.consultantVat : 0
   const totalAmount = isPaymentObject ? payment.amount : booking.price
@@ -425,13 +456,25 @@ export const paymentSuccessToUserTemplate = (
   )
 
   const body = `
-    ${para('Your payment has been successfully processed. Your booking is now pending approval from the consultant.')}
+    ${para(
+      isAuthorizedPayment
+        ? 'Your payment has been authorized and held securely. Your card will only be charged once the consultant confirms your booking.'
+        : 'Your payment has been successfully processed. Your booking is now pending approval from the consultant.',
+    )}
     ${infoBlock(rows)}
-    ${noticeBlock('This receipt can be used by VAT-registered businesses for tax purposes. You will be notified once the consultant confirms your booking.')}
+    ${noticeBlock(
+      isAuthorizedPayment
+        ? 'If the consultant does not confirm this booking, the authorization will be released and no refund will be required because the payment was not captured.'
+        : 'This receipt can be used by VAT-registered businesses for tax purposes. You will be notified once the consultant confirms your booking.',
+    )}
     ${para('Thank you for choosing Consultz!')}
   `
 
-  return baseLayout('Payment Successful', user.firstName, body)
+  return baseLayout(
+    isAuthorizedPayment ? 'Payment Authorized' : 'Payment Successful',
+    user.firstName,
+    body,
+  )
 }
 
 export const paymentRefundToUserTemplate = (

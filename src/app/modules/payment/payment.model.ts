@@ -47,6 +47,9 @@ const paymentSchema = new Schema<TPayment>(
     holdDaysSnapshot: { type: Number, default: null },
     clearedAt: { type: Date, default: null },
     withdrawnAt: { type: Date, default: null },
+    authorizedAt: { type: Date, default: null },
+    authorizationExpiresAt: { type: Date, default: null },
+    capturedAt: { type: Date, default: null },
     paymentIntentId: {
       type: String,
       default: null,

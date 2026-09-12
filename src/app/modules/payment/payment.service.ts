@@ -52,6 +52,13 @@ const getRefundSummary = (refunds: any[] = []) => {
   return { refunds: formattedRefunds, refundedAmount }
 }
 
+const getAuthorizationExpiresAt = (paymentIntent: any): Date | null => {
+  const captureBefore =
+    paymentIntent?.latest_charge?.payment_method_details?.card?.capture_before
+
+  return captureBefore ? new Date(captureBefore * 1000) : null
+}
+
 /* =====================================================
    🔹 CREATE PAYMENT INTENT (WITH CUSTOMER SUPPORT)
 ===================================================== */
@@ -142,6 +149,7 @@ const createPaymentIntent = async (payload: {
     currency: 'gbp',
     customer: stripeCustomerId,
     payment_method_types: ['card'],
+    capture_method: 'manual',
     metadata: {
       bookingId: bookingId.toString(),
       userId: userId.toString(),
@@ -194,12 +202,17 @@ const confirmPayment = async (payload: {
   const { paymentIntentId, booking: bookingId, user: userId } = payload
 
   /* ========= 1. Verify from Stripe ========= */
-  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId)
+  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, {
+    expand: ['latest_charge'],
+  })
 
-  if (paymentIntent.status !== 'succeeded') {
+  const isAuthorizedPayment = paymentIntent.status === 'requires_capture'
+  const isCapturedPayment = paymentIntent.status === 'succeeded'
+
+  if (!isAuthorizedPayment && !isCapturedPayment) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
-      'Payment not successful on Stripe',
+      'Payment was not authorized on Stripe',
     )
   }
 
@@ -214,13 +227,28 @@ const confirmPayment = async (payload: {
     /* ========= 2. Update Payment ========= */
     const payment = await Payment.findOneAndUpdate(
       { paymentIntentId, isPaid: false },
-      {
-        isPaid: true,
-        status: PAYMENT_STATUS.paid,
-        settlementStatus: PAYMENT_SETTLEMENT_STATUS.pending_session,
-        transactionId:
-          paymentIntent.latest_charge?.toString() || paymentIntent.id,
-      },
+      isAuthorizedPayment
+        ? {
+            isPaid: false,
+            status: PAYMENT_STATUS.authorized,
+            settlementStatus: PAYMENT_SETTLEMENT_STATUS.authorization_held,
+            transactionId:
+              typeof paymentIntent.latest_charge === 'string'
+                ? paymentIntent.latest_charge
+                : paymentIntent.latest_charge?.id || paymentIntent.id,
+            authorizedAt: new Date(),
+            authorizationExpiresAt: getAuthorizationExpiresAt(paymentIntent),
+          }
+        : {
+            isPaid: true,
+            status: PAYMENT_STATUS.paid,
+            settlementStatus: PAYMENT_SETTLEMENT_STATUS.pending_session,
+            transactionId:
+              typeof paymentIntent.latest_charge === 'string'
+                ? paymentIntent.latest_charge
+                : paymentIntent.latest_charge?.id || paymentIntent.id,
+            capturedAt: new Date(),
+          },
       { returnDocument: 'after', session },
     )
 
@@ -235,13 +263,15 @@ const confirmPayment = async (payload: {
       _id: { $ne: bookingId },
     }).session(session)
 
-    shouldAwardFirstPaidBookingBonus = previousPaidBookingsCount === 0
+    shouldAwardFirstPaidBookingBonus = isCapturedPayment && previousPaidBookingsCount === 0
 
     /* ========= 3. Update Booking ========= */
     const booking = await Booking.findByIdAndUpdate(
       bookingId,
       {
-        paymentStatus: PAYMENT_STATUS.paid,
+        paymentStatus: isAuthorizedPayment
+          ? PAYMENT_STATUS.authorized
+          : PAYMENT_STATUS.paid,
         status: BOOKING_STATUS.pending,
       },
       { returnDocument: 'after', session },
@@ -356,7 +386,14 @@ const getAllPaymentsFromDB = async (query: Record<string, any>) => {
   const paymentModel = new QueryBuilder(
     Payment.find({
       isDeleted: false,
-      status: { $in: [PAYMENT_STATUS.paid, PAYMENT_STATUS.refunded] },
+      status: {
+        $in: [
+          PAYMENT_STATUS.authorized,
+          PAYMENT_STATUS.paid,
+          PAYMENT_STATUS.refunded,
+          PAYMENT_STATUS.cancelled,
+        ],
+      },
     }),
     query,
   )

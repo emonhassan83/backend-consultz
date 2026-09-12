@@ -6,9 +6,11 @@ export const SESSION_TYPE = {
 
 export const PAYMENT_STATUS = {
   unpaid: 'unpaid',
+  authorized: 'authorized',
   paid: 'paid',
   failed: 'failed',
   refunded: 'refunded',
+  cancelled: 'cancelled',
 } as const
 
 export const BOOKING_STATUS = {

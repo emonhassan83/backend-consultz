@@ -47,7 +47,7 @@ const runAutoMarkNotRespondedJobOnce = async (): Promise<void> => {
 
     const oldBookings = await Booking.find({
       status: { $in: [BOOKING_STATUS.confirmed, BOOKING_STATUS.pending] },
-      paymentStatus: PAYMENT_STATUS.paid,
+      paymentStatus: { $in: [PAYMENT_STATUS.authorized, PAYMENT_STATUS.paid] },
       isDeleted: false,
     }).session(session)
 
@@ -108,7 +108,7 @@ const runAutoMarkNotRespondedJobOnce = async (): Promise<void> => {
         {
           _id: booking._id,
           status: booking.status,
-          paymentStatus: PAYMENT_STATUS.paid,
+          paymentStatus: booking.paymentStatus,
           updatedAt: booking.updatedAt,
         },
         { status: BOOKING_STATUS.not_responded, respondedAt: new Date() },
@@ -125,7 +125,7 @@ const runAutoMarkNotRespondedJobOnce = async (): Promise<void> => {
       // â”€â”€ Refund â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const payment = await Payment.findOne({
         booking: booking._id as any,
-        isPaid: true,
+        status: { $in: [PAYMENT_STATUS.authorized, PAYMENT_STATUS.paid] },
         isDeleted: false,
       }).session(session)
 
@@ -145,36 +145,42 @@ const runAutoMarkNotRespondedJobOnce = async (): Promise<void> => {
 
       postCommitTasks.push(async () => {
         let refundProcessed = false
+        let authorizationReleased = false
 
         // Run Stripe only after MongoDB commits. The idempotency key prevents
         // duplicate refunds if this task is retried.
         if (capturedPayment?.paymentIntentId) {
           try {
-            const refundResult = await RefundService.createFullRefund({
+            const paymentResult = await RefundService.releaseOrRefundPayment({
               payment: capturedPayment,
               reason: 'Booking not accepted',
               refundedBy: REFUND_BY.system,
               idempotencyKey: `booking-not-responded-${capturedBooking._id}`,
             })
-            refundProcessed = true
-            if (booker) {
+            refundProcessed = paymentResult.type === 'refund'
+            authorizationReleased = paymentResult.type === 'authorization_released'
+            if (refundProcessed && booker && paymentResult.refund) {
               await paymentNotifyToUser(
                 'REFUND',
                 capturedPayment as any,
                 booker as TUser,
-                refundResult.refund,
+                paymentResult.refund,
               )
               await sendPaymentRefundToUser(
                 booker as TUser,
                 capturedPayment,
-                refundResult.refund,
+                paymentResult.refund,
                 capturedBooking as any,
               )
             }
-            console.log(`Refund processed for booking ${capturedBooking._id}`)
+            console.log(
+              authorizationReleased
+                ? `Payment authorization released for booking ${capturedBooking._id}`
+                : `Refund processed for booking ${capturedBooking._id}`,
+            )
           } catch (refundError: any) {
             console.error(
-              `Refund failed for booking ${capturedBooking._id}:`,
+              `Refund/authorization release failed for booking ${capturedBooking._id}:`,
               refundError.message,
             )
           }
@@ -200,6 +206,7 @@ const runAutoMarkNotRespondedJobOnce = async (): Promise<void> => {
             expert as any,
             capturedBooking as any,
             refundProcessed,
+            authorizationReleased,
           ).catch((err) => console.error(`Email failed for booking ${capturedBooking._id}:`, err))
         }
       })

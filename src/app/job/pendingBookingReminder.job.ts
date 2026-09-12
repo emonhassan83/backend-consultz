@@ -21,7 +21,7 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
   // Find all pending bookings created at least 10 minutes ago
   const pendingBookings = await Booking.find({
     status: BOOKING_STATUS.pending,
-    paymentStatus: PAYMENT_STATUS.paid,
+    paymentStatus: { $in: [PAYMENT_STATUS.authorized, PAYMENT_STATUS.paid] },
     isDeleted: false,
     createdAt: { $lte: tenMinutesAgo },
     $or: [

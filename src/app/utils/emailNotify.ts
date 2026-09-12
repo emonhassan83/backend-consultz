@@ -13,6 +13,7 @@ import {
   bookingRescheduledToConsultantTemplate,
   scheduleChangeRequestToUserTemplate,
   sessionReminderTemplate,
+  notRespondedAuthorizationReleasedToUserTemplate,
   notRespondedToUserTemplate,
   notRespondedToConsultantTemplate,
   paymentSuccessToUserTemplate,
@@ -214,19 +215,24 @@ export const sendNotRespondedEmail = async (
   consult: TUser,
   booking: TBookings,
   refundProcessed: boolean = false,
+  authorizationReleased: boolean = false,
 ): Promise<void> => {
   const tasks: Promise<void>[] = []
 
   if (user?.email && user.emailNotify?.booking) {
-    const userSubject = refundProcessed
+    let userSubject = refundProcessed
       ? 'Your Booking Has Been Cancelled – Full Refund Initiated'
       : 'Your Booking Has Been Cancelled – Refund Processing Update'
 
     tasks.push(
       emailSender(
         user.email,
-        userSubject,
-        notRespondedToUserTemplate(user, consult, booking, refundProcessed),
+        authorizationReleased
+          ? 'Your Booking Has Been Cancelled - Payment Authorization Released'
+          : userSubject,
+        authorizationReleased
+          ? notRespondedAuthorizationReleasedToUserTemplate(user, consult, booking)
+          : notRespondedToUserTemplate(user, consult, booking, refundProcessed),
       ).catch((err) => console.error(`Not responded email failed (user ${user._id}):`, err)),
     )
   }

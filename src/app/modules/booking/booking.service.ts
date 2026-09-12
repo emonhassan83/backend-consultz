@@ -3,6 +3,7 @@ import customParseFormat from 'dayjs/plugin/customParseFormat'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
 import mongoose from 'mongoose'
+import Stripe from 'stripe'
 import httpStatus from 'http-status'
 import { TBookings } from './booking.interface'
 import { BOOKING_STATUS, PAYMENT_STATUS } from './booking.constants'
@@ -45,6 +46,12 @@ import { Reviews } from '../review/review.models'
 import { REFUND_BY } from '../refund/refund.constant'
 import { RefundService } from '../refund/refund.service'
 import { paymentNotifyToUser } from '../payment/payment.utils'
+import config from '../../config'
+
+const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
+  apiVersion: '2026-06-24.dahlia',
+  typescript: true,
+})
 
 const getEntityId = (entity: any): string =>
   (entity?._id || entity)?.toString()
@@ -325,7 +332,7 @@ const createBookings = async (payload: TBookings, userId: string) => {
       const existingBookings = await Booking.find({
         consult: consult._id,
         status: { $in: ACTIVE_BOOKING_STATUSES },
-        paymentStatus: PAYMENT_STATUS.paid,
+        paymentStatus: { $in: [PAYMENT_STATUS.authorized, PAYMENT_STATUS.paid] },
         isDeleted: false,
       })
         .select('sessionDuration timezone startAt endAt bufferEndAt date localDate localStartTime')
@@ -769,10 +776,13 @@ const cancelBooking = async (
     }
 
     // Single Combined Message with Clear Explanation
-    if (booking.paymentStatus !== PAYMENT_STATUS.paid) {
+    if (
+      booking.paymentStatus !== PAYMENT_STATUS.paid &&
+      booking.paymentStatus !== PAYMENT_STATUS.authorized
+    ) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        'This booking has not been paid yet and cannot be cancelled.',
+        'This booking has not been authorized or paid yet and cannot be cancelled.',
       )
     }
     if (booking.status === BOOKING_STATUS.completed) {
@@ -808,7 +818,7 @@ const cancelBooking = async (
     const cancellationWarning = isRefundEligible
       ? ''
       : 'This booking was cancelled within 24 hours of the scheduled appointment time, so no refund will be issued.'
-    const refundNote = isRefundEligible
+    let refundNote = isRefundEligible
       ? 'A full refund has been initiated and will usually appear on the original payment method within 3 to 7 business days, depending on the bank or card provider.'
       : cancellationWarning
 
@@ -827,19 +837,23 @@ const cancelBooking = async (
 
     // Refund process
     let refundProcessed = false
+    let authorizationReleased = false
     let refundAmount = 0
     let refundedPayment: any = null
     let refundInfo: any = null
-    if (booking.paymentStatus == PAYMENT_STATUS.paid && isRefundEligible) {
+    if (
+      booking.paymentStatus === PAYMENT_STATUS.authorized ||
+      (booking.paymentStatus === PAYMENT_STATUS.paid && isRefundEligible)
+    ) {
       const payment = await Payment.findOne({
         booking: booking._id.toString(),
-        isPaid: true,
+        status: { $in: [PAYMENT_STATUS.authorized, PAYMENT_STATUS.paid] },
         isDeleted: false,
       }).session(session)
 
       if (payment && payment.paymentIntentId) {
         try {
-          const refundResult = await RefundService.createFullRefund({
+          const paymentResult = await RefundService.releaseOrRefundPayment({
             payment,
             reason:
               currentUserId.toString() === getEntityId(booking.user)
@@ -849,10 +863,15 @@ const cancelBooking = async (
             session,
           })
 
-          refundProcessed = true
-          refundAmount = refundResult.refund.amount
+          refundProcessed = paymentResult.type === 'refund'
+          authorizationReleased = paymentResult.type === 'authorization_released'
+          refundAmount = paymentResult.amount
           refundedPayment = payment
-          refundInfo = refundResult.refund
+          refundInfo = paymentResult.refund
+          if (authorizationReleased) {
+            refundNote =
+              'The payment authorization has been released. No refund is required because the payment was not captured.'
+          }
         } catch (refundError: any) {
           console.error('Refund failed:', refundError.message)
           // Also throw error if fail
@@ -920,15 +939,19 @@ const cancelBooking = async (
       booking: {
         ...(cancelledBooking.toObject ? cancelledBooking.toObject() : cancelledBooking),
         refundProcessed,
+        authorizationReleased,
         refundAmount,
         cancellationWarning,
         refundNote,
       },
       refundProcessed,
+      authorizationReleased,
       refundAmount,
       cancellationWarning,
       refundNote,
-      message: refundProcessed
+      message: authorizationReleased
+        ? 'Booking cancelled and payment authorization released'
+        : refundProcessed
         ? 'Booking cancelled and refund processed'
         : 'Booking cancelled without refund',
     }
@@ -976,17 +999,80 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
       )
     }
 
-    if (booking.paymentStatus !== PAYMENT_STATUS.paid) {
+    if (
+      booking.paymentStatus !== PAYMENT_STATUS.paid &&
+      booking.paymentStatus !== PAYMENT_STATUS.authorized
+    ) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        'This booking has not been paid yet and cannot be confirmed.',
+        'This booking has not been authorized or paid yet and cannot be confirmed.',
       )
+    }
+
+    let shouldAwardFirstPaidBookingBonus = false
+
+    if (booking.paymentStatus === PAYMENT_STATUS.authorized) {
+      const payment = await Payment.findOne({
+        booking: booking._id as any,
+        status: PAYMENT_STATUS.authorized,
+        isDeleted: false,
+      }).session(session)
+
+      if (!payment?.paymentIntentId) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Authorized payment not found for this booking.',
+        )
+      }
+
+      const paymentIntent = await stripe.paymentIntents.retrieve(
+        payment.paymentIntentId,
+        { expand: ['latest_charge'] },
+      )
+
+      let capturedIntent: any = paymentIntent
+      if (paymentIntent.status === 'requires_capture') {
+        capturedIntent = await stripe.paymentIntents.capture(payment.paymentIntentId)
+      } else if (paymentIntent.status !== 'succeeded') {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          `Payment cannot be captured because Stripe status is ${paymentIntent.status}.`,
+        )
+      }
+
+      await Payment.findByIdAndUpdate(
+        payment._id,
+        {
+          isPaid: true,
+          status: PAYMENT_STATUS.paid,
+          settlementStatus: PAYMENT_SETTLEMENT_STATUS.pending_session,
+          transactionId:
+            typeof capturedIntent.latest_charge === 'string'
+              ? capturedIntent.latest_charge
+              : capturedIntent.latest_charge?.id || capturedIntent.id,
+          capturedAt: new Date(),
+        },
+        { session },
+      )
+
+      const previousPaidBookingsCount = await Booking.countDocuments({
+        user: booking.user,
+        paymentStatus: PAYMENT_STATUS.paid,
+        isDeleted: false,
+        _id: { $ne: bookingId },
+      }).session(session)
+
+      shouldAwardFirstPaidBookingBonus = previousPaidBookingsCount === 0
     }
 
     // 3. Mark booking as confirmed
     const updatedBooking = await Booking.findByIdAndUpdate(
       bookingId,
-      { status: BOOKING_STATUS.confirmed, respondedAt: new Date() },
+      {
+        status: BOOKING_STATUS.confirmed,
+        paymentStatus: PAYMENT_STATUS.paid,
+        respondedAt: new Date(),
+      },
       { returnDocument: 'after', session },
     ).populate('user consult')
 
@@ -997,6 +1083,16 @@ const confirmedBooking = async (bookingId: string, currentUserId: string) => {
     // 4. Award 50 points to the USER (booker)
     const user = await User.findById(updatedBooking.user).session(session)
     if (user) {
+      if (shouldAwardFirstPaidBookingBonus) {
+        user.points = (user.points || 0) + 300
+        await createRewardPointsLog(
+          user._id,
+          300,
+          'First paid booking reward',
+          session,
+        )
+      }
+
       const pointsToAdd = 50
       user.points = (user.points || 0) + pointsToAdd
       await user.save({ session })
@@ -1155,10 +1251,13 @@ const declineBooking = async (
       )
     }
 
-    if (booking.paymentStatus !== PAYMENT_STATUS.paid) {
+    if (
+      booking.paymentStatus !== PAYMENT_STATUS.paid &&
+      booking.paymentStatus !== PAYMENT_STATUS.authorized
+    ) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        'This booking has not been paid yet and cannot be declined.',
+        'This booking has not been authorized or paid yet and cannot be declined.',
       )
     }
 
@@ -1175,29 +1274,31 @@ const declineBooking = async (
 
     // 5. Refund process
     let refundProcessed = false
+    let authorizationReleased = false
     let refundAmount = 0
     let refundedPayment: any = null
     let refundInfo: any = null
 
     const payment = await Payment.findOne({
       booking: booking._id.toString(),
-      isPaid: true,
+      status: { $in: [PAYMENT_STATUS.authorized, PAYMENT_STATUS.paid] },
       isDeleted: false,
     }).session(session)
 
     if (payment && payment.paymentIntentId) {
       try {
-        const refundResult = await RefundService.createFullRefund({
+        const paymentResult = await RefundService.releaseOrRefundPayment({
           payment,
           reason: 'Booking declined by consultant',
           refundedBy: REFUND_BY.system,
           session,
         })
 
-        refundProcessed = true
-        refundAmount = refundResult.refund.amount
+        refundProcessed = paymentResult.type === 'refund'
+        authorizationReleased = paymentResult.type === 'authorization_released'
+        refundAmount = paymentResult.amount
         refundedPayment = payment
-        refundInfo = refundResult.refund
+        refundInfo = paymentResult.refund
       } catch (refundError: any) {
         console.error('Refund failed:', refundError.message)
       }
@@ -1245,8 +1346,11 @@ const declineBooking = async (
     return {
       booking: updatedBooking,
       refundProcessed,
+      authorizationReleased,
       refundAmount,
-      message: refundProcessed
+      message: authorizationReleased
+        ? 'Booking declined and payment authorization released'
+        : refundProcessed
         ? 'Booking declined and refund processed'
         : 'Booking declined (no refund needed)',
     }
