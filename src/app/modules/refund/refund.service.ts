@@ -1,0 +1,322 @@
+import Stripe from 'stripe'
+import httpStatus from 'http-status'
+import mongoose, { ClientSession, Types } from 'mongoose'
+import AppError from '../../errors/AppError'
+import config from '../../config'
+import { Booking } from '../booking/booking.models'
+import { PAYMENT_STATUS as BOOKING_PAYMENT_STATUS } from '../booking/booking.constants'
+import { Payment } from '../payment/payment.model'
+import {
+  PAYMENT_SETTLEMENT_STATUS,
+  PAYMENT_STATUS,
+} from '../payment/payment.constant'
+import { REFUND_BY, REFUND_STATUS, TRefundBy } from './refund.constant'
+import { Refund } from './refund.model'
+
+const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
+  apiVersion: '2026-06-24.dahlia',
+  typescript: true,
+})
+
+type TFullRefundPayload = {
+  paymentId?: string
+  payment?: any
+  reason: string
+  refundedBy: TRefundBy
+  session?: ClientSession
+  idempotencyKey?: string
+}
+
+type TAdminRefundPayload = {
+  type: 'full' | 'partial'
+  amount?: number
+  reason: string
+}
+
+type TRefundPayload = TFullRefundPayload & {
+  type?: 'full' | 'partial'
+  amount?: number
+}
+
+const toObjectId = (value: unknown) =>
+  new Types.ObjectId(String((value as any)?._id || value))
+
+const getRefundHistoryByPayments = async (paymentIds: unknown[]) => {
+  const ids = paymentIds.filter(Boolean).map(toObjectId)
+
+  if (!ids.length) {
+    return new Map<string, any[]>()
+  }
+
+  const refunds = await Refund.find({ payment: { $in: ids } })
+    .populate({ path: 'user', select: '_id firstName lastName email photoUrl' })
+    .sort({ createdAt: -1 })
+    .lean()
+
+  return refunds.reduce((acc, refund: any) => {
+    const key = String(refund.payment)
+    const current = acc.get(key) || []
+    current.push(refund)
+    acc.set(key, current)
+    return acc
+  }, new Map<string, any[]>())
+}
+
+const round2 = (value: number) => Number((value || 0).toFixed(2))
+
+const getSucceededRefundedAmount = async (paymentId: unknown) => {
+  const summary = await Refund.aggregate([
+    {
+      $match: {
+        payment: toObjectId(paymentId),
+        status: REFUND_STATUS.succeeded,
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        amount: { $sum: '$amount' },
+      },
+    },
+  ])
+
+  return round2(summary[0]?.amount || 0)
+}
+
+const assertRefundablePayment = async (payment: any) => {
+  if (!payment || payment.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Payment not found')
+  }
+
+  if (payment.status === PAYMENT_STATUS.refunded) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Payment is already refunded')
+  }
+
+  if (payment.status !== PAYMENT_STATUS.paid || !payment.isPaid) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Only paid payments can be refunded',
+    )
+  }
+
+  if (payment.settlementStatus === PAYMENT_SETTLEMENT_STATUS.withdrawn) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'This payment has already been withdrawn and cannot be refunded automatically',
+    )
+  }
+
+  if (!payment.paymentIntentId) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Stripe payment intent ID is missing for this payment',
+    )
+  }
+}
+
+const createRefund = async ({
+  paymentId,
+  payment: providedPayment,
+  reason,
+  refundedBy,
+  session,
+  idempotencyKey,
+  type = 'full',
+  amount,
+}: TRefundPayload) => {
+  if (!reason?.trim()) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Refund reason is required')
+  }
+
+  const payment =
+    providedPayment ||
+    (session
+      ? await Payment.findOne({
+          _id: paymentId,
+          isDeleted: false,
+        }).session(session)
+      : await Payment.findOne({
+          _id: paymentId,
+          isDeleted: false,
+        }))
+
+  await assertRefundablePayment(payment)
+
+  const alreadyRefundedAmount = await getSucceededRefundedAmount(payment._id)
+  const refundableAmount = round2((payment.amount || 0) - alreadyRefundedAmount)
+
+  if (refundableAmount <= 0) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Payment is already refunded')
+  }
+
+  if (type === 'partial' && (!amount || amount <= 0)) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Refund amount is required for partial refund',
+    )
+  }
+
+  if (type === 'full' && amount) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Amount is not allowed for full refund',
+    )
+  }
+
+  const refundAmount = round2(type === 'full' ? refundableAmount : amount || 0)
+
+  if (refundAmount > refundableAmount) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `Refund amount cannot be greater than remaining refundable amount ${refundableAmount}`,
+    )
+  }
+
+  const isFullRefundAfterThis = refundAmount === refundableAmount
+
+  const booking = session
+    ? await Booking.findOne({
+        _id: payment.booking,
+        isDeleted: false,
+      }).session(session)
+    : await Booking.findOne({
+        _id: payment.booking,
+        isDeleted: false,
+      })
+
+  if (!booking) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
+  }
+
+  const refund: any = await Refund.create({
+    payment: toObjectId(payment._id),
+    booking: toObjectId((booking as any)._id),
+    user: toObjectId((booking as any).user),
+    amount: refundAmount,
+    reason: reason.trim(),
+    refundedBy,
+    status: REFUND_STATUS.pending,
+    stripeRefundId: null,
+  })
+
+  let stripeRefund: Stripe.Refund
+
+  try {
+    stripeRefund = idempotencyKey
+      ? await stripe.refunds.create(
+          {
+            payment_intent: payment.paymentIntentId,
+            amount: Math.round(refundAmount * 100),
+            reason: 'requested_by_customer',
+          },
+          { idempotencyKey },
+        )
+      : await stripe.refunds.create({
+          payment_intent: payment.paymentIntentId,
+          amount: Math.round(refundAmount * 100),
+          reason: 'requested_by_customer',
+        })
+  } catch (error: any) {
+    await Refund.findByIdAndUpdate(refund._id, {
+      status: REFUND_STATUS.failed,
+      stripeRefundId: null,
+    })
+
+    console.error('Refund failed:', error?.message || error)
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      error?.message || 'Refund processing failed',
+    )
+  }
+
+  await Refund.findByIdAndUpdate(refund._id, {
+    status: REFUND_STATUS.succeeded,
+    stripeRefundId: stripeRefund.id,
+  })
+
+  try {
+    const updateOptions = session ? { session } : {}
+
+    await Promise.all([
+      Payment.findByIdAndUpdate(
+        payment._id,
+        isFullRefundAfterThis
+          ? {
+              status: PAYMENT_STATUS.refunded,
+              settlementStatus: PAYMENT_SETTLEMENT_STATUS.refunded,
+              isPaid: false,
+            }
+          : {
+              status: PAYMENT_STATUS.paid,
+              isPaid: true,
+            },
+        updateOptions,
+      ),
+      ...(isFullRefundAfterThis
+        ? [
+            Booking.findByIdAndUpdate(
+              booking._id,
+              { paymentStatus: BOOKING_PAYMENT_STATUS.refunded },
+              updateOptions,
+            ),
+          ]
+        : []),
+    ])
+  } catch (error: any) {
+    console.error(
+      `Refund ${refund._id} succeeded on Stripe but DB status update failed:`,
+      error?.message || error,
+    )
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Refund succeeded on Stripe but database status update failed',
+    )
+  }
+
+  return {
+    refund: {
+      ...(refund.toObject ? refund.toObject() : refund),
+      status: REFUND_STATUS.succeeded,
+      stripeRefundId: stripeRefund.id,
+    },
+    stripeRefund,
+  }
+}
+
+const createFullRefund = (payload: TFullRefundPayload) =>
+  createRefund({ ...payload, type: 'full' })
+
+const adminRefundPayment = async (
+  paymentId: string,
+  payload: TAdminRefundPayload,
+  _adminId: string,
+) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
+
+  try {
+    const result = await createRefund({
+      paymentId,
+      reason: payload.reason,
+      refundedBy: REFUND_BY.admin,
+      session,
+      type: payload.type,
+      amount: payload.amount,
+    })
+
+    await session.commitTransaction()
+    return result
+  } catch (error) {
+    await session.abortTransaction()
+    throw error
+  } finally {
+    session.endSession()
+  }
+}
+
+export const RefundService = {
+  createRefund,
+  createFullRefund,
+  adminRefundPayment,
+  getRefundHistoryByPayments,
+}

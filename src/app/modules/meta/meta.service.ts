@@ -10,6 +10,17 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { Payment } from '../payment/payment.model'
 import { PAYMENT_STATUS } from '../payment/payment.constant'
 import { getGeneralSettingNumber } from '../contents/contents.utils'
+import { RefundService } from '../refund/refund.service'
+
+const formatRefunds = (refunds: any[] = []) =>
+  refunds.map((refund) => ({
+    amount: refund.amount,
+    reason: refund.reason,
+    refundedBy: refund.refundedBy,
+    status: refund.status,
+    stripeRefundId: refund.stripeRefundId,
+    createdAt: refund.createdAt,
+  }))
 
 const fetchDashboardMetaData = async (
   query: Record<string, unknown>,
@@ -128,8 +139,7 @@ const paymentTransactionMetaData = async (
 
   const baseFilter = {
     isDeleted: false,
-    isPaid: true,
-    status: PAYMENT_STATUS.paid,
+    status: { $in: [PAYMENT_STATUS.paid, PAYMENT_STATUS.refunded] },
     createdAt: { $gte: yearStart, $lte: yearEnd },
   }
 
@@ -168,16 +178,84 @@ const paymentTransactionMetaData = async (
     Payment.aggregate([
       { $match: summaryFilter },
       {
+        $lookup: {
+          from: 'refunds',
+          let: { paymentId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$payment', '$$paymentId'] },
+                    { $eq: ['$status', 'succeeded'] },
+                  ],
+                },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                amount: { $sum: '$amount' },
+              },
+            },
+          ],
+          as: 'refundSummary',
+        },
+      },
+      {
+        $addFields: {
+          grossForCalc: { $ifNull: ['$grossBookingValue', '$amount'] },
+          refundedAmount: {
+            $ifNull: [{ $arrayElemAt: ['$refundSummary.amount', 0] }, 0],
+          },
+        },
+      },
+      {
+        $addFields: {
+          retainedAmount: {
+            $max: [0, { $subtract: ['$grossForCalc', '$refundedAmount'] }],
+          },
+        },
+      },
+      {
+        $addFields: {
+          retainedRatio: {
+            $cond: [
+              { $gt: ['$grossForCalc', 0] },
+              { $divide: ['$retainedAmount', '$grossForCalc'] },
+              0,
+            ],
+          },
+        },
+      },
+      {
         $group: {
           _id: null,
           grossBookingValue: {
-            $sum: { $ifNull: ['$grossBookingValue', '$amount'] },
+            $sum: '$grossForCalc',
+          },
+          refundedAmount: { $sum: '$refundedAmount' },
+          platformCommission: {
+            $sum: { $multiply: ['$platformCommission', '$retainedRatio'] },
+          },
+          platformVat: {
+            $sum: { $multiply: ['$platformVat', '$retainedRatio'] },
           },
           platformTotalDeduction: {
-            $sum: { $ifNull: ['$platformTotalDeduction', '$platformTotal'] },
+            $sum: {
+              $multiply: [
+                { $ifNull: ['$platformTotalDeduction', '$platformTotal'] },
+                '$retainedRatio',
+              ],
+            },
           },
           expertPayout: {
-            $sum: { $ifNull: ['$expertPayout', '$consultAmount'] },
+            $sum: {
+              $multiply: [
+                { $ifNull: ['$expertPayout', '$consultAmount'] },
+                '$retainedRatio',
+              ],
+            },
           },
         },
       },
@@ -186,19 +264,34 @@ const paymentTransactionMetaData = async (
 
   const summaryData = summary[0] || {
     grossBookingValue: 0,
+    refundedAmount: 0,
+    platformCommission: 0,
+    platformVat: 0,
     platformTotalDeduction: 0,
     expertPayout: 0,
   }
 
+  const refundMap = await RefundService.getRefundHistoryByPayments(
+    paymentList.map((payment: any) => payment._id),
+  )
+
   const normalizedPaymentList = paymentList.map((payment: any) => {
     const raw = payment.toObject ? payment.toObject() : payment
+    const refunds = formatRefunds(refundMap.get(String(raw._id)) || [])
+    const refundedAmount = refunds
+      .filter((refund: any) => refund.status === 'succeeded')
+      .reduce((sum: number, refund: any) => sum + (refund.amount || 0), 0)
+    const grossBookingValue = raw.grossBookingValue ?? raw.amount ?? 0
 
     return {
       ...raw,
-      grossBookingValue: raw.grossBookingValue ?? raw.amount ?? 0,
+      grossBookingValue,
+      refundedAmount,
+      netRevenueAfterRefund: grossBookingValue - refundedAmount,
       platformTotalDeduction:
         raw.platformTotalDeduction ?? raw.platformTotal ?? 0,
       expertPayout: raw.expertPayout ?? raw.consultAmount ?? 0,
+      refunds,
     }
   })
 
@@ -206,6 +299,11 @@ const paymentTransactionMetaData = async (
     meta: paymentMeta,
     data: {
       grossBookingValue: summaryData.grossBookingValue,
+      refundedAmount: summaryData.refundedAmount,
+      netRevenueAfterRefund:
+        summaryData.grossBookingValue - summaryData.refundedAmount,
+      platformCommission: summaryData.platformCommission,
+      platformVat: summaryData.platformVat,
       platformTotalDeduction: summaryData.platformTotalDeduction,
       expertPayout: summaryData.expertPayout,
       paymentList: normalizedPaymentList,

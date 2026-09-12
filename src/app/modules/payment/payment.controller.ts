@@ -66,12 +66,16 @@ const getAPaymentByBookingId = catchAsync(async (req, res) => {
 })
 
 const refundPayment = catchAsync(async (req, res) => {
-  const result = await PaymentService.refundPayment(req.body)
+  const result = await PaymentService.refundPayment(
+    req.params.paymentId as string,
+    req.body,
+    req.user._id,
+  )
 
   sendResponse(res, {
     success: true,
     statusCode: httpStatus.OK,
-    message: 'Payment refund successfully!',
+    message: 'Payment refunded successfully!',
     data: result,
   })
 })

@@ -18,8 +18,6 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { Payment } from '../payment/payment.model'
 import { PAYMENT_SETTLEMENT_STATUS } from '../payment/payment.constant'
 import { Contents } from '../contents/contents.models'
-import Stripe from 'stripe'
-import config from '../../config'
 import {
   sendCancellationEmail,
   sendRescheduleEmail,
@@ -43,6 +41,8 @@ import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
 import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
 import { getGeneralSettingNumber } from '../contents/contents.utils'
 import { Reviews } from '../review/review.models'
+import { REFUND_BY } from '../refund/refund.constant'
+import { RefundService } from '../refund/refund.service'
 
 const getEntityId = (entity: any): string =>
   (entity?._id || entity)?.toString()
@@ -55,11 +55,6 @@ dayjs.extend(isoWeek)
 dayjs.extend(customParseFormat)
 dayjs.extend(utc)
 dayjs.extend(timezone)
-
-const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
-  apiVersion: '2026-06-24.dahlia',
-  typescript: true,
-})
 
 const createRewardPointsLog = async (
   userId: any,
@@ -821,22 +816,18 @@ const cancelBooking = async (
 
       if (payment && payment.paymentIntentId) {
         try {
-          const refund = await stripe.refunds.create({
-            payment_intent: payment.paymentIntentId,
-            amount: payment.amount * 100,
+          const refundResult = await RefundService.createFullRefund({
+            payment,
+            reason:
+              currentUserId.toString() === getEntityId(booking.user)
+                ? 'Booking cancelled by consultee'
+                : 'Booking cancelled by consultant',
+            refundedBy: REFUND_BY.system,
+            session,
           })
 
-          // payment status changed
-          await Payment.updateOne(
-            { _id: payment._id },
-            { status: PAYMENT_STATUS.refunded },
-            { session },
-          )
-
           refundProcessed = true
-          refundAmount = refund.amount / 100
-
-          refundProcessed = true
+          refundAmount = refundResult.refund.amount
         } catch (refundError: any) {
           console.error('Refund failed:', refundError.message)
           // Also throw error if fail
@@ -1152,19 +1143,15 @@ const declineBooking = async (
 
     if (payment && payment.paymentIntentId) {
       try {
-        const refund = await stripe.refunds.create({
-          payment_intent: payment.paymentIntentId,
-          amount: payment.amount * 100,
+        const refundResult = await RefundService.createFullRefund({
+          payment,
+          reason: 'Booking declined by consultant',
+          refundedBy: REFUND_BY.system,
+          session,
         })
 
-        await Payment.updateOne(
-          { _id: payment._id },
-          { status: PAYMENT_STATUS.refunded },
-          { session },
-        )
-
         refundProcessed = true
-        refundAmount = refund.amount / 100
+        refundAmount = refundResult.refund.amount
       } catch (refundError: any) {
         console.error('Refund failed:', refundError.message)
       }

@@ -29,12 +29,17 @@ router.get(
 
 router.get('/booking/:bookingId', PaymentControllers.getAPaymentByBookingId)
 
+router.post(
+  '/:paymentId/refund',
+  auth(USER_ROLE.admin),
+  zodValidationRequest(PaymentValidation.refundValidationSchema),
+  PaymentControllers.refundPayment,
+)
+
 router.get(
   '/:id',
   auth(USER_ROLE.admin, USER_ROLE.consult, USER_ROLE.expert),
   PaymentControllers.getAPayment,
 )
-
-router.patch('/refund-payment', PaymentControllers.refundPayment)
 
 export const PaymentRoutes = router

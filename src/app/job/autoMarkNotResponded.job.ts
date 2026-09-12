@@ -4,29 +4,23 @@ import timezone from 'dayjs/plugin/timezone'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import utc from 'dayjs/plugin/utc'
 import mongoose from 'mongoose'
-import Stripe from 'stripe'
 import { Booking } from '../modules/booking/booking.models'
 import { Payment } from '../modules/payment/payment.model'
-import { PAYMENT_SETTLEMENT_STATUS } from '../modules/payment/payment.constant'
 import { User } from '../modules/user/user.model'
 import { BOOKING_STATUS, PAYMENT_STATUS } from '../modules/booking/booking.constants'
 import { sendBookingsNotification } from '../modules/booking/booking.utils'
 import { sendNotRespondedEmail } from '../utils/emailNotify'
-import config from '../config'
 import { TUser } from '../modules/user/user.interface'
 import {
   resolveBookingEndUtc,
   resolveBookingStartUtc,
 } from './bookingJobTime.utils'
+import { RefundService } from '../modules/refund/refund.service'
+import { REFUND_BY } from '../modules/refund/refund.constant'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
 dayjs.extend(customParseFormat)
-
-const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
-  apiVersion: '2026-06-24.dahlia',
-  typescript: true,
-})
 
 const isTransientMongoNetworkError = (error: any): boolean => {
   const labels = error?.errorLabels || []
@@ -136,20 +130,12 @@ const runAutoMarkNotRespondedJobOnce = async (): Promise<void> => {
         // duplicate refunds if this task is retried.
         if (capturedPayment?.paymentIntentId) {
           try {
-            await stripe.refunds.create(
-              {
-                payment_intent: capturedPayment.paymentIntentId,
-                amount: Math.round(capturedPayment.amount * 100),
-              },
-              { idempotencyKey: `booking-not-responded-${capturedBooking._id}` },
-            )
-            await Payment.updateOne(
-              { _id: capturedPayment._id },
-              {
-                status: PAYMENT_STATUS.refunded,
-                settlementStatus: PAYMENT_SETTLEMENT_STATUS.refunded,
-              },
-            )
+            await RefundService.createFullRefund({
+              payment: capturedPayment,
+              reason: 'Booking not accepted',
+              refundedBy: REFUND_BY.system,
+              idempotencyKey: `booking-not-responded-${capturedBooking._id}`,
+            })
             refundProcessed = true
             console.log(`Refund processed for booking ${capturedBooking._id}`)
           } catch (refundError: any) {

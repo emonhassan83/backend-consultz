@@ -44,6 +44,8 @@ type TPaymentBucket = {
   platformVat: number
   platformTotalDeduction: number
   expertPayout: number
+  refundedAmount: number
+  netRevenueAfterRefund: number
 }
 
 const round2 = (value: number) => Number((value || 0).toFixed(2))
@@ -193,9 +195,59 @@ export const getDashboardPaymentOverview = async (
     {
       $match: {
         createdAt: { $gte: filter.startDate, $lte: filter.endDate },
-        isPaid: true,
-        status: PAYMENT_STATUS.paid,
+        status: { $in: [PAYMENT_STATUS.paid, PAYMENT_STATUS.refunded] },
         isDeleted: false,
+      },
+    },
+    {
+      $lookup: {
+        from: 'refunds',
+        let: { paymentId: '$_id' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$payment', '$$paymentId'] },
+                  { $eq: ['$status', 'succeeded'] },
+                ],
+              },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              amount: { $sum: '$amount' },
+            },
+          },
+        ],
+        as: 'refundSummary',
+      },
+    },
+    {
+      $addFields: {
+        grossForCalc: { $ifNull: ['$grossBookingValue', '$amount'] },
+        refundedAmount: {
+          $ifNull: [{ $arrayElemAt: ['$refundSummary.amount', 0] }, 0],
+        },
+      },
+    },
+    {
+      $addFields: {
+        retainedAmount: {
+          $max: [0, { $subtract: ['$grossForCalc', '$refundedAmount'] }],
+        },
+      },
+    },
+    {
+      $addFields: {
+        retainedRatio: {
+          $cond: [
+            { $gt: ['$grossForCalc', 0] },
+            { $divide: ['$retainedAmount', '$grossForCalc'] },
+            0,
+          ],
+        },
       },
     },
     {
@@ -208,15 +260,30 @@ export const getDashboardPaymentOverview = async (
           },
         },
         grossBookingValue: {
-          $sum: { $ifNull: ['$grossBookingValue', '$amount'] },
+          $sum: '$grossForCalc',
         },
-        platformCommission: { $sum: '$platformCommission' },
-        platformVat: { $sum: '$platformVat' },
+        refundedAmount: { $sum: '$refundedAmount' },
+        platformCommission: {
+          $sum: { $multiply: ['$platformCommission', '$retainedRatio'] },
+        },
+        platformVat: {
+          $sum: { $multiply: ['$platformVat', '$retainedRatio'] },
+        },
         platformTotalDeduction: {
-          $sum: { $ifNull: ['$platformTotalDeduction', '$platformTotal'] },
+          $sum: {
+            $multiply: [
+              { $ifNull: ['$platformTotalDeduction', '$platformTotal'] },
+              '$retainedRatio',
+            ],
+          },
         },
         expertPayout: {
-          $sum: { $ifNull: ['$expertPayout', '$consultAmount'] },
+          $sum: {
+            $multiply: [
+              { $ifNull: ['$expertPayout', '$consultAmount'] },
+              '$retainedRatio',
+            ],
+          },
         },
       },
     },
@@ -237,6 +304,9 @@ export const getDashboardPaymentOverview = async (
         platformVat: bucket.platformVat || 0,
         platformTotalDeduction: bucket.platformTotalDeduction || 0,
         expertPayout: bucket.expertPayout || 0,
+        refundedAmount: bucket.refundedAmount || 0,
+        netRevenueAfterRefund:
+          (bucket.grossBookingValue || 0) - (bucket.refundedAmount || 0),
       },
     ]),
   )
@@ -252,6 +322,8 @@ export const getDashboardPaymentOverview = async (
       platformVat: round2(data?.platformVat || 0),
       platformTotalDeduction: round2(data?.platformTotalDeduction || 0),
       expertPayout: round2(data?.expertPayout || 0),
+      refundedAmount: round2(data?.refundedAmount || 0),
+      netRevenueAfterRefund: round2(data?.netRevenueAfterRefund || 0),
     }
   })
 
@@ -262,6 +334,8 @@ export const getDashboardPaymentOverview = async (
       acc.platformVat += bucket.platformVat
       acc.platformTotalDeduction += bucket.platformTotalDeduction
       acc.expertPayout += bucket.expertPayout
+      acc.refundedAmount += bucket.refundedAmount
+      acc.netRevenueAfterRefund += bucket.netRevenueAfterRefund
       return acc
     },
     {
@@ -270,12 +344,16 @@ export const getDashboardPaymentOverview = async (
       platformVat: 0,
       platformTotalDeduction: 0,
       expertPayout: 0,
+      refundedAmount: 0,
+      netRevenueAfterRefund: 0,
     },
   )
 
   return {
-    totalEarnings: round2(totals.grossBookingValue),
+    totalEarnings: round2(totals.netRevenueAfterRefund),
     grossBookingValue: round2(totals.grossBookingValue),
+    refundedAmount: round2(totals.refundedAmount),
+    netRevenueAfterRefund: round2(totals.netRevenueAfterRefund),
     totalCommission: round2(totals.platformCommission),
     platformCommission: round2(totals.platformCommission),
     platformVat: round2(totals.platformVat),
@@ -285,10 +363,12 @@ export const getDashboardPaymentOverview = async (
       month: bucket.label,
       revenue: bucket.grossBookingValue,
       commission: bucket.platformCommission,
+      refunded: bucket.refundedAmount,
+      netRevenue: bucket.netRevenueAfterRefund,
     })),
     earningOverview: buckets.map((bucket) => ({
       month: bucket.label,
-      total: bucket.grossBookingValue,
+      total: bucket.netRevenueAfterRefund,
     })),
   }
 }
@@ -308,6 +388,8 @@ export const getEarningOverview = async (year: number) => {
   return {
     totalEarnings: overview.totalEarnings,
     grossBookingValue: overview.grossBookingValue,
+    refundedAmount: overview.refundedAmount,
+    netRevenueAfterRefund: overview.netRevenueAfterRefund,
     consultAmount: overview.expertPayout,
     expertPayout: overview.expertPayout,
     platformCommission: overview.platformCommission,

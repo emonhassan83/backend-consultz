@@ -25,11 +25,31 @@ import { getGeneralSettingNumber } from '../contents/contents.utils'
 import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
 import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
 import { Calling } from '../calling/calling.model'
+import { RefundService } from '../refund/refund.service'
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2026-06-24.dahlia',
   typescript: true,
 })
+
+const formatRefunds = (refunds: any[] = []) =>
+  refunds.map((refund) => ({
+    amount: refund.amount,
+    reason: refund.reason,
+    refundedBy: refund.refundedBy,
+    status: refund.status,
+    stripeRefundId: refund.stripeRefundId,
+    createdAt: refund.createdAt,
+  }))
+
+const getRefundSummary = (refunds: any[] = []) => {
+  const formattedRefunds = formatRefunds(refunds)
+  const refundedAmount = formattedRefunds
+    .filter((refund: any) => refund.status === 'succeeded')
+    .reduce((sum: number, refund: any) => sum + (refund.amount || 0), 0)
+
+  return { refunds: formattedRefunds, refundedAmount }
+}
 
 /* =====================================================
    🔹 CREATE PAYMENT INTENT (WITH CUSTOMER SUPPORT)
@@ -335,8 +355,7 @@ const getAllPaymentsFromDB = async (query: Record<string, any>) => {
   const paymentModel = new QueryBuilder(
     Payment.find({
       isDeleted: false,
-      isPaid: true,
-      status: PAYMENT_STATUS.paid,
+      status: { $in: [PAYMENT_STATUS.paid, PAYMENT_STATUS.refunded] },
     }),
     query,
   )
@@ -348,14 +367,24 @@ const getAllPaymentsFromDB = async (query: Record<string, any>) => {
 
   const payments = await paymentModel.modelQuery
   const meta = await paymentModel.countTotal()
+  const refundMap = await RefundService.getRefundHistoryByPayments(
+    payments.map((payment: any) => payment._id),
+  )
   const data = payments.map((payment: any) => {
     const raw = payment.toObject ? payment.toObject() : payment
+    const { refunds, refundedAmount } = getRefundSummary(
+      refundMap.get(String(raw._id)) || [],
+    )
+    const grossBookingValue = raw.grossBookingValue ?? raw.amount ?? 0
     return {
       ...raw,
-      grossBookingValue: raw.grossBookingValue ?? raw.amount ?? 0,
+      grossBookingValue,
+      refundedAmount,
+      netRevenueAfterRefund: grossBookingValue - refundedAmount,
       platformTotalDeduction:
         raw.platformTotalDeduction ?? raw.platformTotal ?? 0,
       expertPayout: raw.expertPayout ?? raw.consultAmount ?? 0,
+      refunds,
     }
   })
 
@@ -387,6 +416,11 @@ const getAPaymentsFromDB = async (id: string) => {
   }
 
   const rawPayment: any = payment
+  const refundMap = await RefundService.getRefundHistoryByPayments([rawPayment._id])
+  const { refunds, refundedAmount } = getRefundSummary(
+    refundMap.get(String(rawPayment._id)) || [],
+  )
+  const grossBookingValue = rawPayment.grossBookingValue ?? rawPayment.amount ?? 0
   const callLogs = await Calling.find({
     booking: rawPayment.booking?._id || rawPayment.booking,
     isDeleted: false,
@@ -401,93 +435,32 @@ const getAPaymentsFromDB = async (id: string) => {
 
   return {
     ...rawPayment,
-    grossBookingValue: rawPayment.grossBookingValue ?? rawPayment.amount ?? 0,
+    grossBookingValue,
+    refundedAmount,
+    netRevenueAfterRefund: grossBookingValue - refundedAmount,
     platformTotalDeduction:
       rawPayment.platformTotalDeduction ?? rawPayment.platformTotal ?? 0,
     expertPayout: rawPayment.expertPayout ?? rawPayment.consultAmount ?? 0,
+    refunds,
     callLogs,
   }
 }
 
-const refundPayment = async (payload: any) => {
-  if (!payload?.intendId) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Payment intent ID is required')
-  }
+const refundPayment = async (
+  paymentId: string,
+  payload: { type: 'full' | 'partial'; amount?: number; reason: string },
+  adminId: string,
+) => {
+  const result = await RefundService.adminRefundPayment(paymentId, payload, adminId)
+  const payment = await Payment.findById(paymentId)
+  const user = payment?.account ? await User.findById(payment.account) : null
 
-  const session = await mongoose.startSession()
-  session.startTransaction()
-
-  try {
-    const refundData = {
-      payment_intent: payload.intendId,
-      ...(payload.amount && {
-        amount: payload.amount * 100,
-        reason: 'requested_by_customer',
-      }),
-    }
-
-    // Find and update payment status
-    const payment = await Payment.findOneAndUpdate(
-      { paymentIntentId: payload.intendId },
-      {
-        status: PAYMENT_STATUS.refunded,
-        settlementStatus: PAYMENT_SETTLEMENT_STATUS.refunded,
-        isPaid: false,
-      },
-      { returnDocument: 'after', session },
-    )
-    if (!payment || payment?.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Payment record not found')
-    }
-
-    // Validate and update booking status
-    const booking = await Booking.findById(payment.booking).session(session)
-    if (!booking || booking?.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Booking record not found')
-    }
-
-    if (booking.status !== BOOKING_STATUS.cancelled) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'Only cancelled bookings can be refunded. Please cancel the booking first.',
-      )
-    }
-
-    await Booking.findByIdAndUpdate(
-      payment.booking,
-      { paymentStatus: PAYMENT_STATUS.refunded },
-      { returnDocument: 'after', session },
-    )
-
-    // Process refund via Stripe
-    const response = await stripe.refunds.create(refundData)
-
-    // fatch user
-    const user = await User.findById(payment.account)
-    if (!user || user?.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
-    }
-
-    // Commit transaction
-    await session.commitTransaction()
-    session.endSession()
-
-    // sent notify to user when payment is refund
+  if (payment && user) {
     await paymentNotifyToUser('REFUND', payment, user)
-
-    // sent notify to admin when payment is refund
     await paymentNotifyToAdmin('REFUND', payment)
-
-    return response
-  } catch (error: any) {
-    await session.abortTransaction()
-    session.endSession()
-    console.error('Refund Error:', error)
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      error.message || 'Refund processing failed',
-    )
   }
+
+  return result
 }
 
 export const PaymentService = {
