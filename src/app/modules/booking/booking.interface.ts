@@ -3,6 +3,7 @@ import { TBookingStatus, TPaymentStatus, TSessionType } from './booking.constant
 
 export interface TBookings {
   _id?: ObjectId | string
+  id?: string | null
   user: Types.ObjectId
   consult: Types.ObjectId
   date?: string

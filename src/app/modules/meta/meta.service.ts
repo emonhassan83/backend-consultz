@@ -11,6 +11,7 @@ import { Payment } from '../payment/payment.model'
 import { PAYMENT_STATUS } from '../payment/payment.constant'
 import { getGeneralSettingNumber } from '../contents/contents.utils'
 import { RefundService } from '../refund/refund.service'
+import mongoose from 'mongoose'
 
 const formatRefunds = (refunds: any[] = []) =>
   refunds.map((refund) => ({
@@ -128,36 +129,89 @@ const paymentTransactionMetaData = async (
   query: Record<string, unknown>,
   _userId: string,
 ) => {
-  const { year, ...restQuery } = query
+  const { year, startDate, endDate, status, searchTerm, ...restQuery } = query
 
   const selectedYear = year
     ? parseInt(year as string, 10) || new Date().getFullYear()
     : new Date().getFullYear()
 
-  const yearStart = new Date(selectedYear, 0, 1)
-  const yearEnd = new Date(selectedYear, 11, 31, 23, 59, 59, 999)
+  const rangeStart = startDate
+    ? new Date(`${String(startDate)}T00:00:00.000Z`)
+    : new Date(selectedYear, 0, 1)
+  const rangeEnd = endDate
+    ? new Date(`${String(endDate)}T23:59:59.999Z`)
+    : new Date(selectedYear, 11, 31, 23, 59, 59, 999)
 
-  const baseFilter = {
+  const baseFilter: Record<string, any> = {
     isDeleted: false,
-    status: { $in: [PAYMENT_STATUS.paid, PAYMENT_STATUS.refunded] },
-    createdAt: { $gte: yearStart, $lte: yearEnd },
+    status:
+      status && status !== 'all'
+        ? status
+        : { $in: [PAYMENT_STATUS.paid, PAYMENT_STATUS.refunded] },
+    createdAt: { $gte: rangeStart, $lte: rangeEnd },
   }
 
   const summaryFilter: Record<string, unknown> = { ...baseFilter }
-  const excludedFields = ['searchTerm', 'sort', 'limit', 'page', 'fields']
+  const excludedFields = ['sort', 'limit', 'page', 'fields']
 
   Object.entries(restQuery).forEach(([key, value]) => {
     if (!excludedFields.includes(key)) {
       summaryFilter[key] = value
+      baseFilter[key] = value
     }
   })
+
+  if (searchTerm) {
+    const term = String(searchTerm).trim()
+    const terms = term.split(/\s+/).filter(Boolean)
+    const searchRegex = new RegExp(term, 'i')
+    const accountIds = await User.find({
+      isDeleted: false,
+      $or: [
+        { firstName: searchRegex },
+        { lastName: searchRegex },
+        { email: searchRegex },
+        ...(terms.length > 1
+          ? [
+              {
+                $and: terms.map((singleTerm) => {
+                  const regex = new RegExp(singleTerm, 'i')
+                  return {
+                    $or: [
+                      { firstName: regex },
+                      { lastName: regex },
+                      { email: regex },
+                    ],
+                  }
+                }),
+              },
+            ]
+          : []),
+      ],
+    }).distinct('_id')
+
+    const searchOr: Record<string, unknown>[] = [
+      { id: searchRegex },
+      { paymentIntentId: searchRegex },
+      { transactionId: searchRegex },
+      { account: { $in: accountIds } },
+    ]
+
+    if (mongoose.Types.ObjectId.isValid(term)) {
+      searchOr.push({ _id: new mongoose.Types.ObjectId(term) })
+      searchOr.push({ booking: new mongoose.Types.ObjectId(term) })
+    }
+
+    baseFilter.$or = searchOr
+    summaryFilter.$or = searchOr
+  }
 
   const paymentQuery = new QueryBuilder(
     Payment.find(baseFilter).populate([
       {
         path: 'booking',
         select:
-          '_id date startTime endTime startAt endAt sessionType sessionDuration price timezone localDate localStartTime localEndTime',
+          '_id id date startTime endTime startAt endAt sessionType sessionDuration price timezone localDate localStartTime localEndTime',
       },
       {
         path: 'account',
@@ -166,8 +220,6 @@ const paymentTransactionMetaData = async (
     ]),
     restQuery,
   )
-    .search(['booking.sessionType'])
-    .filter()
     .sort()
     .paginate()
     .fields()
@@ -285,6 +337,7 @@ const paymentTransactionMetaData = async (
 
     return {
       ...raw,
+      booking: raw.booking ? { ...raw.booking, id: raw.booking.id ?? null } : raw.booking,
       grossBookingValue,
       refundedAmount,
       netRevenueAfterRefund: grossBookingValue - refundedAmount,

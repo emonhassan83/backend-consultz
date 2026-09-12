@@ -402,7 +402,7 @@ const getAPaymentsFromDB = async (id: string) => {
       {
         path: 'booking',
         select:
-          '_id user consult date startTime endTime startAt endAt sessionType sessionDuration price timezone localDate localStartTime localEndTime status paymentStatus',
+          '_id id user consult date startTime endTime startAt endAt sessionType sessionDuration price timezone localDate localStartTime localEndTime status paymentStatus',
         populate: [
           { path: 'user', select: '_id firstName lastName email photoUrl' },
           { path: 'consult', select: '_id firstName lastName email photoUrl' },
@@ -435,6 +435,9 @@ const getAPaymentsFromDB = async (id: string) => {
 
   return {
     ...rawPayment,
+    booking: rawPayment.booking
+      ? { ...rawPayment.booking, id: rawPayment.booking.id ?? null }
+      : rawPayment.booking,
     grossBookingValue,
     refundedAmount,
     netRevenueAfterRefund: grossBookingValue - refundedAmount,

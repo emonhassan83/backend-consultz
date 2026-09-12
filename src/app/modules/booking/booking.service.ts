@@ -167,6 +167,7 @@ const getBookingDisplayFields = (booking: any) => ({
 
 const attachBookingDisplayFields = (booking: any) => ({
   ...booking,
+  id: booking.id ?? null,
   ...getBookingDisplayFields(booking),
 })
 
@@ -524,7 +525,7 @@ const getAllBookings = async (
         { path: 'consult', select: 'firstName lastName photoUrl' },
       ])
       .select(
-        'user consult sessionType sessionDuration price timezone status createdAt mainQuestion date localDate localStartTime localEndTime startTime endTime',
+        'id user consult sessionType sessionDuration price timezone status createdAt mainQuestion date localDate localStartTime localEndTime startTime endTime',
       ) as any,
     restQuery,
   )
@@ -650,7 +651,7 @@ const getAllBookingsByDate = async (
       { path: 'consult', select: 'firstName lastName photoUrl' },
     ])
     .select(
-      'user consult sessionType sessionDuration price timezone status createdAt date localDate localStartTime localEndTime startTime endTime',
+      'id user consult sessionType sessionDuration price timezone status createdAt date localDate localStartTime localEndTime startTime endTime',
     )
     .sort({ createdAt: -1 })
 

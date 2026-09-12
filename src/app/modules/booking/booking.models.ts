@@ -1,5 +1,6 @@
 import { model, Schema } from 'mongoose'
 import { TBookings, TBookingsModules } from './booking.interface'
+import { generateCryptoString } from '../../utils/generateCryptoString'
 import {
   BOOKING_STATUS,
   PAYMENT_STATUS,
@@ -8,6 +9,12 @@ import {
 
 const bookingsSchema = new Schema<TBookings>(
   {
+    id: {
+      type: String,
+      unique: true,
+      sparse: true,
+      default: () => generateCryptoString(10),
+    },
     user: {
       type: Schema.Types.ObjectId,
       ref: 'User',
@@ -135,6 +142,7 @@ const bookingsSchema = new Schema<TBookings>(
     timestamps: true,
     toJSON: {
       transform: (_doc, ret) => {
+        ret.id = ret.id ?? null
         delete (ret as any).sessionStartedAt
         delete (ret as any).dmCloseTime
         delete (ret as any).localTime
@@ -143,6 +151,7 @@ const bookingsSchema = new Schema<TBookings>(
     },
     toObject: {
       transform: (_doc, ret) => {
+        ret.id = ret.id ?? null
         delete (ret as any).sessionStartedAt
         delete (ret as any).dmCloseTime
         delete (ret as any).localTime
