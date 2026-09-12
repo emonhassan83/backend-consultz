@@ -429,3 +429,27 @@ export const paymentSuccessToUserTemplate = (
   return baseLayout('Payment Successful', user.firstName, body)
 }
 
+export const paymentRefundToUserTemplate = (
+  user: TUser,
+  payment: any,
+  refund: any,
+  booking?: TBookings | null,
+): string => {
+  const amount = Number(refund?.amount || payment?.amount || 0)
+  const sessionInfo = booking ? getBookingSessionInfo(booking) : 'N/A'
+
+  const body = `
+    ${para('A refund has been issued for your Consultz booking payment.')}
+    ${infoBlock([
+      { label: 'Refund Amount', value: `Â£${amount.toFixed(2)}` },
+      { label: 'Reason', value: refund?.reason || 'Refund processed' },
+      { label: 'Status', value: refund?.status || 'succeeded' },
+      { label: 'Session', value: sessionInfo },
+    ])}
+    ${noticeBlock('The refund has been submitted to the payment provider. Depending on your bank or card provider, it may take a few business days to appear in your account.', 'info')}
+    ${para('Thank you for your understanding.')}
+  `
+
+  return baseLayout('Refund Issued', user.firstName, body)
+}
+

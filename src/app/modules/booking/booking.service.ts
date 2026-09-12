@@ -20,6 +20,7 @@ import { PAYMENT_SETTLEMENT_STATUS } from '../payment/payment.constant'
 import { Contents } from '../contents/contents.models'
 import {
   sendCancellationEmail,
+  sendPaymentRefundToUser,
   sendRescheduleEmail,
   sendScheduleChangeRequestEmail,
   sendSessionCompletedToConsultant,
@@ -43,6 +44,7 @@ import { getGeneralSettingNumber } from '../contents/contents.utils'
 import { Reviews } from '../review/review.models'
 import { REFUND_BY } from '../refund/refund.constant'
 import { RefundService } from '../refund/refund.service'
+import { paymentNotifyToUser } from '../payment/payment.utils'
 
 const getEntityId = (entity: any): string =>
   (entity?._id || entity)?.toString()
@@ -808,6 +810,8 @@ const cancelBooking = async (
     // Refund process
     let refundProcessed = false
     let refundAmount = 0
+    let refundedPayment: any = null
+    let refundInfo: any = null
     if (booking.paymentStatus == PAYMENT_STATUS.paid) {
       const payment = await Payment.findOne({
         booking: booking._id.toString(),
@@ -829,6 +833,8 @@ const cancelBooking = async (
 
           refundProcessed = true
           refundAmount = refundResult.refund.amount
+          refundedPayment = payment
+          refundInfo = refundResult.refund
         } catch (refundError: any) {
           console.error('Refund failed:', refundError.message)
           // Also throw error if fail
@@ -882,6 +888,12 @@ const cancelBooking = async (
         cancelledByEmail,
       )
     }
+
+    if (refundProcessed && booker && refundedPayment && refundInfo) {
+      await paymentNotifyToUser('REFUND', refundedPayment, booker as TUser, refundInfo)
+      await sendPaymentRefundToUser(booker as TUser, refundedPayment, refundInfo, cancelledBooking)
+    }
+
     await session.commitTransaction()
 
     return {
@@ -1135,6 +1147,8 @@ const declineBooking = async (
     // 5. Refund process
     let refundProcessed = false
     let refundAmount = 0
+    let refundedPayment: any = null
+    let refundInfo: any = null
 
     const payment = await Payment.findOne({
       booking: booking._id.toString(),
@@ -1153,6 +1167,8 @@ const declineBooking = async (
 
         refundProcessed = true
         refundAmount = refundResult.refund.amount
+        refundedPayment = payment
+        refundInfo = refundResult.refund
       } catch (refundError: any) {
         console.error('Refund failed:', refundError.message)
       }
@@ -1169,6 +1185,11 @@ const declineBooking = async (
       await sendBookingsNotification('declined', updatedBooking, booker, expert as TUser, {
         cancelledBy: 'booker',
       })
+    }
+
+    if (refundProcessed && booker && refundedPayment && refundInfo) {
+      await paymentNotifyToUser('REFUND', refundedPayment, booker as TUser, refundInfo)
+      await sendPaymentRefundToUser(booker as TUser, refundedPayment, refundInfo, updatedBooking)
     }
 
     // 8. Push notification to expert (optional â€” self declined)

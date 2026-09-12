@@ -16,6 +16,7 @@ import {
   notRespondedToUserTemplate,
   notRespondedToConsultantTemplate,
   paymentSuccessToUserTemplate,
+  paymentRefundToUserTemplate,
 } from '../templates/booking.templates'
 import {
   withdrawCompletedTemplate,
@@ -188,6 +189,20 @@ export const sendPaymentSuccessToUser = async (
     'Payment Successful – Booking Pending Approval',
     paymentSuccessToUserTemplate(user, booking, expert, payment),
   ).catch((err) => console.error(`Payment success email failed (user ${user._id}):`, err))
+}
+
+export const sendPaymentRefundToUser = async (
+  user: TUser,
+  payment: any,
+  refund: any,
+  booking?: TBookings | null,
+) => {
+  if (!user?.email || !user.emailNotify?.payment) return
+  await emailSender(
+    user.email,
+    'Refund Issued',
+    paymentRefundToUserTemplate(user, payment, refund, booking),
+  ).catch((err) => console.error(`Payment refund email failed (user ${user._id}):`, err))
 }
 
 // 9. Not responded → user & consultant

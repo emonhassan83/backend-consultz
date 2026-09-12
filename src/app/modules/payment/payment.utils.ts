@@ -26,12 +26,14 @@ interface TPayload {
   paymentId: string | Types.ObjectId
 }
 
+const formatMoney = (amount: number) => `£${Number(amount || 0).toFixed(2)}`
+
 export const createCheckoutSession = async (payload: TPayload) => {
   const paymentGatewayData = await stripe.checkout.sessions.create({
     line_items: [
       {
         price_data: {
-          currency: 'gbp', // Changed from 'usd' to 'gbp'
+          currency: 'gbp',
           product_data: {
             name: payload?.product?.name,
           },
@@ -55,12 +57,12 @@ export const createCheckoutSession = async (payload: TPayload) => {
 export const paymentNotifyToAdmin = async (
   type: 'SUCCESS' | 'REFUND',
   payment: TPayment,
+  refund?: any,
 ) => {
   const admin = await findAdmin()
 
   if (!admin || !admin?.fcmToken) return
 
-  // Define message and description based on type
   const message =
     type === 'SUCCESS'
       ? messages.paymentManagement.paymentSuccess
@@ -68,10 +70,9 @@ export const paymentNotifyToAdmin = async (
 
   const description =
     type === 'SUCCESS'
-      ? `A payment of £${payment.amount} has been successfully received. Transaction ID: ${payment.transactionId}.`
-      : `A refund of £${payment.amount} has been successfully processed. Refund Transaction ID: ${payment.transactionId}.`
+      ? `A payment of ${formatMoney(payment.amount)} has been successfully received. Transaction ID: ${payment.transactionId}.`
+      : `A refund of ${formatMoney(refund?.amount || payment.amount)} has been successfully processed. Reason: ${refund?.reason || 'Refund processed'}.`
 
-  // Create a notification entry
   const notifyPayload = {
     receiver: admin?._id,
     message,
@@ -87,10 +88,10 @@ export const paymentNotifyToUser = async (
   type: 'SUCCESS' | 'REFUND',
   payment: TPayment,
   user: TUser,
+  refund?: any,
 ) => {
   if (!user || !user?.fcmToken || user.pushNotify?.payment === false) return
 
-  // Define message and description based on type
   const message =
     type === 'SUCCESS'
       ? messages.paymentManagement.paymentSuccess
@@ -98,10 +99,9 @@ export const paymentNotifyToUser = async (
 
   const description =
     type === 'SUCCESS'
-      ? `Your payment of £${payment.amount} has been successfully processed`
-      : `A refund of £${payment.amount} has been issued to your account`
+      ? `Your payment of ${formatMoney(payment.amount)} has been successfully processed`
+      : `A refund of ${formatMoney(refund?.amount || payment.amount)} has been issued to your account. Reason: ${refund?.reason || 'Refund processed'}`
 
-  // Create a notification entry
   const notifyPayload = {
     receiver: payment?.account,
     message,

@@ -9,7 +9,7 @@ import { Payment } from '../modules/payment/payment.model'
 import { User } from '../modules/user/user.model'
 import { BOOKING_STATUS, PAYMENT_STATUS } from '../modules/booking/booking.constants'
 import { sendBookingsNotification } from '../modules/booking/booking.utils'
-import { sendNotRespondedEmail } from '../utils/emailNotify'
+import { sendNotRespondedEmail, sendPaymentRefundToUser } from '../utils/emailNotify'
 import { TUser } from '../modules/user/user.interface'
 import {
   resolveBookingEndUtc,
@@ -17,6 +17,7 @@ import {
 } from './bookingJobTime.utils'
 import { RefundService } from '../modules/refund/refund.service'
 import { REFUND_BY } from '../modules/refund/refund.constant'
+import { paymentNotifyToUser } from '../modules/payment/payment.utils'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -130,13 +131,27 @@ const runAutoMarkNotRespondedJobOnce = async (): Promise<void> => {
         // duplicate refunds if this task is retried.
         if (capturedPayment?.paymentIntentId) {
           try {
-            await RefundService.createFullRefund({
+            const refundResult = await RefundService.createFullRefund({
               payment: capturedPayment,
               reason: 'Booking not accepted',
               refundedBy: REFUND_BY.system,
               idempotencyKey: `booking-not-responded-${capturedBooking._id}`,
             })
             refundProcessed = true
+            if (booker) {
+              await paymentNotifyToUser(
+                'REFUND',
+                capturedPayment as any,
+                booker as TUser,
+                refundResult.refund,
+              )
+              await sendPaymentRefundToUser(
+                booker as TUser,
+                capturedPayment,
+                refundResult.refund,
+                capturedBooking as any,
+              )
+            }
             console.log(`Refund processed for booking ${capturedBooking._id}`)
           } catch (refundError: any) {
             console.error(

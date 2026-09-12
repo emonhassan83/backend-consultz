@@ -14,6 +14,7 @@ import { sendBookingsNotification } from '../booking/booking.utils'
 import {
   sendNewBookingToConsultant,
   sendPaymentSuccessToUser,
+  sendPaymentRefundToUser,
 } from '../../utils/emailNotify'
 import { Chat } from '../chat/chat.models'
 import { getVatRateForCountry } from '../../utils/vatRate'
@@ -455,12 +456,14 @@ const refundPayment = async (
   adminId: string,
 ) => {
   const result = await RefundService.adminRefundPayment(paymentId, payload, adminId)
-  const payment = await Payment.findById(paymentId)
+  const payment = await Payment.findById(paymentId).populate('booking')
   const user = payment?.account ? await User.findById(payment.account) : null
+  const refund = result?.refund
 
   if (payment && user) {
-    await paymentNotifyToUser('REFUND', payment, user)
-    await paymentNotifyToAdmin('REFUND', payment)
+    await paymentNotifyToUser('REFUND', payment, user, refund)
+    await sendPaymentRefundToUser(user, payment, refund, payment.booking as any)
+    await paymentNotifyToAdmin('REFUND', payment, refund)
   }
 
   return result
