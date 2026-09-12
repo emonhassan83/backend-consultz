@@ -27,6 +27,7 @@ import { MetaRoutes } from '../modules/meta/meta.route'
 import { SupportRoutes } from '../modules/support/support.route'
 import { PointsLogsRoutes } from '../modules/pointsLogs/pointsLogs.route'
 import { AppealRoutes } from '../modules/appeal/appeal.route'
+import { SettingsLogsRoutes } from '../modules/settingsLogs/settingsLogs.route'
 
 const router = Router()
 
@@ -134,6 +135,10 @@ const moduleRoutes = [
   {
     path: '/points-logs',
     route: PointsLogsRoutes,
+  },
+  {
+    path: '/settings-logs',
+    route: SettingsLogsRoutes,
   },
   {
     path: '/categories',

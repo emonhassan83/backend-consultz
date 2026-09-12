@@ -788,11 +788,29 @@ const cancelBooking = async (
       )
     }
 
-    await ensureActionBeforePolicyWindow({
-      booking,
-      settingKey: 'cancellationTime',
-      actionLabel: 'Cancellation',
-    })
+    const bookingStartAt = resolveBookingStartDate(booking)
+    if (!bookingStartAt) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Cannot validate cancellation policy because booking start time is missing.',
+      )
+    }
+
+    if (dayjs(bookingStartAt).isSameOrBefore(dayjs())) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Booking cannot be cancelled after the scheduled start time.',
+      )
+    }
+
+    const hoursUntilStart = dayjs(bookingStartAt).diff(dayjs(), 'hour', true)
+    const isRefundEligible = hoursUntilStart >= 24
+    const cancellationWarning = isRefundEligible
+      ? ''
+      : 'This booking was cancelled within 24 hours of the scheduled appointment time, so no refund will be issued.'
+    const refundNote = isRefundEligible
+      ? 'A full refund has been initiated and will usually appear on the original payment method within 3 to 7 business days, depending on the bank or card provider.'
+      : cancellationWarning
 
     // Booking status canceled
     const cancelledBooking = await Booking.findByIdAndUpdate(
@@ -812,7 +830,7 @@ const cancelBooking = async (
     let refundAmount = 0
     let refundedPayment: any = null
     let refundInfo: any = null
-    if (booking.paymentStatus == PAYMENT_STATUS.paid) {
+    if (booking.paymentStatus == PAYMENT_STATUS.paid && isRefundEligible) {
       const payment = await Payment.findOne({
         booking: booking._id.toString(),
         isPaid: true,
@@ -886,6 +904,8 @@ const cancelBooking = async (
         cancelledBooking,
         reason,
         cancelledByEmail,
+        refundProcessed,
+        refundNote,
       )
     }
 
@@ -897,11 +917,20 @@ const cancelBooking = async (
     await session.commitTransaction()
 
     return {
-      booking,
+      booking: {
+        ...(cancelledBooking.toObject ? cancelledBooking.toObject() : cancelledBooking),
+        refundProcessed,
+        refundAmount,
+        cancellationWarning,
+        refundNote,
+      },
       refundProcessed,
+      refundAmount,
+      cancellationWarning,
+      refundNote,
       message: refundProcessed
         ? 'Booking cancelled and refund processed'
-        : 'Booking cancelled (no refund needed)',
+        : 'Booking cancelled without refund',
     }
   } catch (error) {
     await session.abortTransaction()

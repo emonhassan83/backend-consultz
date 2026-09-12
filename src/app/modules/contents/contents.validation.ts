@@ -29,8 +29,15 @@ const createOrUpdateSettingZodSchema = z.object({
 const updateGeneralsZodSchema = z.object({
   body: z
     .object({
-      paymentHoldDays: z.number().optional(),
-      platformFeePercentage: z.number().optional(),
+      paymentHoldDays: z
+        .number()
+        .min(1, 'Payment hold days must be at least 1')
+        .optional(),
+      platformFeePercentage: z
+        .number()
+        .min(0, 'Platform fee percentage cannot be negative')
+        .max(100, 'Platform fee percentage cannot be greater than 100')
+        .optional(),
       supportContract: z.string().optional(),
       supportEmail: z.string().email({ message: 'Invalid email' }).optional(),
       reschedulingTime: z.number().min(0).optional(),

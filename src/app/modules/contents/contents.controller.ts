@@ -31,7 +31,7 @@ const getGeneralContents = catchAsync(async (req: Request, res: Response) => {
 // Create or update single content
 const createOrUpdateContent = catchAsync(async (req: Request, res: Response) => {
   const key = Array.isArray(req.params.key) ? req.params.key[0] : req.params.key
-  const result = await contentsService.createOrUpdate(key, req.body)
+  const result = await contentsService.createOrUpdate(key, req.body, req.user?._id)
 
   sendResponse(res, {
     statusCode: 200,
@@ -43,7 +43,7 @@ const createOrUpdateContent = catchAsync(async (req: Request, res: Response) => 
 
 // Update multiple general contents
 const updateGeneralContents = catchAsync(async (req: Request, res: Response) => {
-  const result = await contentsService.updateGenerals(req.body)
+  const result = await contentsService.updateGenerals(req.body, req.user?._id)
 
   sendResponse(res, {
     statusCode: 200,

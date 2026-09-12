@@ -44,6 +44,8 @@ export const sendCancellationEmail = async (
   booking: TBookings,
   reason: string,
   cancelledBy: 'user' | 'consult',
+  withRefundOverride?: boolean,
+  refundNote?: string,
 ): Promise<void> => {
   const cancelledByName =
     cancelledBy === 'user'
@@ -53,11 +55,12 @@ export const sendCancellationEmail = async (
   const tasks: Promise<void>[] = []
 
   if (user?.email && user.emailNotify?.booking) {
+    const withRefund = withRefundOverride ?? cancelledBy === 'consult'
     tasks.push(
       emailSender(
         user.email,
         'Booking Cancelled',
-        bookingCancelledToUserTemplate(user, consult, booking, reason, cancelledByName, cancelledBy === 'consult', cancelledBy),
+        bookingCancelledToUserTemplate(user, consult, booking, reason, cancelledByName, withRefund, cancelledBy, refundNote),
       ).catch((err) => console.error(`Cancellation email failed (user ${user._id}):`, err)),
     )
   }

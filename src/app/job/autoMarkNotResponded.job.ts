@@ -12,12 +12,13 @@ import { sendBookingsNotification } from '../modules/booking/booking.utils'
 import { sendNotRespondedEmail, sendPaymentRefundToUser } from '../utils/emailNotify'
 import { TUser } from '../modules/user/user.interface'
 import {
-  resolveBookingEndUtc,
   resolveBookingStartUtc,
 } from './bookingJobTime.utils'
 import { RefundService } from '../modules/refund/refund.service'
 import { REFUND_BY } from '../modules/refund/refund.constant'
 import { paymentNotifyToUser } from '../modules/payment/payment.utils'
+import { Calling } from '../modules/calling/calling.model'
+import { CALLING_STATUS } from '../modules/calling/calling.constant'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -67,21 +68,39 @@ const runAutoMarkNotRespondedJobOnce = async (): Promise<void> => {
       }
 
       const minutesSinceStart = nowUtc.diff(bookingStartUtc, 'minute', true)
-      const bookingEndUtc = resolveBookingEndUtc(booking)
-      const minutesSinceEnd = bookingEndUtc
-        ? nowUtc.diff(bookingEndUtc, 'minute', true)
-        : minutesSinceStart - booking.sessionDuration
 
       console.log(
         `Booking ${booking._id} | tz: ${bookingTimezone} | start: ${bookingStartUtc.tz(bookingTimezone).format()} | minutes since start: ${minutesSinceStart.toFixed(2)}`,
       )
 
+      // Tracy operational rule: no-show/no-response must be checked 5 minutes
+      // after scheduled start, regardless of session duration.
+      if (minutesSinceStart < 5) continue
+
       if (booking.status === BOOKING_STATUS.confirmed) {
-        if (minutesSinceEnd < 0) continue
-      } else if (booking.status === BOOKING_STATUS.pending) {
-        // Give the expert a short grace period at the scheduled start before
-        // expiring an unaccepted request and refunding the consultee.
-        if (minutesSinceStart < 5) continue
+        if (booking.sessionStartedAt) continue
+
+        const activeCall = await Calling.exists({
+          booking: booking._id as any,
+          isDeleted: false,
+          $or: [
+            { startedAt: { $ne: null } },
+            {
+              status: {
+                $in: [
+                  CALLING_STATUS.ringing,
+                  CALLING_STATUS.accepted,
+                  CALLING_STATUS.completed,
+                ],
+              },
+            },
+          ],
+        }).session(session)
+
+        if (activeCall) {
+          console.log(`Booking ${booking._id} has call activity; skipping no-show mark.`)
+          continue
+        }
       }
 
       // â”€â”€ Mark as not_responded â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

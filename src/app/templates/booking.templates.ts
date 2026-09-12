@@ -126,6 +126,7 @@ export const bookingCancelledToUserTemplate = (
   cancelledByName: string,
   withRefund: boolean,
   cancelledBy?: 'user' | 'consult',
+  refundNote?: string,
 ): string => {
   const sessionInfo = getBookingSessionInfo(booking)
 
@@ -140,7 +141,11 @@ export const bookingCancelledToUserTemplate = (
       { label: 'Session', value: sessionInfo },
       { label: 'Reason', value: reason || 'No reason provided' },
     ])}
-    ${withRefund ? noticeBlock('A full refund has been initiated and will be reflected in your account shortly.', 'info') : ''}
+    ${
+      withRefund
+        ? noticeBlock(refundNote || 'A full refund has been initiated and will usually appear on your original payment method within 3 to 7 business days, depending on your bank or card provider.', 'info')
+        : noticeBlock(refundNote || 'This booking was cancelled within 24 hours of the scheduled appointment time, so no refund will be issued under the cancellation policy.', 'warning')
+    }
     ${para('If this was unexpected, please contact our support team.')}
   `
 
