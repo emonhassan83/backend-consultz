@@ -60,6 +60,12 @@ export default {
     keyId: process.env.APNS_KEY_ID,
     teamId: process.env.APNS_TEAM_ID,
     bundleId: process.env.APNS_BUNDLE_ID,
+    // Explicit override for TestFlight/App Store vs Xcode Debug.
+    // Default: NODE_ENV === 'production'
+    production:
+      process.env.APNS_PRODUCTION !== undefined
+        ? process.env.APNS_PRODUCTION === 'true'
+        : process.env.NODE_ENV === 'production',
   },
   apifreaks_key: process.env.APIFREAKS_KEY,
 }

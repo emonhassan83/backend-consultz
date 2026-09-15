@@ -18,8 +18,7 @@ const apnProvider = new apn.Provider({
     keyId: config.apns.keyId as string,
     teamId: config.apns.teamId as string,
   },
-  production: process.env.NODE_ENV === 'production',
-  // Optional: আরও ভালো error handling
+  production: config.apns.production,
   rejectUnauthorized: true,
 });
 
@@ -72,10 +71,15 @@ export const sendVoIPPush = async (
     const response = await apnProvider.send(notification, voipToken);
 
     if (response.sent.length > 0) {
-      console.log(`[VoIP Push] ✅ Successfully sent to iOS device`);
+      console.log(
+        `[VoIP Push] ✅ Sent via ${config.apns.production ? 'production' : 'sandbox'} gateway`,
+      );
       return { success: true };
     } else {
-      console.error('[VoIP Push] ❌ Failed:', response.failed);
+      console.error(
+        `[VoIP Push] ❌ Failed (${config.apns.production ? 'production' : 'sandbox'}):`,
+        response.failed,
+      );
       return {
         success: false,
         reason: response.failed?.[0]?.response?.reason,
