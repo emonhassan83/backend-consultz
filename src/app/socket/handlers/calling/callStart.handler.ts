@@ -190,19 +190,25 @@ const callStart = eventHandler<TCallStartPayload>(
       })
 
       // ================== PUSH NOTIFICATION LOGIC ==================
+      // Same keys for iOS VoIP + Android FCM (uid === agora_uid, token === agora_token)
       const callIncomingPayload = {
         type: 'incoming_call',
+        call_id: calling._id.toString(),
         callId: calling._id.toString(),
         callerId: caller._id.toString(),
+        caller_name: `${caller.firstName || ''} ${caller.lastName || ''}`.trim(),
         callerName: `${caller.firstName || ''} ${caller.lastName || ''}`.trim(),
+        caller_photo: caller.photoUrl || '',
         callerPhoto: caller.photoUrl || '',
+        is_video: isVideo,
         isVideo,
+        channel_name: channelName,
         channelName,
+        agora_token: receiverTokenData.token,
+        agora_uid: receiverUid,
         token: receiverTokenData.token,
         uid: receiverUid,
         expireAt: receiverTokenData.expireAt,
-
-        // Rating & Important Info
         bookingId: booking._id.toString(),
         expertId: booking.consult.toString(),
         userId: booking.user.toString(),
@@ -211,18 +217,16 @@ const callStart = eventHandler<TCallStartPayload>(
       if (receiver.deviceType === 'ios' && receiver.voipToken) {
         // iOS → VoIP Push
         const voipResult = await sendVoIPPush(receiver.voipToken, {
-          call_id: calling._id.toString(),
-          caller_name: callIncomingPayload.callerName,
-          caller_photo: callIncomingPayload.callerPhoto,
-          channel_name: channelName,
-          agora_token: receiverTokenData.token,
-          agora_uid: receiverUid,
-          is_video: isVideo,
-
-          // Rating & Important Info
-          bookingId: booking._id.toString(),
-          expertId: booking.consult.toString(),
-          userId: booking.user.toString(),
+          call_id: callIncomingPayload.call_id,
+          caller_name: callIncomingPayload.caller_name,
+          caller_photo: callIncomingPayload.caller_photo,
+          channel_name: callIncomingPayload.channel_name,
+          agora_token: callIncomingPayload.agora_token,
+          agora_uid: callIncomingPayload.agora_uid,
+          is_video: callIncomingPayload.is_video,
+          bookingId: callIncomingPayload.bookingId,
+          expertId: callIncomingPayload.expertId,
+          userId: callIncomingPayload.userId,
         })
 
         if (!voipResult.success && voipResult.reason === 'BadDeviceToken') {
@@ -232,7 +236,7 @@ const callStart = eventHandler<TCallStartPayload>(
           )
         }
       } else if (receiver.fcmToken) {
-        // Android or fallback → FCM
+        // Android or fallback → FCM (same keys as iOS VoIP)
         await sendDataMessageToToken(receiver.fcmToken, {
           ...callIncomingPayload,
         })
