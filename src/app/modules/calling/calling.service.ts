@@ -187,6 +187,14 @@ const generateCallToken = async (
     throw new AppError(httpStatus.FORBIDDEN, 'Unauthorized')
   }
 
+  const booking = await Booking.findById(call.booking)
+    .select('_id user consult isDeleted')
+    .lean()
+
+  if (!booking || booking.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
+  }
+
   const uid = generateAgoraUidFromUserId(userId)
 
   const tokenData = generateAgoraToken({
@@ -195,9 +203,20 @@ const generateCallToken = async (
   })
 
   return {
+    call_id: call._id.toString(),
+    callId: call._id.toString(),
+    channel_name: call.channelName,
+    channelName: call.channelName,
+    agora_token: tokenData.token,
+    agora_uid: uid,
     token: tokenData.token,
     uid,
     expireAt: tokenData.expireAt,
+    is_video: call.isVideo,
+    isVideo: call.isVideo,
+    bookingId: booking._id.toString(),
+    expertId: booking.consult.toString(),
+    userId: booking.user.toString(),
   }
 }
 
