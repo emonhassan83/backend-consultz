@@ -214,7 +214,7 @@ const sentSupportMessageIntoDB = async (
         status: SUPPORT_STATUS.respond,
       },
     },
-    { new: true },
+    { returnDocument: 'after' },
   )
 
   return updatedSupport

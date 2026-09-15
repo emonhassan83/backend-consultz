@@ -52,7 +52,7 @@ const callEnd = eventHandler<TCallEndPayload>(
             duration: clientDuration,
           },
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
 
       if (!call) {

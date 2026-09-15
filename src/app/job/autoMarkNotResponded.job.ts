@@ -116,7 +116,7 @@ const runAutoMarkNotRespondedJobOnce = async (): Promise<void> => {
           cancelledBy: 'system',
           respondedAt: new Date(),
         },
-        { session, new: true },
+        { session, returnDocument: 'after' },
       )
 
       // The booking was rescheduled/updated after this job read it. Never mark

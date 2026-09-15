@@ -1768,7 +1768,7 @@ const rescheduleBooking = async (
             lastPendingReminderSentAt: null,
           },
         },
-        { new: true, session },
+        { returnDocument: 'after', session },
       )
 
       if (!updatedBooking) {
