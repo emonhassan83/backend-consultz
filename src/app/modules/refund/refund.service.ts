@@ -12,6 +12,8 @@ import {
 } from '../payment/payment.constant'
 import { REFUND_BY, REFUND_STATUS, TRefundBy } from './refund.constant'
 import { Refund } from './refund.model'
+import QueryBuilder from '../../builder/QueryBuilder'
+import { User } from '../user/user.model'
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2026-06-24.dahlia',
@@ -50,6 +52,31 @@ type TReleaseOrRefundPayload = {
 const toObjectId = (value: unknown) =>
   new Types.ObjectId(String((value as any)?._id || value))
 
+const refundPopulateOptions = [
+  { path: 'user', select: '_id firstName lastName email photoUrl' },
+  {
+    path: 'booking',
+    select:
+      '_id id user consult cancelledBy status paymentStatus date startTime endTime localDate localStartTime localEndTime',
+    populate: [
+      { path: 'user', select: '_id firstName lastName email photoUrl' },
+      { path: 'consult', select: '_id firstName lastName email photoUrl' },
+    ],
+  },
+  {
+    path: 'payment',
+    select:
+      '_id id paymentIntentId transactionId amount status settlementStatus createdAt',
+  },
+]
+
+const formatRefundRecord = (refund: any) => ({
+  ...refund,
+  consultee: refund.booking?.user || refund.user || null,
+  expert: refund.booking?.consult || null,
+  cancelledBy: refund.booking?.cancelledBy || null,
+})
+
 const getRefundHistoryByPayments = async (paymentIds: unknown[]) => {
   const ids = paymentIds.filter(Boolean).map(toObjectId)
 
@@ -58,15 +85,7 @@ const getRefundHistoryByPayments = async (paymentIds: unknown[]) => {
   }
 
   const refunds = await Refund.find({ payment: { $in: ids } })
-    .populate({ path: 'user', select: '_id firstName lastName email photoUrl' })
-    .populate({
-      path: 'booking',
-      select: '_id id user consult cancelledBy status paymentStatus date startTime endTime localDate localStartTime localEndTime',
-      populate: [
-        { path: 'user', select: '_id firstName lastName email photoUrl' },
-        { path: 'consult', select: '_id firstName lastName email photoUrl' },
-      ],
-    })
+    .populate(refundPopulateOptions)
     .sort({ createdAt: -1 })
     .lean()
 
@@ -77,6 +96,65 @@ const getRefundHistoryByPayments = async (paymentIds: unknown[]) => {
     acc.set(key, current)
     return acc
   }, new Map<string, any[]>())
+}
+
+const getARefundFromDB = async (refundId: string) => {
+  const refund = await Refund.findById(refundId)
+    .populate(refundPopulateOptions)
+    .lean()
+
+  if (!refund) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Refund not found')
+  }
+
+  return formatRefundRecord(refund)
+}
+
+const getAllRefundsFromDB = async (query: Record<string, unknown>) => {
+  const { searchTerm, ...restQuery } = query
+  const filter: Record<string, any> = { ...restQuery }
+
+  if (searchTerm) {
+    const term = String(searchTerm).trim()
+    const searchRegex = new RegExp(term, 'i')
+    const matchedUserIds = await User.find({
+      isDeleted: false,
+      $or: [
+        { firstName: searchRegex },
+        { lastName: searchRegex },
+        { email: searchRegex },
+      ],
+    }).distinct('_id')
+
+    filter.$or = [
+      { reason: searchRegex },
+      { stripeRefundId: searchRegex },
+      { user: { $in: matchedUserIds } },
+    ]
+
+    if (mongoose.Types.ObjectId.isValid(term)) {
+      const objectId = new mongoose.Types.ObjectId(term)
+      filter.$or.push({ _id: objectId }, { payment: objectId }, { booking: objectId })
+    }
+  }
+
+  const refundQuery = new QueryBuilder(
+    Refund.find(filter).populate(refundPopulateOptions),
+    query,
+  )
+    .sort()
+    .paginate()
+    .fields()
+
+  const [refunds, meta] = await Promise.all([
+    refundQuery.modelQuery.lean(),
+    refundQuery.countTotal(),
+  ])
+
+  return {
+    meta,
+    data: refunds.map(formatRefundRecord),
+  }
 }
 
 const round2 = (value: number) => Number((value || 0).toFixed(2))
@@ -450,4 +528,6 @@ export const RefundService = {
   releaseOrRefundPayment,
   adminRefundPayment,
   getRefundHistoryByPayments,
+  getARefundFromDB,
+  getAllRefundsFromDB,
 }

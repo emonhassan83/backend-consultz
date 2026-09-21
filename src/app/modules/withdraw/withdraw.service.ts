@@ -12,7 +12,10 @@ import { User } from '../user/user.model'
 import mongoose from 'mongoose'
 import { Booking } from '../booking/booking.models'
 import { Payment } from '../payment/payment.model'
-import { sendWithdrawStatusChangeEmail } from '../../utils/emailNotify'
+import {
+  sendWithdrawCompletedEmail,
+  sendWithdrawStatusChangeEmail,
+} from '../../utils/emailNotify'
 import dayjs from 'dayjs'
 import {
   PAYMENT_SETTLEMENT_STATUS,
@@ -449,25 +452,46 @@ const updateWithdrawFromDB = async (
 
     await withdraw.save({ session });
 
-    // Send notification to user
-    const user = await User.findById(withdraw.user).session(session);
-    if (user) {
-      await sendWithdrawNotify(status, withdraw, user, note);
-    }
-
-    // Send email to user about status change
-    if (user && user.emailNotify?.payment) {
-      await sendWithdrawStatusChangeEmail(user, withdraw, status);
-    }
+    const consultant = await User.findById(withdraw.user).session(session);
+    const booking = await Booking.findById(withdraw.booking)
+      .populate('user')
+      .session(session);
 
     // Optional: Log admin action (if you have AuditLog model)
     // await AuditLog.create({ action: 'update_withdraw', adminId, withdrawId: id, oldStatus: currentStatus, newStatus: status, note });
 
     await session.commitTransaction();
 
+    if (consultant) {
+      await sendWithdrawNotify(status, withdraw, consultant, note).catch((err) =>
+        console.error(`Withdraw notify failed for consultant ${consultant._id}:`, err),
+      );
+
+      if (status === WITHDRAW_STATUS.completed) {
+        const booker = booking?.user as any;
+
+        if (booker && consultant.emailNotify?.payment) {
+          await sendWithdrawCompletedEmail(
+            consultant,
+            withdraw,
+            booking as any,
+            booker,
+          ).catch((err) =>
+            console.error(`Withdraw email failed for consultant ${consultant._id}:`, err),
+          );
+        }
+      } else if (consultant.emailNotify?.payment) {
+        await sendWithdrawStatusChangeEmail(consultant, withdraw, status).catch((err) =>
+          console.error(`Withdraw status email failed for consultant ${consultant._id}:`, err),
+        );
+      }
+    }
+
     return withdraw;
   } catch (error) {
-    await session.abortTransaction();
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
     throw error instanceof AppError
       ? error
       : new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to update withdraw status');

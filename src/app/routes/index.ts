@@ -22,6 +22,7 @@ import { CardRoutes } from '../modules/card/card.route'
 import { CategoriesRoutes } from '../modules/category/category.route'
 import { StripeRoute } from '../modules/stripe/stripe.route'
 import { WithdrawRoutes } from '../modules/withdraw/withdraw.route'
+import { RefundRoutes } from '../modules/refund/refund.route'
 import { CallingRoutes } from '../modules/calling/calling.route'
 import { MetaRoutes } from '../modules/meta/meta.route'
 import { SupportRoutes } from '../modules/support/support.route'
@@ -103,6 +104,10 @@ const moduleRoutes = [
   {
     path: '/withdraw',
     route: WithdrawRoutes,
+  },
+  {
+    path: '/refunds',
+    route: RefundRoutes,
   },
   {
     path: '/chats',

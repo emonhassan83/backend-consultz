@@ -531,6 +531,9 @@ const refundPayment = async (
   const payment = await Payment.findById(paymentId).populate('booking')
   const user = payment?.account ? await User.findById(payment.account) : null
   const refund = result?.refund
+  const enrichedRefund = refund
+    ? await RefundService.getARefundFromDB(refund._id)
+    : null
 
   if (payment && user) {
     await paymentNotifyToUser('REFUND', payment, user, refund)
@@ -538,7 +541,10 @@ const refundPayment = async (
     await paymentNotifyToAdmin('REFUND', payment, refund)
   }
 
-  return result
+  return {
+    ...result,
+    refund: enrichedRefund,
+  }
 }
 
 export const PaymentService = {
