@@ -1,8 +1,12 @@
 import httpStatus from 'http-status'
 import { Contents } from './contents.models'
 import AppError from '../../errors/AppError'
-import { DEFAULT_GENERAL_CONTENTS, GENERAL_KEYS } from './contents.constants'
+import { DEFAULT_GENERAL_CONTENTS, GENERAL_KEYS, POLICY_TIME_KEYS } from './contents.constants'
 import { SettingsLogsService } from '../settingsLogs/settingsLogs.service'
+import {
+  normalizeGeneralSettingsPayload,
+  resolveGeneralSettingKey,
+} from './contents.utils'
 
 const validateGeneralSettingValue = (key: string, value: any) => {
   if (key === 'paymentHoldDays') {
@@ -24,6 +28,16 @@ const validateGeneralSettingValue = (key: string, value: any) => {
       )
     }
   }
+
+  if ((POLICY_TIME_KEYS as readonly string[]).includes(key)) {
+    const numberValue = Number(value)
+    if (!Number.isFinite(numberValue) || numberValue < 0) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        `${key} must be 0 or greater`,
+      )
+    }
+  }
 }
 
 // Get single content by key
@@ -32,16 +46,16 @@ const getContent = async (key: string) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Key is required')
   }
 
-  // Get from database
-  const content = await Contents.findOne({ key }).select('-__v').lean()
-  if (!content) {
-    throw new AppError(
-      httpStatus.NOT_FOUND,
-      `Content with key "${key}" not found`,
-    )
+  const resolvedKey = resolveGeneralSettingKey(key)
+  const content = await Contents.findOne({ key: resolvedKey }).select('-__v').lean()
+  if (content) {
+    return content
   }
 
-  return content
+  throw new AppError(
+    httpStatus.NOT_FOUND,
+    `Content with key "${key}" not found`,
+  )
 }
 
 // Get all general contents
@@ -71,19 +85,20 @@ const createOrUpdate = async (key: string, payload: any, changedBy?: string) => 
     )
   }
 
-  validateGeneralSettingValue(key, payload.value ?? payload)
+  const resolvedKey = resolveGeneralSettingKey(key)
+  validateGeneralSettingValue(resolvedKey, payload.value ?? payload)
   const newValue = payload.value ?? payload
-  const isGeneralKey = GENERAL_KEYS.includes(key as any)
+  const isGeneralKey = GENERAL_KEYS.includes(resolvedKey as any)
   const existingContent = isGeneralKey
-    ? await Contents.findOne({ key }).select('value').lean()
+    ? await Contents.findOne({ key: resolvedKey }).select('value').lean()
     : null
   const previousValue =
-    existingContent?.value ?? DEFAULT_GENERAL_CONTENTS[key as keyof typeof DEFAULT_GENERAL_CONTENTS] ?? null
+    existingContent?.value ?? DEFAULT_GENERAL_CONTENTS[resolvedKey as keyof typeof DEFAULT_GENERAL_CONTENTS] ?? null
 
   // Update database
   const content = await Contents.findOneAndUpdate(
-    { key },
-    { key, value: newValue, name: payload.name },
+    { key: resolvedKey },
+    { key: resolvedKey, value: newValue, name: payload.name },
     { returnDocument: 'after', upsert: true },
   ).select('-__v')
 
@@ -94,7 +109,7 @@ const createOrUpdate = async (key: string, payload: any, changedBy?: string) => 
   ) {
     await SettingsLogsService.createSettingsLogs([
       {
-        key,
+        key: resolvedKey,
         previousValue,
         newValue,
         changedBy: changedBy as any,
@@ -107,7 +122,8 @@ const createOrUpdate = async (key: string, payload: any, changedBy?: string) => 
 
 // Update multiple general contents
 const updateGenerals = async (payload: Record<string, any>, changedBy?: string) => {
-  const validKeys = GENERAL_KEYS.filter(key => payload[key] !== undefined)
+  const normalizedPayload = normalizeGeneralSettingsPayload(payload)
+  const validKeys = GENERAL_KEYS.filter(key => normalizedPayload[key] !== undefined)
 
   if (validKeys.length === 0) {
     throw new AppError(
@@ -116,7 +132,7 @@ const updateGenerals = async (payload: Record<string, any>, changedBy?: string) 
     )
   }
 
-  validKeys.forEach((key) => validateGeneralSettingValue(key, payload[key]))
+  validKeys.forEach((key) => validateGeneralSettingValue(key, normalizedPayload[key]))
 
   const previousContents = await Contents.find({
     key: { $in: validKeys },
@@ -129,7 +145,7 @@ const updateGenerals = async (payload: Record<string, any>, changedBy?: string) 
   const updates = validKeys.map(key =>
     Contents.findOneAndUpdate(
       { key },
-      { value: payload[key] },
+      { value: normalizedPayload[key] },
       { upsert: true, returnDocument: 'after' },
     ).select('-__v'),
   )
@@ -143,7 +159,7 @@ const updateGenerals = async (payload: Record<string, any>, changedBy?: string) 
           previousValueByKey.get(key) ??
           DEFAULT_GENERAL_CONTENTS[key as keyof typeof DEFAULT_GENERAL_CONTENTS] ??
           null
-        const newValue = payload[key]
+        const newValue = normalizedPayload[key]
 
         if (JSON.stringify(previousValue) === JSON.stringify(newValue)) {
           return null

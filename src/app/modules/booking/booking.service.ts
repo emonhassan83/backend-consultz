@@ -18,7 +18,6 @@ import {
 import QueryBuilder from '../../builder/QueryBuilder'
 import { Payment } from '../payment/payment.model'
 import { PAYMENT_SETTLEMENT_STATUS } from '../payment/payment.constant'
-import { Contents } from '../contents/contents.models'
 import {
   sendCancellationEmail,
   sendPaymentRefundToUser,
@@ -41,7 +40,7 @@ import {
 } from './bookingRules.utils'
 import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
 import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
-import { getGeneralSettingNumber } from '../contents/contents.utils'
+import { getGeneralSettingNumber, getPartyPolicyMinutes } from '../contents/contents.utils'
 import { Reviews } from '../review/review.models'
 import { REFUND_BY } from '../refund/refund.constant'
 import { RefundService } from '../refund/refund.service'
@@ -180,15 +179,6 @@ const attachBookingDisplayFields = (booking: any) => ({
   ...getBookingDisplayFields(booking),
 })
 
-const getGeneralNumberSetting = async (
-  key: string,
-  defaultValue: number,
-): Promise<number> => {
-  const content = await Contents.findOne({ key }).select('value').lean()
-  const value = Number(content?.value)
-  return Number.isFinite(value) && value >= 0 ? value : defaultValue
-}
-
 const resolveBookingStartDate = (booking: any): Date | null => {
   if (booking.startAt) {
     return new Date(booking.startAt)
@@ -213,17 +203,17 @@ const resolveBookingStartDate = (booking: any): Date | null => {
 const ensureActionBeforePolicyWindow = async ({
   booking,
   startAt: providedStartAt,
-  settingKey,
-  defaultMinutes = 60,
+  party,
+  action,
   actionLabel,
 }: {
   booking?: any
   startAt?: Date
-  settingKey: 'reschedulingTime' | 'cancellationTime'
-  defaultMinutes?: number
+  party: 'consultee' | 'consultant'
+  action: 'cancellation' | 'rescheduling'
   actionLabel: string
 }) => {
-  const policyMinutes = await getGeneralNumberSetting(settingKey, defaultMinutes)
+  const policyMinutes = await getPartyPolicyMinutes(party, action)
   const startAt = providedStartAt || resolveBookingStartDate(booking)
 
   if (!startAt) {
@@ -813,19 +803,23 @@ const cancelBooking = async (
       )
     }
 
-    const hoursUntilStart = dayjs(bookingStartAt).diff(dayjs(), 'hour', true)
-    const isRefundEligible = hoursUntilStart >= 24
-    const cancellationWarning = isRefundEligible
-      ? ''
-      : 'This booking was cancelled within 24 hours of the scheduled appointment time, so no refund will be issued.'
-    let refundNote = isRefundEligible
-      ? 'A full refund has been initiated and will usually appear on the original payment method within 3 to 7 business days, depending on the bank or card provider.'
-      : cancellationWarning
-
     const cancelledByValue =
       currentUserId.toString() === getEntityId(booking.user)
         ? 'consultee'
         : 'consultant'
+    const policyMinutes = await getPartyPolicyMinutes(
+      cancelledByValue,
+      'cancellation',
+    )
+    const minutesUntilStart = dayjs(bookingStartAt).diff(dayjs(), 'minute', true)
+    const isRefundEligible =
+      cancelledByValue === 'consultant' || minutesUntilStart >= policyMinutes
+    const cancellationWarning = isRefundEligible
+      ? ''
+      : `This booking was cancelled within ${policyMinutes} minutes of the scheduled appointment time, so no refund will be issued.`
+    let refundNote = isRefundEligible
+      ? 'A full refund has been initiated and will usually appear on the original payment method within 3 to 7 business days, depending on the bank or card provider.'
+      : cancellationWarning
 
     // Booking status canceled
     const cancelledBooking = await Booking.findByIdAndUpdate(
@@ -1646,7 +1640,8 @@ const rescheduleBooking = async (
 
       await ensureActionBeforePolicyWindow({
         startAt: interval.startAt,
-        settingKey: 'reschedulingTime',
+        party: isUser ? 'consultee' : 'consultant',
+        action: 'rescheduling',
         actionLabel: 'Rescheduling',
       })
 
@@ -1837,7 +1832,8 @@ const requestScheduleChange = async (
 
   await ensureActionBeforePolicyWindow({
     booking,
-    settingKey: 'reschedulingTime',
+    party: 'consultant',
+    action: 'rescheduling',
     actionLabel: 'Schedule change request',
   })
 

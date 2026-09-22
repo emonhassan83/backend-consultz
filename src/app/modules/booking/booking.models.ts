@@ -2,6 +2,7 @@ import { model, Schema } from 'mongoose'
 import { TBookings, TBookingsModules } from './booking.interface'
 import { generateCryptoString } from '../../utils/generateCryptoString'
 import {
+  BOOKING_NO_SHOW_BY,
   BOOKING_STATUS,
   PAYMENT_STATUS,
   SESSION_TYPE,
@@ -124,6 +125,11 @@ const bookingsSchema = new Schema<TBookings>(
     cancelledBy: {
       type: String,
       enum: ['consultee', 'consultant', 'system'],
+      default: null,
+    },
+    noShowBy: {
+      type: String,
+      enum: Object.values(BOOKING_NO_SHOW_BY),
       default: null,
     },
     respondedAt: {

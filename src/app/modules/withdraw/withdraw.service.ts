@@ -35,34 +35,63 @@ const getExpertWithdrawalBalances = async (userId: string) => {
 
   if (bookingIds.length === 0) {
     return {
+      lifetimeEarnings: 0,
       availableBalance: 0,
+      amountHeld: 0,
       pendingBalance: 0,
       pendingClearsOn: null as Date | null,
+      totalPaidOut: 0,
     }
   }
 
-  const payments = await Payment.find({
-    booking: { $in: bookingIds },
-    isPaid: true,
-    status: PAYMENT_COLLECTION_STATUS.paid,
-    isDeleted: false,
-    settlementStatus: {
-      $in: [
-        PAYMENT_SETTLEMENT_STATUS.cleared,
-        PAYMENT_SETTLEMENT_STATUS.held,
-      ],
-    },
-  } as any)
-    .select('expertPayout consultAmount amount settlementStatus holdUntil')
-    .lean()
+  const [payments, activeWithdrawSummary, completedWithdrawSummary] =
+    await Promise.all([
+      Payment.find({
+        booking: { $in: bookingIds },
+        isPaid: true,
+        status: PAYMENT_COLLECTION_STATUS.paid,
+        isDeleted: false,
+        settlementStatus: {
+          $in: [
+            PAYMENT_SETTLEMENT_STATUS.cleared,
+            PAYMENT_SETTLEMENT_STATUS.held,
+            PAYMENT_SETTLEMENT_STATUS.withdrawn,
+          ],
+        },
+      } as any)
+        .select('expertPayout consultAmount amount settlementStatus holdUntil')
+        .lean(),
+      Withdraw.aggregate([
+        {
+          $match: {
+            user: new mongoose.Types.ObjectId(userId),
+            status: { $in: [WITHDRAW_STATUS.proceed, WITHDRAW_STATUS.hold] },
+            isDeleted: false,
+          },
+        },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+      Withdraw.aggregate([
+        {
+          $match: {
+            user: new mongoose.Types.ObjectId(userId),
+            status: WITHDRAW_STATUS.completed,
+            isDeleted: false,
+          },
+        },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+    ])
 
+  let lifetimeEarnings = 0
   let availableBalance = 0
-  let pendingBalance = 0
+  let amountHeld = 0
   let pendingClearsOn: Date | null = null
 
   for (const payment of payments) {
     const amount =
       payment.expertPayout || payment.consultAmount || payment.amount || 0
+    lifetimeEarnings += amount
 
     if (payment.settlementStatus === PAYMENT_SETTLEMENT_STATUS.cleared) {
       availableBalance += amount
@@ -70,7 +99,7 @@ const getExpertWithdrawalBalances = async (userId: string) => {
     }
 
     if (payment.settlementStatus === PAYMENT_SETTLEMENT_STATUS.held) {
-      pendingBalance += amount
+      amountHeld += amount
       if (
         payment.holdUntil &&
         (!pendingClearsOn || payment.holdUntil < pendingClearsOn)
@@ -80,10 +109,17 @@ const getExpertWithdrawalBalances = async (userId: string) => {
     }
   }
 
+  const activeWithdrawAmount = activeWithdrawSummary[0]?.total || 0
+  const totalPaidOut = completedWithdrawSummary[0]?.total || 0
+  availableBalance += activeWithdrawAmount
+
   return {
+    lifetimeEarnings: Number(lifetimeEarnings.toFixed(2)),
     availableBalance: Number(availableBalance.toFixed(2)),
-    pendingBalance: Number(pendingBalance.toFixed(2)),
+    amountHeld: Number(amountHeld.toFixed(2)),
+    pendingBalance: Number(amountHeld.toFixed(2)),
     pendingClearsOn,
+    totalPaidOut: Number(totalPaidOut.toFixed(2)),
   }
 }
 
@@ -195,31 +231,156 @@ const addWithdraw = async (payload: { booking: string }, userId: string) => {
   }
 }
 
+const round2 = (value: number) => Number((value || 0).toFixed(2))
+
+const escapeRegExp = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const isMongoObjectId = (value: string) =>
+  /^[a-fA-F0-9]{24}$/.test(value) && mongoose.Types.ObjectId.isValid(value)
+
+const getWithdrawDateRange = (query: Record<string, unknown>) => ({
+  startDate: query.startDate || query.dateFrom,
+  endDate: query.endDate || query.dateTo,
+})
+
+const applyCreatedAtRange = (
+  match: Record<string, any>,
+  startDate: unknown,
+  endDate: unknown,
+) => {
+  if (!startDate && !endDate) {
+    return
+  }
+
+  match.createdAt = {}
+  if (startDate) {
+    match.createdAt.$gte = dayjs(String(startDate)).startOf('day').toDate()
+  }
+  if (endDate) {
+    match.createdAt.$lte = dayjs(String(endDate)).endOf('day').toDate()
+  }
+}
+
+const buildWithdrawSearchMatch = (rawTerm: string) => {
+  const searchTerm = rawTerm.trim()
+  if (!searchTerm) {
+    return null
+  }
+
+  const searchRegex = new RegExp(escapeRegExp(searchTerm), 'i')
+  const orMatch: Record<string, unknown>[] = [
+    { id: searchRegex },
+    { withdrawObjectId: searchRegex },
+    { 'booking.id': searchRegex },
+    { bookingObjectId: searchRegex },
+    { 'user.firstName': searchRegex },
+    { 'user.lastName': searchRegex },
+    { 'user.email': searchRegex },
+  ]
+
+  if (isMongoObjectId(searchTerm)) {
+    const objectId = new mongoose.Types.ObjectId(searchTerm)
+    orMatch.push({ _id: objectId }, { 'booking._id': objectId })
+  }
+
+  const terms = searchTerm.split(/\s+/).filter(Boolean)
+  if (terms.length > 1) {
+    orMatch.push({
+      $and: terms.map((term) => {
+        const termRegex = new RegExp(escapeRegExp(term), 'i')
+        return {
+          $or: [{ 'user.firstName': termRegex }, { 'user.lastName': termRegex }],
+        }
+      }),
+    })
+  }
+
+  return { $or: orMatch }
+}
+
+const getAdminWithdrawSummary = async (query: Record<string, unknown>) => {
+  const { startDate, endDate } = getWithdrawDateRange(query)
+
+  const paidMatch: Record<string, any> = {
+    isDeleted: false,
+    status: WITHDRAW_STATUS.completed,
+  }
+
+  if (startDate || endDate) {
+    applyCreatedAtRange(paidMatch, startDate, endDate)
+  } else {
+    paidMatch.createdAt = {
+      $gte: dayjs().startOf('month').toDate(),
+      $lte: dayjs().endOf('month').toDate(),
+    }
+  }
+
+  const [outstanding, awaitingDecision, paid] = await Promise.all([
+    Withdraw.aggregate([
+      {
+        $match: {
+          isDeleted: false,
+          status: { $in: [WITHDRAW_STATUS.proceed, WITHDRAW_STATUS.hold] },
+        },
+      },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]),
+    Withdraw.aggregate([
+      {
+        $match: {
+          isDeleted: false,
+          status: WITHDRAW_STATUS.hold,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          count: { $sum: 1 },
+          total: { $sum: '$amount' },
+        },
+      },
+    ]),
+    Withdraw.aggregate([
+      { $match: paidMatch },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]),
+  ])
+
+  const totalPendingAmount = round2(outstanding[0]?.total || 0)
+  const awaitingDecisionCount = awaitingDecision[0]?.count || 0
+  const awaitingDecisionAmount = round2(awaitingDecision[0]?.total || 0)
+  const totalPaidAmount = round2(paid[0]?.total || 0)
+
+  return {
+    totalPendingAmount,
+    awaitingDecisionCount,
+    awaitingDecisionAmount,
+    totalPaidAmount,
+  }
+}
+
 const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
   const page = Number(query.page) || 1
   const limit = Number(query.limit) || 10
   const skip = (page - 1) * limit
   const matchStage: Record<string, any> = { isDeleted: false }
 
-  if (query.status) {
-    matchStage.status = query.status
+  const status = String(query.status || '').trim()
+  if (
+    status &&
+    status !== 'all' &&
+    Object.values(WITHDRAW_STATUS).includes(status as TWithdrawStatus)
+  ) {
+    matchStage.status = status
   }
 
-  const startDate = query.startDate || query.dateFrom
-  const endDate = query.endDate || query.dateTo
+  const { startDate, endDate } = getWithdrawDateRange(query)
+  applyCreatedAtRange(matchStage, startDate, endDate)
 
-  if (startDate || endDate) {
-    matchStage.createdAt = {}
-    if (startDate) {
-      matchStage.createdAt.$gte = dayjs(String(startDate)).startOf('day').toDate()
-    }
-    if (endDate) {
-      matchStage.createdAt.$lte = dayjs(String(endDate)).endOf('day').toDate()
-    }
-  }
-
-  const searchTerm = String(query.searchTerm || '').trim()
-  const searchRegex = searchTerm ? new RegExp(searchTerm, 'i') : null
+  const searchMatch = buildWithdrawSearchMatch(
+    String(query.searchTerm || query.search || ''),
+  )
 
   const sortField = String(query.sort || '-createdAt')
   const sortDirection = sortField.startsWith('-') ? -1 : 1
@@ -253,20 +414,8 @@ const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
     },
   ]
 
-  if (searchRegex) {
-    pipeline.push({
-      $match: {
-        $or: [
-          { id: searchRegex },
-          { withdrawObjectId: searchRegex },
-          { 'booking.id': searchRegex },
-          { bookingObjectId: searchRegex },
-          { 'user.firstName': searchRegex },
-          { 'user.lastName': searchRegex },
-          { 'user.email': searchRegex },
-        ],
-      },
-    })
+  if (searchMatch) {
+    pipeline.push({ $match: searchMatch })
   }
 
   pipeline.push(
@@ -314,6 +463,37 @@ const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
   const aggregateResult = await Withdraw.aggregate(pipeline)
   const result = aggregateResult[0]?.data || []
   const total = aggregateResult[0]?.meta?.[0]?.total || 0
+  const expertIds = Array.from(
+    new Set<string>(
+      result
+        .map((withdraw: any) => withdraw.user?._id?.toString())
+        .filter(Boolean),
+    ),
+  )
+  const balanceEntries = await Promise.all(
+    expertIds.map(async (expertId) => [
+      expertId,
+      await getExpertWithdrawalBalances(expertId),
+    ]),
+  )
+  const balanceMap = new Map(balanceEntries as [string, Awaited<ReturnType<typeof getExpertWithdrawalBalances>>][])
+  const enrichedResult = result.map((withdraw: any) => {
+    const expertId = withdraw.user?._id?.toString()
+    const balance = expertId ? balanceMap.get(expertId) : null
+
+    return {
+      ...withdraw,
+      user: withdraw.user
+        ? {
+            ...withdraw.user,
+            lifetimeEarnings: balance?.lifetimeEarnings || 0,
+            availableBalance: balance?.availableBalance || 0,
+            amountHeld: balance?.amountHeld || 0,
+            totalPaidOut: balance?.totalPaidOut || 0,
+          }
+        : withdraw.user,
+    }
+  })
   const meta = {
     page,
     limit,
@@ -321,9 +501,14 @@ const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
     totalPage: Math.ceil(total / limit),
   }
 
+  const summary = await getAdminWithdrawSummary(query)
+
   return {
     meta,
-    result,
+    result: {
+      summary,
+      withdrawList: enrichedResult,
+    },
   }
 }
 
@@ -412,9 +597,22 @@ const getAWithdrawFromDB = async (id: string) => {
     .populate({ path: 'payment', select: '_id id transactionId settlementStatus isManualHold' })
     .sort({ createdAt: -1 })
     .lean()
+  const withdraw = result.toObject ? result.toObject() : result
+  const balance = await getExpertWithdrawalBalances(
+    String(withdraw.user?._id || withdraw.user),
+  )
 
   return {
-    ...(result.toObject ? result.toObject() : result),
+    ...withdraw,
+    user: withdraw.user
+      ? {
+          ...withdraw.user,
+          lifetimeEarnings: balance.lifetimeEarnings,
+          availableBalance: balance.availableBalance,
+          amountHeld: balance.amountHeld,
+          totalPaidOut: balance.totalPaidOut,
+        }
+      : withdraw.user,
     manualHoldLogs,
   }
 }

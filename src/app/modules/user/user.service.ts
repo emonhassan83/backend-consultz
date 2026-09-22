@@ -21,7 +21,7 @@ import {
 } from './user.utils'
 import mongoose, { QueryFilter, Types } from 'mongoose'
 import { Booking } from '../booking/booking.models'
-import { BOOKING_STATUS, PAYMENT_STATUS } from '../booking/booking.constants'
+import { BOOKING_NO_SHOW_BY, BOOKING_STATUS, PAYMENT_STATUS } from '../booking/booking.constants'
 import { validateVatNumber } from '../../utils/vatValidation'
 import { getVatRateForCountry } from '../../utils/vatRate'
 import { sendNotification } from '../../utils/sentNotification'
@@ -859,10 +859,16 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
           status: BOOKING_STATUS.not_responded,
           paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
           isDeleted: false,
+          $or: [
+            { noShowBy: { $in: [BOOKING_NO_SHOW_BY.consultant, BOOKING_NO_SHOW_BY.both] } },
+            { noShowBy: { $exists: false } },
+            { noShowBy: null },
+          ],
         })
         : Booking.countDocuments({
           user: new Types.ObjectId(viewedUserId),
           status: BOOKING_STATUS.not_responded,
+          noShowBy: { $in: [BOOKING_NO_SHOW_BY.consultee, BOOKING_NO_SHOW_BY.both] },
           paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
           isDeleted: false,
         }),

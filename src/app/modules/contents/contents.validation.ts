@@ -40,6 +40,10 @@ const updateGeneralsZodSchema = z.object({
         .optional(),
       supportContract: z.string().optional(),
       supportEmail: z.string().email({ message: 'Invalid email' }).optional(),
+      consulteeReschedulingTime: z.number().min(0).optional(),
+      expertReschedulingTime: z.number().min(0).optional(),
+      consulteeCancellationTime: z.number().min(0).optional(),
+      expertCancellationTime: z.number().min(0).optional(),
       reschedulingTime: z.number().min(0).optional(),
       cancellationTime: z.number().min(0).optional(),
 
