@@ -15,10 +15,17 @@ router.post(
 )
 
 router.patch(
-  '/:id',
+  '/:withdrawId/manual-hold',
   auth(USER_ROLE.admin),
-  zodValidationRequest(WithdrawValidation.updateValidationSchema),
-  WithdrawControllers.updateWithdraw,
+  zodValidationRequest(WithdrawValidation.manualHoldReleaseValidationSchema),
+  WithdrawControllers.manualHoldWithdraw,
+)
+
+router.patch(
+  '/:withdrawId/manual-release',
+  auth(USER_ROLE.admin),
+  zodValidationRequest(WithdrawValidation.manualHoldReleaseValidationSchema),
+  WithdrawControllers.manualReleaseWithdraw,
 )
 
 router.get(

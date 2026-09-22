@@ -36,6 +36,7 @@ export type TPayment = {
   settlementStatus: TPaymentSettlementStatus
   holdUntil?: Date
   holdDaysSnapshot?: number
+  isManualHold?: boolean
   clearedAt?: Date
   withdrawnAt?: Date
   authorizedAt?: Date

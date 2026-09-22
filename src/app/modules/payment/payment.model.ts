@@ -45,6 +45,7 @@ const paymentSchema = new Schema<TPayment>(
     },
     holdUntil: { type: Date, default: null },
     holdDaysSnapshot: { type: Number, default: null },
+    isManualHold: { type: Boolean, default: false },
     clearedAt: { type: Date, default: null },
     withdrawnAt: { type: Date, default: null },
     authorizedAt: { type: Date, default: null },

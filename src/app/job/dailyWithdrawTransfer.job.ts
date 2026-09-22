@@ -3,6 +3,7 @@ import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
 import mongoose from 'mongoose'
 import { Booking } from '../modules/booking/booking.models'
+import { Payment } from '../modules/payment/payment.model'
 import { User } from '../modules/user/user.model'
 import { Withdraw } from '../modules/withdraw/withdraw.model'
 import { WITHDRAW_STATUS } from '../modules/withdraw/withdraw.constant'
@@ -57,6 +58,18 @@ export const dailyWithdrawTransferJob = async (): Promise<void> => {
 
       if (!booking) {
         console.warn(`Booking not found for withdraw ${withdraw._id}`)
+        continue
+      }
+
+      const payment = await Payment.findOne({
+        booking: withdraw.booking,
+        isDeleted: false,
+      })
+        .select('isManualHold')
+        .session(session)
+
+      if (payment?.isManualHold) {
+        console.log(`Withdraw ${withdraw._id} is manually held; skipping transfer.`)
         continue
       }
 

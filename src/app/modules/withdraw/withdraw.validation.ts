@@ -22,7 +22,14 @@ const updateValidationSchema = z.object({
   }),
 })
 
+const manualHoldReleaseValidationSchema = z.object({
+  body: z.object({
+    reason: z.string().trim().min(1, 'Reason is required'),
+  }),
+})
+
 export const WithdrawValidation = {
   updateValidationSchema,
   createValidationSchema,
+  manualHoldReleaseValidationSchema,
 }

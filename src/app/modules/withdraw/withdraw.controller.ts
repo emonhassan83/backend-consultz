@@ -48,6 +48,36 @@ const getAWithdraw = catchAsync(async (req, res) => {
   })
 })
 
+const manualHoldWithdraw = catchAsync(async (req, res) => {
+  const result = await WithdrawService.manualHoldWithdrawFromDB(
+    req.params.withdrawId as string,
+    req.body,
+    req.user._id,
+  )
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Withdraw manually held successfully!',
+    data: result,
+  })
+})
+
+const manualReleaseWithdraw = catchAsync(async (req, res) => {
+  const result = await WithdrawService.manualReleaseWithdrawFromDB(
+    req.params.withdrawId as string,
+    req.body,
+    req.user._id,
+  )
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Withdraw manually released successfully!',
+    data: result,
+  })
+})
+
 const updateWithdraw = catchAsync(async (req, res) => {
   const result = await WithdrawService.updateWithdrawFromDB(
     req.params.id as string,
@@ -67,5 +97,7 @@ export const WithdrawControllers = {
   getAllWithdraw,
   getConsultWithdraw,
   getAWithdraw,
+  manualHoldWithdraw,
+  manualReleaseWithdraw,
   updateWithdraw
 }

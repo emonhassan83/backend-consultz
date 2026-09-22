@@ -21,6 +21,7 @@ import {
   PAYMENT_SETTLEMENT_STATUS,
   PAYMENT_STATUS as PAYMENT_COLLECTION_STATUS,
 } from '../payment/payment.constant'
+import { WithdrawManualHoldLog } from '../withdrawManualHoldLog/withdrawManualHoldLog.model'
 
 const getExpertWithdrawalBalances = async (userId: string) => {
   const bookings = await Booking.find({
@@ -404,7 +405,223 @@ const getAWithdrawFromDB = async (id: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Withdraw not found')
   }
 
-  return result
+  const manualHoldLogs = await WithdrawManualHoldLog.find({
+    withdraw: result._id,
+  })
+    .populate({ path: 'admin', select: '_id firstName lastName email photoUrl' })
+    .populate({ path: 'payment', select: '_id id transactionId settlementStatus isManualHold' })
+    .sort({ createdAt: -1 })
+    .lean()
+
+  return {
+    ...(result.toObject ? result.toObject() : result),
+    manualHoldLogs,
+  }
+}
+
+const manualHoldWithdrawFromDB = async (
+  withdrawId: string,
+  payload: { reason: string },
+  adminId: string,
+) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
+
+  try {
+    const withdraw = await Withdraw.findById(withdrawId).session(session)
+    if (!withdraw || withdraw.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Withdraw not found')
+    }
+
+    if (withdraw.status === WITHDRAW_STATUS.completed) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Completed withdrawals cannot be held',
+      )
+    }
+
+    const [payment, consultant] = await Promise.all([
+      Payment.findOne({ booking: withdraw.booking, isDeleted: false }).session(
+        session,
+      ),
+      User.findById(withdraw.user).session(session),
+    ])
+
+    if (!payment) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Payment not found')
+    }
+
+    if (!consultant || consultant.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Consultant not found')
+    }
+
+    if (
+      payment.status === PAYMENT_COLLECTION_STATUS.refunded ||
+      payment.status === PAYMENT_COLLECTION_STATUS.cancelled ||
+      payment.settlementStatus === PAYMENT_SETTLEMENT_STATUS.refunded
+    ) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Refunded or cancelled payments cannot be held',
+      )
+    }
+
+    if (payment.isManualHold && withdraw.status === WITHDRAW_STATUS.hold) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Withdraw is already on manual hold')
+    }
+
+    const previousWithdrawStatus = withdraw.status
+    const previousSettlementStatus = payment.settlementStatus
+
+    withdraw.status = WITHDRAW_STATUS.hold
+    withdraw.proceedAt = undefined
+    payment.isManualHold = true
+    payment.settlementStatus = PAYMENT_SETTLEMENT_STATUS.held
+
+    await Promise.all([withdraw.save({ session }), payment.save({ session })])
+
+    const [auditLog] = await (WithdrawManualHoldLog as any).create(
+      [
+        {
+          withdraw: withdraw._id,
+          payment: payment._id,
+          booking: withdraw.booking,
+          admin: adminId,
+          action: 'manual_hold',
+          reason: payload.reason.trim(),
+          previousWithdrawStatus,
+          newWithdrawStatus: withdraw.status,
+          previousSettlementStatus,
+          newSettlementStatus: payment.settlementStatus,
+        },
+      ],
+      { session },
+    )
+
+    await session.commitTransaction()
+
+    await Promise.allSettled([
+      sendWithdrawNotify(WITHDRAW_STATUS.hold, withdraw, consultant, payload.reason),
+      consultant.emailNotify?.payment
+        ? sendWithdrawStatusChangeEmail(consultant, withdraw, WITHDRAW_STATUS.hold)
+        : Promise.resolve(),
+    ])
+
+    return { withdraw, auditLog }
+  } catch (error) {
+    if (session.inTransaction()) {
+      await session.abortTransaction()
+    }
+    throw error
+  } finally {
+    session.endSession()
+  }
+}
+
+const manualReleaseWithdrawFromDB = async (
+  withdrawId: string,
+  payload: { reason: string },
+  adminId: string,
+) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
+
+  try {
+    const withdraw = await Withdraw.findById(withdrawId).session(session)
+    if (!withdraw || withdraw.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Withdraw not found')
+    }
+
+    if (withdraw.status === WITHDRAW_STATUS.completed) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Completed withdrawals cannot be released',
+      )
+    }
+
+    const [payment, consultant, latestHoldLog] = await Promise.all([
+      Payment.findOne({ booking: withdraw.booking, isDeleted: false }).session(
+        session,
+      ),
+      User.findById(withdraw.user).session(session),
+      WithdrawManualHoldLog.findOne({
+        withdraw: withdraw._id,
+        action: 'manual_hold',
+      })
+        .sort({ createdAt: -1 })
+        .session(session),
+    ])
+
+    if (!payment) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Payment not found')
+    }
+
+    if (!consultant || consultant.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Consultant not found')
+    }
+
+    if (!payment.isManualHold) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Payment is not on manual hold')
+    }
+
+    const previousWithdrawStatus = withdraw.status
+    const previousSettlementStatus = payment.settlementStatus
+    let newSettlementStatus: PAYMENT_SETTLEMENT_STATUS =
+      (latestHoldLog?.previousSettlementStatus as PAYMENT_SETTLEMENT_STATUS) ||
+      PAYMENT_SETTLEMENT_STATUS.withdrawn
+
+    if (
+      newSettlementStatus === PAYMENT_SETTLEMENT_STATUS.held &&
+      payment.holdUntil &&
+      payment.holdUntil <= new Date()
+    ) {
+      newSettlementStatus = PAYMENT_SETTLEMENT_STATUS.cleared
+      payment.clearedAt = new Date()
+    }
+
+    withdraw.status = WITHDRAW_STATUS.proceed
+    withdraw.proceedAt = new Date()
+    payment.isManualHold = false
+    payment.settlementStatus = newSettlementStatus
+
+    await Promise.all([withdraw.save({ session }), payment.save({ session })])
+
+    const [auditLog] = await (WithdrawManualHoldLog as any).create(
+      [
+        {
+          withdraw: withdraw._id,
+          payment: payment._id,
+          booking: withdraw.booking,
+          admin: adminId,
+          action: 'manual_release',
+          reason: payload.reason.trim(),
+          previousWithdrawStatus,
+          newWithdrawStatus: withdraw.status,
+          previousSettlementStatus,
+          newSettlementStatus,
+        },
+      ],
+      { session },
+    )
+
+    await session.commitTransaction()
+
+    await Promise.allSettled([
+      sendWithdrawNotify(WITHDRAW_STATUS.proceed, withdraw, consultant, payload.reason),
+      consultant.emailNotify?.payment
+        ? sendWithdrawStatusChangeEmail(consultant, withdraw, WITHDRAW_STATUS.proceed)
+        : Promise.resolve(),
+    ])
+
+    return { withdraw, auditLog }
+  } catch (error) {
+    if (session.inTransaction()) {
+      await session.abortTransaction()
+    }
+    throw error
+  } finally {
+    session.endSession()
+  }
 }
 
 const updateWithdrawFromDB = async (
@@ -505,5 +722,7 @@ export const WithdrawService = {
   getAllWithdrawsFromDB,
   getConsultWithdrawsFromDB,
   getAWithdrawFromDB,
+  manualHoldWithdrawFromDB,
+  manualReleaseWithdrawFromDB,
   updateWithdrawFromDB,
 }

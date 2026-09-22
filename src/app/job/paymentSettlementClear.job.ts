@@ -15,6 +15,7 @@ export const paymentSettlementClearJob = async (): Promise<void> => {
       status: PAYMENT_STATUS.paid,
       isPaid: true,
       isDeleted: false,
+      isManualHold: { $ne: true },
       settlementStatus: PAYMENT_SETTLEMENT_STATUS.held,
       holdUntil: { $lte: now },
     },
