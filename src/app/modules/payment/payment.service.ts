@@ -41,10 +41,6 @@ const formatRefunds = (refunds: any[] = []) =>
     refundedBy: refund.refundedBy,
     status: refund.status,
     stripeRefundId: refund.stripeRefundId,
-    booking: refund.booking,
-    consultee: (refund.booking as any)?.user || refund.user,
-    expert: (refund.booking as any)?.consult || null,
-    cancelledBy: (refund.booking as any)?.cancelledBy || null,
     createdAt: refund.createdAt,
   }))
 

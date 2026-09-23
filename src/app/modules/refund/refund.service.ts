@@ -90,7 +90,7 @@ const getRefundHistoryByPayments = async (paymentIds: unknown[]) => {
     .lean()
 
   return refunds.reduce((acc, refund: any) => {
-    const key = String(refund.payment)
+    const key = String(refund.payment?._id || refund.payment)
     const current = acc.get(key) || []
     current.push(refund)
     acc.set(key, current)
