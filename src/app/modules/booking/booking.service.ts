@@ -485,36 +485,161 @@ const getBookingCalender = async (
   return calendarData
 }
 
+const getBookingDateRange = (query: Record<string, unknown>) => {
+  let startDate = query.startDate || query.dateFrom
+  let endDate = query.endDate || query.dateTo
+  const filterType = String(query.filterType || '').trim().toLowerCase()
+
+  if (!startDate && !endDate && filterType && filterType !== 'all') {
+    const today = dayjs()
+    if (filterType === 'today') {
+      startDate = today.format('YYYY-MM-DD')
+      endDate = today.format('YYYY-MM-DD')
+    } else if (filterType === 'tomorrow') {
+      const tomorrow = today.add(1, 'day')
+      startDate = tomorrow.format('YYYY-MM-DD')
+      endDate = tomorrow.format('YYYY-MM-DD')
+    } else if (filterType === 'day') {
+      startDate = today.format('YYYY-MM-DD')
+      endDate = today.add(1, 'day').format('YYYY-MM-DD')
+    } else if (filterType === 'week') {
+      startDate = today.startOf('isoWeek').format('YYYY-MM-DD')
+      endDate = today.endOf('isoWeek').format('YYYY-MM-DD')
+    } else if (filterType === 'month') {
+      startDate = today.startOf('month').format('YYYY-MM-DD')
+      endDate = today.endOf('month').format('YYYY-MM-DD')
+    }
+  }
+
+  if (!startDate && !endDate) {
+    return null
+  }
+
+  const range: Record<string, Date> = {}
+  if (startDate) {
+    range.$gte = dayjs(String(startDate)).startOf('day').toDate()
+  }
+  if (endDate) {
+    range.$lte = dayjs(String(endDate)).endOf('day').toDate()
+  }
+
+  const startKey = startDate ? dayjs(String(startDate)).format('YYYY-MM-DD') : null
+  const endKey = endDate ? dayjs(String(endDate)).format('YYYY-MM-DD') : null
+  const dateRange: Record<string, string> = {}
+  if (startKey) dateRange.$gte = startKey
+  if (endKey) dateRange.$lte = endKey
+
+  return {
+    $or: [
+      { startAt: range },
+      { createdAt: range },
+      ...(Object.keys(dateRange).length ? [{ date: dateRange }, { localDate: dateRange }] : []),
+    ],
+  }
+}
+
+const getBookingListStats = async (scopeFilter: Record<string, any>) => {
+  const monthStart = dayjs().startOf('month').toDate()
+  const monthEnd = dayjs().endOf('month').toDate()
+
+  const [totalBooking, cancelledBooking, completedBooking, thisMonthBooking] =
+    await Promise.all([
+      Booking.countDocuments(scopeFilter),
+      Booking.countDocuments({
+        ...scopeFilter,
+        status: BOOKING_STATUS.cancelled,
+      }),
+      Booking.countDocuments({
+        ...scopeFilter,
+        status: BOOKING_STATUS.completed,
+      }),
+      Booking.countDocuments({
+        ...scopeFilter,
+        createdAt: { $gte: monthStart, $lte: monthEnd },
+      }),
+    ])
+
+  return {
+    totalBooking,
+    cancelledBooking,
+    completedBooking,
+    thisMonthBooking,
+  }
+}
+
 const getAllBookings = async (
   query: Record<string, any>,
   currentUserId: string,
 ) => {
   const queryCopy = { ...query }
-  const { consult, user, participant, ...restQuery } = queryCopy
+  const {
+    consult,
+    user,
+    participant,
+    startDate,
+    endDate,
+    dateFrom,
+    dateTo,
+    filterType,
+    ...restQuery
+  } = queryCopy
   const requestedStatus =
     typeof restQuery.status === 'string'
       ? restQuery.status.trim().toLowerCase()
       : undefined
   delete restQuery.status
+  delete restQuery.search
+  const searchTerm = String(restQuery.searchTerm || query.search || '').trim()
 
-  let baseFilter: any = {
+  const scopeFilter: Record<string, any> = {
     isDeleted: false,
     paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
   }
 
+  if (participant) {
+    const participantId = new mongoose.Types.ObjectId(participant)
+    scopeFilter.$or = [{ consult: participantId }, { user: participantId }]
+  } else {
+    if (consult) scopeFilter.consult = new mongoose.Types.ObjectId(consult)
+    if (user) scopeFilter.user = new mongoose.Types.ObjectId(user)
+  }
+
+  const baseFilter: Record<string, any> = { ...scopeFilter }
+  const extraFilters: Record<string, any>[] = []
+
   if (
     requestedStatus &&
+    requestedStatus !== 'all' &&
     Object.values(BOOKING_STATUS).includes(requestedStatus as any)
   ) {
     baseFilter.status = requestedStatus
   }
 
-  if (participant) {
-    const participantId = new mongoose.Types.ObjectId(participant)
-    baseFilter.$or = [{ consult: participantId }, { user: participantId }]
-  } else {
-    if (consult) baseFilter.consult = new mongoose.Types.ObjectId(consult)
-    if (user) baseFilter.user = new mongoose.Types.ObjectId(user)
+  const dateFilter = getBookingDateRange({
+    startDate,
+    endDate,
+    dateFrom,
+    dateTo,
+    filterType,
+  })
+  if (dateFilter) {
+    extraFilters.push(dateFilter)
+  }
+
+  if (searchTerm) {
+    extraFilters.push({
+      $or: [
+        { id: { $regex: searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
+        ...(mongoose.Types.ObjectId.isValid(searchTerm) &&
+        /^[a-fA-F0-9]{24}$/.test(searchTerm)
+          ? [{ _id: new mongoose.Types.ObjectId(searchTerm) }]
+          : []),
+      ],
+    })
+  }
+
+  if (extraFilters.length) {
+    baseFilter.$and = [...(baseFilter.$and || []), ...extraFilters]
   }
 
   const bookingModel = new QueryBuilder(
@@ -528,19 +653,19 @@ const getAllBookings = async (
       ) as any,
     restQuery,
   )
-    .search(['mainQuestion'])
     .filter()
     .paginate()
     .sort()
 
-  const data = await bookingModel.modelQuery
-  const meta = await bookingModel.countTotal()
+  const [data, meta, stats] = await Promise.all([
+    bookingModel.modelQuery,
+    bookingModel.countTotal(),
+    getBookingListStats(scopeFilter),
+  ])
 
-  // âœ… Batch unread counts
   const bookingIds = data.map((b: any) => b._id.toString())
   const unreadMap = await getUnreadMessageCountsBatch(bookingIds, currentUserId)
 
-  // âœ… Batch payment details
   const payments = await Payment.find({ booking: { $in: bookingIds } }).lean()
   const paymentMap = new Map()
   payments.forEach((p: any) => {
@@ -557,7 +682,7 @@ const getAllBookings = async (
     }
   })
 
-  return { data: enriched, meta }
+  return { data: enriched, meta, stats }
 }
 
 const getExpertBooking = async (
@@ -592,7 +717,8 @@ const getAllBookingsByDate = async (
   query: Record<string, any>,
   userId: string,
 ) => {
-  const { filterType, date, ...restQuery } = query
+  const { filterType, date, searchTerm, search, ...restQuery } = query
+  const searchValue = String(searchTerm || search || '').trim()
 
   let targetDates: string[] = []
   const today = dayjs()
@@ -641,6 +767,24 @@ const getAllBookingsByDate = async (
           { date: { $in: targetDates } },
         ],
       },
+      ...(searchValue
+        ? [
+            {
+              $or: [
+                {
+                  id: {
+                    $regex: searchValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+                    $options: 'i',
+                  },
+                },
+                ...(mongoose.Types.ObjectId.isValid(searchValue) &&
+                /^[a-fA-F0-9]{24}$/.test(searchValue)
+                  ? [{ _id: new mongoose.Types.ObjectId(searchValue) }]
+                  : []),
+              ],
+            },
+          ]
+        : []),
     ],
   }
 

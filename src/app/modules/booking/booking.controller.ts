@@ -63,7 +63,10 @@ const getAllBookings = catchAsync(async (req: Request, res: Response) => {
     success: true,
     message: 'All bookings fetched successfully',
     meta: result.meta,
-    data: result.data,
+    data: {
+      stats: result.stats,
+      bookings: result.data,
+    },
   })
 })
 
