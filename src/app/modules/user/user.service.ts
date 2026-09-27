@@ -415,7 +415,7 @@ const getInterestExpertsFromDB = async (
 
   const usersQuery = new QueryBuilder(
     User.find(baseFilter).select(
-      '_id firstName lastName photoUrl headline followers avgRating ratingCount',
+      '_id firstName lastName photoUrl headline followers avgRating ratingCount hourlyRate',
     ),
     query,
   )
@@ -461,7 +461,7 @@ const getPropertyExpertsFromDB = async (
 
   const usersQuery = new QueryBuilder(
     User.find(filter).select(
-      '_id firstName lastName photoUrl headline followers avgRating ratingCount',
+      '_id firstName lastName photoUrl headline followers avgRating ratingCount hourlyRate',
     ),
     query,
   )
@@ -508,7 +508,7 @@ const getTopExpertsFromDB = async (
 
   const usersQuery = new QueryBuilder(
     User.find(filter).select(
-      '_id firstName lastName photoUrl headline avgRating ratingCount followers',
+      '_id firstName lastName photoUrl headline avgRating ratingCount followers hourlyRate',
     ),
     query,
   )
@@ -576,7 +576,7 @@ const getPublicInterestExpertsFromDB = async (
 
   const usersQuery = new QueryBuilder(
     User.find(baseFilter).select(
-      '_id firstName lastName photoUrl headline followers avgRating ratingCount',
+      '_id firstName lastName photoUrl headline followers avgRating ratingCount hourlyRate',
     ),
     query,
   )
@@ -616,7 +616,7 @@ const getPublicPropertyExpertsFromDB = async (
 
   const usersQuery = new QueryBuilder(
     User.find(baseFilter).select(
-      '_id firstName lastName photoUrl headline followers avgRating ratingCount',
+      '_id firstName lastName photoUrl headline followers avgRating ratingCount hourlyRate',
     ),
     query,
   )
@@ -651,7 +651,7 @@ const getPublicTopExpertsFromDB = async (query: Record<string, unknown>) => {
 
   const usersQuery = new QueryBuilder(
     User.find(baseFilter).select(
-      '_id firstName lastName photoUrl headline avgRating ratingCount followers',
+      '_id firstName lastName photoUrl headline avgRating ratingCount followers hourlyRate',
     ),
     query,
   )
