@@ -267,6 +267,9 @@ userSchema.statics.isPasswordMatched = async function (
   plainTextPassword: string,
   hashedPassword: string,
 ): Promise<boolean> {
+  if (!plainTextPassword || !hashedPassword) {
+    return false
+  }
   return await bcrypt.compare(plainTextPassword, hashedPassword)
 }
 

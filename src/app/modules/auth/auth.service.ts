@@ -54,9 +54,26 @@ const loginUser = async (payload: TLoginUser) => {
     throw new AppError(httpStatus.NOT_FOUND, 'This user is not found !')
   }
 
+  if (!payload?.password) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Password is required')
+  }
+
+  // Social / password-less accounts cannot use email+password login
+  if (!user.password) {
+    const registerWith = user.registerWith || 'social'
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      registerWith === REGISTER_WITH.google ||
+        registerWith === REGISTER_WITH.apple
+        ? `This account was created with ${registerWith}. Please continue with ${registerWith} login.`
+        : 'Password is not set for this account. Please reset your password or use social login.',
+    )
+  }
+
   //* checking if the password is correct
-  if (!(await User.isPasswordMatched(payload?.password, user?.password)))
+  if (!(await User.isPasswordMatched(payload.password, user.password))) {
     throw new AppError(httpStatus.FORBIDDEN, 'Password do not matched')
+  }
 
   // if user is not verify yet throw error
   if (!user?.verification?.status && !user?.isPhoneOtpVerified) {
