@@ -10,6 +10,10 @@ import {
   PAYMENT_SETTLEMENT_STATUS,
   PAYMENT_STATUS,
 } from '../payment/payment.constant'
+import {
+  getPaymentStatusAfterRefund,
+  isRefundablePaymentStatus,
+} from '../payment/payment.refund.utils'
 import { REFUND_BY, REFUND_STATUS, TRefundBy } from './refund.constant'
 import { Refund } from './refund.model'
 import QueryBuilder from '../../builder/QueryBuilder'
@@ -187,10 +191,10 @@ const assertRefundablePayment = async (payment: any) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Payment is already refunded')
   }
 
-  if (payment.status !== PAYMENT_STATUS.paid || !payment.isPaid) {
+  if (!isRefundablePaymentStatus(payment.status) || !payment.isPaid) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
-      'Only paid payments can be refunded',
+      'Only paid or partially refunded payments can be refunded',
     )
   }
 
@@ -342,7 +346,7 @@ const createRefund = async ({
               isPaid: false,
             }
           : {
-              status: PAYMENT_STATUS.paid,
+              status: getPaymentStatusAfterRefund(false),
               isPaid: true,
             },
         updateOptions,

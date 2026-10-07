@@ -15,6 +15,7 @@ import {
   calculateProfileSetupProgress,
   generateUserStatusEmail,
   getFollowingStatusBatch,
+  getCancellationRates,
   getTotalBookingsBatch,
   removeUserContentData,
   sendUserStatusNotifYToAdmin,
@@ -768,6 +769,14 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
     }
 
     const last7Days = dayjs().subtract(7, 'day').toDate()
+    const last90Days = dayjs().subtract(90, 'day').toDate()
+    const partyField =
+      user.role === USER_ROLE.expert ? 'consult' : 'user'
+    const partyFilter = {
+      [partyField]: new Types.ObjectId(viewedUserId),
+      paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
+      isDeleted: false,
+    }
 
     const [
       completedBookingsCount,
@@ -780,6 +789,8 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       totalFollowersCount,
       totalFollowingCount,
       cancellationBookings,
+      last90DaysTotalBookings,
+      last90DaysCancellationBookings,
       noShowBookings,
       // Pending booking count — field differs by role
       pendingBookingsCount,
@@ -791,17 +802,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
         isDeleted: false,
       }),
 
-      user.role === USER_ROLE.expert
-        ? Booking.countDocuments({
-          consult: new Types.ObjectId(viewedUserId),
-          paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
-          isDeleted: false,
-        })
-        : Booking.countDocuments({
-          user: new Types.ObjectId(viewedUserId),
-          paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
-          isDeleted: false,
-        }),
+      Booking.countDocuments(partyFilter),
 
       ProfileView.countDocuments({
         viewedUser: viewedUserId,
@@ -839,19 +840,21 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
 
       Follow.countDocuments({ follower: viewedUserId }),
 
-      user.role === USER_ROLE.expert
-        ? Booking.countDocuments({
-          consult: new Types.ObjectId(viewedUserId),
-          status: BOOKING_STATUS.cancelled,
-          paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
-          isDeleted: false,
-        })
-        : Booking.countDocuments({
-          user: new Types.ObjectId(viewedUserId),
-          status: BOOKING_STATUS.cancelled,
-          paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
-          isDeleted: false,
-        }),
+      Booking.countDocuments({
+        ...partyFilter,
+        status: BOOKING_STATUS.cancelled,
+      }),
+
+      Booking.countDocuments({
+        ...partyFilter,
+        createdAt: { $gte: last90Days },
+      }),
+
+      Booking.countDocuments({
+        ...partyFilter,
+        status: BOOKING_STATUS.cancelled,
+        createdAt: { $gte: last90Days },
+      }),
 
       user.role === USER_ROLE.expert
         ? Booking.countDocuments({
@@ -923,6 +926,14 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
         )
         : 0
 
+    const { cancellationRate, cancellationRateLast90Days } =
+      getCancellationRates(
+        totalBookingsCountAll,
+        cancellationBookings,
+        last90DaysTotalBookings,
+        last90DaysCancellationBookings,
+      )
+
     const profileSetupProgress = calculateProfileSetupProgress(user)
 
     const sessionDurationsWithPrice = enrichSessionDurationsWithPrice(
@@ -938,6 +949,8 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
       totalBookings: totalBookingsCountAll,
       pendingBookings: pendingBookingsCount,
       cancellationBookings,
+      cancellationRate,
+      cancellationRateLast90Days,
       noShowBookings,
       profileSetupProgress,
       advisingTime,

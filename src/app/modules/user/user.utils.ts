@@ -37,6 +37,21 @@ const PENDING_WITHDRAW_STATUSES = [
   WITHDRAW_STATUS.hold,
 ]
 
+export const getCancellationRates = (
+  lifetimeTotal: number,
+  lifetimeCancelled: number,
+  last90DaysTotal: number,
+  last90DaysCancelled: number,
+) => {
+  const toRate = (total: number, cancelled: number) =>
+    total > 0 ? Math.min(Math.round((cancelled / total) * 100), 100) : 0
+
+  return {
+    cancellationRate: toRate(lifetimeTotal, lifetimeCancelled),
+    cancellationRateLast90Days: toRate(last90DaysTotal, last90DaysCancelled),
+  }
+}
+
 export const calculateProfileSetupProgress = (user: any): number => {
   if (!user || !user.role) {
     return 0

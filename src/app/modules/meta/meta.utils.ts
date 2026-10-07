@@ -195,7 +195,13 @@ export const getDashboardPaymentOverview = async (
     {
       $match: {
         createdAt: { $gte: filter.startDate, $lte: filter.endDate },
-        status: { $in: [PAYMENT_STATUS.paid, PAYMENT_STATUS.refunded] },
+        status: {
+          $in: [
+            PAYMENT_STATUS.paid,
+            PAYMENT_STATUS.partial_refund,
+            PAYMENT_STATUS.refunded,
+          ],
+        },
         isDeleted: false,
       },
     },

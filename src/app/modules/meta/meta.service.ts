@@ -166,7 +166,13 @@ const paymentTransactionMetaData = async (
     status:
       status && status !== 'all'
         ? status
-        : { $in: [PAYMENT_STATUS.paid, PAYMENT_STATUS.refunded] },
+        : {
+            $in: [
+              PAYMENT_STATUS.paid,
+              PAYMENT_STATUS.partial_refund,
+              PAYMENT_STATUS.refunded,
+            ],
+          },
     createdAt: { $gte: rangeStart, $lte: rangeEnd },
   }
 

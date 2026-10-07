@@ -405,6 +405,7 @@ const getAllPaymentsFromDB = async (query: Record<string, any>) => {
         $in: [
           PAYMENT_STATUS.authorized,
           PAYMENT_STATUS.paid,
+          PAYMENT_STATUS.partial_refund,
           PAYMENT_STATUS.refunded,
           PAYMENT_STATUS.cancelled,
         ],
