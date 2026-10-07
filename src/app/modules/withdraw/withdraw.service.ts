@@ -758,8 +758,11 @@ const manualReleaseWithdrawFromDB = async (
       throw new AppError(httpStatus.NOT_FOUND, 'Consultant not found')
     }
 
-    if (!payment.isManualHold) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Payment is not on manual hold')
+    const isHeld =
+      withdraw.status === WITHDRAW_STATUS.hold || payment.isManualHold === true
+
+    if (!isHeld) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Withdraw is not on hold')
     }
 
     const previousWithdrawStatus = withdraw.status
