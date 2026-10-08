@@ -262,7 +262,26 @@ const applyCreatedAtRange = (
   }
 }
 
-const buildWithdrawSearchMatch = (rawTerm: string) => {
+const findBookingIdsByPublicId = async (rawTerm: string): Promise<string[]> => {
+  const searchTerm = rawTerm.trim()
+  if (!searchTerm) {
+    return []
+  }
+
+  const bookings = await Booking.find({
+    isDeleted: false,
+    id: { $regex: escapeRegExp(searchTerm), $options: 'i' },
+  })
+    .select('_id')
+    .lean()
+
+  return bookings.map((booking) => String(booking._id))
+}
+
+const buildWithdrawSearchMatch = (
+  rawTerm: string,
+  bookingIdsByPublicId: string[],
+) => {
   const searchTerm = rawTerm.trim()
   if (!searchTerm) {
     return null
@@ -279,9 +298,21 @@ const buildWithdrawSearchMatch = (rawTerm: string) => {
     { 'user.email': searchRegex },
   ]
 
+  if (bookingIdsByPublicId.length) {
+    orMatch.push({
+      bookingRef: {
+        $in: bookingIdsByPublicId.map((id) => new mongoose.Types.ObjectId(id)),
+      },
+    })
+  }
+
   if (isMongoObjectId(searchTerm)) {
     const objectId = new mongoose.Types.ObjectId(searchTerm)
-    orMatch.push({ _id: objectId }, { 'booking._id': objectId })
+    orMatch.push(
+      { _id: objectId },
+      { 'booking._id': objectId },
+      { bookingRef: objectId },
+    )
   }
 
   const terms = searchTerm.split(/\s+/).filter(Boolean)
@@ -378,9 +409,11 @@ const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
   const { startDate, endDate } = getWithdrawDateRange(query)
   applyCreatedAtRange(matchStage, startDate, endDate)
 
-  const searchMatch = buildWithdrawSearchMatch(
-    String(query.searchTerm || query.search || ''),
+  const searchTerm = String(
+    query.searchTerm || query.search || query.bookingId || '',
   )
+  const bookingIdsByPublicId = await findBookingIdsByPublicId(searchTerm)
+  const searchMatch = buildWithdrawSearchMatch(searchTerm, bookingIdsByPublicId)
 
   const sortField = String(query.sort || '-createdAt')
   const sortDirection = sortField.startsWith('-') ? -1 : 1
@@ -388,6 +421,18 @@ const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
 
   const pipeline: any[] = [
     { $match: matchStage },
+    {
+      $addFields: {
+        bookingRef: {
+          $convert: {
+            input: '$booking',
+            to: 'objectId',
+            onError: '$booking',
+            onNull: '$booking',
+          },
+        },
+      },
+    },
     {
       $lookup: {
         from: 'users',
@@ -400,7 +445,7 @@ const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
     {
       $lookup: {
         from: 'bookings',
-        localField: 'booking',
+        localField: 'bookingRef',
         foreignField: '_id',
         as: 'booking',
       },
