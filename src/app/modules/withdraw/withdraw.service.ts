@@ -291,7 +291,7 @@ const buildWithdrawSearchMatch = (
   const orMatch: Record<string, unknown>[] = [
     { id: searchRegex },
     { withdrawObjectId: searchRegex },
-    { 'booking.id': searchRegex },
+    { bookingPublicId: searchRegex },
     { bookingObjectId: searchRegex },
     { 'user.firstName': searchRegex },
     { 'user.lastName': searchRegex },
@@ -455,6 +455,10 @@ const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
       $addFields: {
         withdrawObjectId: { $toString: '$_id' },
         bookingObjectId: { $toString: '$booking._id' },
+        // `id` is a real schema field; `$booking.id` is treated as `_id` in aggregation.
+        bookingPublicId: {
+          $getField: { field: 'id', input: '$booking' },
+        },
       },
     },
   ]
@@ -476,7 +480,7 @@ const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
         },
         booking: {
           _id: '$booking._id',
-          id: { $ifNull: ['$booking.id', null] },
+          id: { $ifNull: ['$bookingPublicId', null] },
           sessionType: '$booking.sessionType',
           date: '$booking.date',
           startTime: '$booking.startTime',
