@@ -12,6 +12,10 @@ import { PAYMENT_STATUS } from '../payment/payment.constant'
 import { getGeneralSettingNumber } from '../contents/contents.utils'
 import { RefundService } from '../refund/refund.service'
 import mongoose from 'mongoose'
+import { Booking } from '../booking/booking.models'
+
+const escapeRegExp = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const formatRefunds = (refunds: any[] = []) =>
   refunds.map((refund) => ({
@@ -148,7 +152,16 @@ const paymentTransactionMetaData = async (
   query: Record<string, unknown>,
   _userId: string,
 ) => {
-  const { year, startDate, endDate, status, searchTerm, ...restQuery } = query
+  const {
+    year,
+    startDate,
+    endDate,
+    status,
+    searchTerm,
+    search,
+    bookingId,
+    ...restQuery
+  } = query
 
   const selectedYear = year
     ? parseInt(year as string, 10) || new Date().getFullYear()
@@ -186,34 +199,41 @@ const paymentTransactionMetaData = async (
     }
   })
 
-  if (searchTerm) {
-    const term = String(searchTerm).trim()
+  const term = String(searchTerm || search || bookingId || '').trim()
+
+  if (term) {
     const terms = term.split(/\s+/).filter(Boolean)
-    const searchRegex = new RegExp(term, 'i')
-    const accountIds = await User.find({
-      isDeleted: false,
-      $or: [
-        { firstName: searchRegex },
-        { lastName: searchRegex },
-        { email: searchRegex },
-        ...(terms.length > 1
-          ? [
-              {
-                $and: terms.map((singleTerm) => {
-                  const regex = new RegExp(singleTerm, 'i')
-                  return {
-                    $or: [
-                      { firstName: regex },
-                      { lastName: regex },
-                      { email: regex },
-                    ],
-                  }
-                }),
-              },
-            ]
-          : []),
-      ],
-    }).distinct('_id')
+    const searchRegex = new RegExp(escapeRegExp(term), 'i')
+    const [accountIds, bookingIds] = await Promise.all([
+      User.find({
+        isDeleted: false,
+        $or: [
+          { firstName: searchRegex },
+          { lastName: searchRegex },
+          { email: searchRegex },
+          ...(terms.length > 1
+            ? [
+                {
+                  $and: terms.map((singleTerm) => {
+                    const regex = new RegExp(escapeRegExp(singleTerm), 'i')
+                    return {
+                      $or: [
+                        { firstName: regex },
+                        { lastName: regex },
+                        { email: regex },
+                      ],
+                    }
+                  }),
+                },
+              ]
+            : []),
+        ],
+      }).distinct('_id'),
+      Booking.find({
+        isDeleted: false,
+        id: { $regex: escapeRegExp(term), $options: 'i' },
+      }).distinct('_id'),
+    ])
 
     const searchOr: Record<string, unknown>[] = [
       { id: searchRegex },
@@ -221,6 +241,10 @@ const paymentTransactionMetaData = async (
       { transactionId: searchRegex },
       { account: { $in: accountIds } },
     ]
+
+    if (bookingIds.length) {
+      searchOr.push({ booking: { $in: bookingIds } })
+    }
 
     if (mongoose.Types.ObjectId.isValid(term)) {
       searchOr.push({ _id: new mongoose.Types.ObjectId(term) })
