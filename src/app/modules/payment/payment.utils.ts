@@ -48,7 +48,6 @@ export const createCheckoutSession = async (payload: TPayload) => {
     invoice_creation: {
       enabled: true,
     },
-    payment_method_types: ['card'],
   })
 
   return paymentGatewayData
