@@ -1,51 +1,145 @@
-// src/app/utils/voipService.ts
-import apn from '@parse/node-apn';
-import fs from 'fs';
-import path from 'path';
-import config from '../config';
-import { ObjectId } from 'mongoose';
+import { connect, type ClientHttp2Session } from 'node:http2'
+import fs from 'fs'
+import path from 'path'
+import jwt from 'jsonwebtoken'
+import config from '../config'
+import { ObjectId } from 'mongoose'
 
 type TVoIPPushResult = {
-  success: boolean;
-  reason?: string;
-};
+  success: boolean
+  reason?: string
+}
 
-const apnProvider = new apn.Provider({
-  token: {
-    key: fs.readFileSync(
-      path.join(__dirname, '../../../certs/AuthKey_' + config.apns.keyId + '.p8')
-    ),
-    keyId: config.apns.keyId as string,
-    teamId: config.apns.teamId as string,
-  },
-  production: config.apns.production,
-  rejectUnauthorized: true,
-});
+type TAPNsResponse = {
+  statusCode: number
+  body: string
+}
+
+const apnsPrivateKey = fs.readFileSync(
+  path.join(__dirname, '../../../certs', `AuthKey_${config.apns.keyId}.p8`),
+)
+const providerTokenRefreshInterval = 50 * 60 * 1000
+let providerToken: string | undefined
+let providerTokenIssuedAt = 0
+let apnsSession: ClientHttp2Session | undefined
+
+const getProviderToken = () => {
+  if (!config.apns.keyId || !config.apns.teamId) {
+    throw new Error('APNS_KEY_ID and APNS_TEAM_ID must be configured')
+  }
+
+  if (
+    !providerToken ||
+    Date.now() - providerTokenIssuedAt >= providerTokenRefreshInterval
+  ) {
+    providerToken = jwt.sign({}, apnsPrivateKey, {
+      algorithm: 'ES256',
+      keyid: config.apns.keyId,
+      issuer: config.apns.teamId,
+    })
+    providerTokenIssuedAt = Date.now()
+  }
+
+  return providerToken
+}
+
+const getApnsSession = () => {
+  if (apnsSession && !apnsSession.destroyed && !apnsSession.closed) {
+    return apnsSession
+  }
+
+  const session = connect(
+    config.apns.production
+      ? 'https://api.push.apple.com'
+      : 'https://api.sandbox.push.apple.com',
+  )
+  apnsSession = session
+  session.on('close', () => {
+    if (apnsSession === session) apnsSession = undefined
+  })
+  session.on('error', (error) => {
+    if (apnsSession === session) apnsSession = undefined
+    console.error('[VoIP Push] APNs session error:', error.message)
+  })
+
+  return session
+}
+
+const sendApnsRequest = (
+  voipToken: string,
+  topic: string,
+  expiration: number,
+  payload: Record<string, unknown>,
+): Promise<TAPNsResponse> =>
+  new Promise((resolve, reject) => {
+    const session = getApnsSession()
+    const request = session.request({
+      ':method': 'POST',
+      ':path': `/3/device/${encodeURIComponent(voipToken)}`,
+      authorization: `bearer ${getProviderToken()}`,
+      'apns-expiration': expiration,
+      'apns-priority': '10',
+      'apns-push-type': 'voip',
+      'apns-topic': topic,
+      'content-type': 'application/json',
+    })
+    let settled = false
+    let statusCode: number | undefined
+    let body = ''
+    let timeout: NodeJS.Timeout
+
+    const fail = (error: Error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      reject(error)
+    }
+
+    request.on('error', fail)
+    request.on('response', (headers) => {
+      const status = headers[':status']
+      if (typeof status === 'number') statusCode = status
+    })
+    request.setEncoding('utf8')
+    request.on('data', (chunk: string) => {
+      body += chunk
+    })
+    request.on('end', () => {
+      if (statusCode === undefined) {
+        fail(new Error('APNs response did not include an HTTP status'))
+        return
+      }
+
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      resolve({ statusCode, body })
+    })
+
+    timeout = setTimeout(() => {
+      fail(new Error('APNs request timed out'))
+      request.close()
+    }, 10000)
+    request.end(JSON.stringify(payload))
+  })
 
 export const sendVoIPPush = async (
   voipToken: string,
   callData: {
-    call_id: string;
-    caller_name: string;
-    caller_photo?: string;
-    channel_name: string;
-    agora_token: string;
-    agora_uid: number;
-    is_video: boolean;
-    bookingId: string | ObjectId,
-    expertId: string | ObjectId,
+    call_id: string
+    caller_name: string
+    caller_photo?: string
+    channel_name: string
+    agora_token: string
+    agora_uid: number
+    is_video: boolean
+    bookingId: string | ObjectId
+    expertId: string | ObjectId
     userId: string | ObjectId
-  }
+  },
 ): Promise<TVoIPPushResult> => {
-  const notification = new apn.Notification();
-
-  notification.topic = `${config.apns.bundleId}.voip`;   // খুব গুরুত্বপূর্ণ
-  notification.expiry = Math.floor(Date.now() / 1000) + 3600; // 1 hour
-  notification.priority = 10;
-  notification.pushType = 'voip';
-
-  // VoIP Payload
-  notification.payload = {
+  const expiration = Math.floor(Date.now() / 1000) + 3600
+  const payload = {
     aps: {
       'content-available': 1,
     },
@@ -61,32 +155,47 @@ export const sendVoIPPush = async (
     uid: callData.agora_uid,
     is_video: callData.is_video,
     isVideo: callData.is_video,
-    // extra info
     bookingId: callData.bookingId,
     expertId: callData.expertId,
-    userId: callData.userId
-  };
+    userId: callData.userId,
+  }
 
   try {
-    const response = await apnProvider.send(notification, voipToken);
-
-    if (response.sent.length > 0) {
-      console.log(
-        `[VoIP Push] ✅ Sent via ${config.apns.production ? 'production' : 'sandbox'} gateway`,
-      );
-      return { success: true };
-    } else {
-      console.error(
-        `[VoIP Push] ❌ Failed (${config.apns.production ? 'production' : 'sandbox'}):`,
-        response.failed,
-      );
-      return {
-        success: false,
-        reason: response.failed?.[0]?.response?.reason,
-      };
+    if (!config.apns.bundleId) {
+      throw new Error('APNS_BUNDLE_ID must be configured')
     }
-  } catch (error: any) {
-    console.error('[VoIP Push] Error:', error.message);
-    return { success: false, reason: error.message };
+
+    const response = await sendApnsRequest(
+      voipToken,
+      `${config.apns.bundleId}.voip`,
+      expiration,
+      payload,
+    )
+
+    if (response.statusCode === 200) {
+      console.log(
+        `[VoIP Push] Sent via ${config.apns.production ? 'production' : 'sandbox'} gateway`,
+      )
+      return { success: true }
+    }
+
+    let reason: string | undefined
+    try {
+      const responseBody = JSON.parse(response.body) as { reason?: unknown }
+      if (typeof responseBody.reason === 'string') reason = responseBody.reason
+    } catch {
+      reason = undefined
+    }
+
+    console.error(
+      `[VoIP Push] Failed (${config.apns.production ? 'production' : 'sandbox'}):`,
+      response.statusCode,
+      reason,
+    )
+    return { success: false, reason: reason || `HTTP ${response.statusCode}` }
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : String(error)
+    console.error('[VoIP Push] Error:', reason)
+    return { success: false, reason }
   }
-};
+}
