@@ -163,7 +163,7 @@ const createPaymentIntent = async (payload: {
     amount: Math.round(amount * 100),
     currency: 'gbp',
     customer: stripeCustomerId,
-    payment_method_types: ['card'],
+    automatic_payment_methods: { enabled: true },
     capture_method: 'manual',
     metadata: {
       bookingId: bookingId.toString(),

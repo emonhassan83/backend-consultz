@@ -49,16 +49,12 @@ class StripeService<T> {
     }
   }
 
-  public async createPaymentIntent(
-    amount: number,
-    currency: string,
-    payment_method_types: string[] = ['card'],
-  ) {
+  public async createPaymentIntent(amount: number, currency: string) {
     try {
       return await this.stripe().paymentIntents.create({
         amount: amount * 100, // Convert amount to cents
         currency,
-        payment_method_types,
+        automatic_payment_methods: { enabled: true },
       })
     } catch (error) {
       this.handleError(error, 'Error creating payment intent')
