@@ -58,17 +58,21 @@ const refresh = catchAsync(async (req: Request, res: Response) => {
 const returnUrl = catchAsync(async (req: Request, res: Response) => {
   const result = await stripeService.returnUrl(req.query)
   const connected = Boolean((result as { connected?: boolean })?.connected)
+  const status = connected ? 'success' : 'failed'
+  const statusCode = connected ? httpStatus.OK : httpStatus.BAD_REQUEST
+  const stripeAccountId =
+    (result as { stripeAccountId?: string | null })?.stripeAccountId || ''
 
-  sendResponse(res, {
-    success: connected,
-    statusCode: connected ? httpStatus.OK : httpStatus.BAD_REQUEST,
-    message:
-      (result as { message?: string })?.message ||
-      (connected
-        ? 'Stripe account connected successfully'
-        : 'Stripe onboarding incomplete'),
-    data: result,
-  })
+  const clientBase = String(config.client_url || '/').replace(/\/$/, '')
+  const redirectUrl = new URL(`${clientBase}/`)
+  redirectUrl.searchParams.set('status', status)
+  redirectUrl.searchParams.set('statusCode', String(statusCode))
+  redirectUrl.searchParams.set('success', String(connected))
+  if (stripeAccountId) {
+    redirectUrl.searchParams.set('stripeAccountId', stripeAccountId)
+  }
+
+  res.redirect(redirectUrl.toString())
 })
 
 // 🔥 Step 5: Get Stripe account status
