@@ -57,10 +57,16 @@ const refresh = catchAsync(async (req: Request, res: Response) => {
 
 const returnUrl = catchAsync(async (req: Request, res: Response) => {
   const result = await stripeService.returnUrl(req.query)
+  const connected = Boolean((result as { connected?: boolean })?.connected)
+
   sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: 'Stripe account connected successfully',
+    success: connected,
+    statusCode: connected ? httpStatus.OK : httpStatus.BAD_REQUEST,
+    message:
+      (result as { message?: string })?.message ||
+      (connected
+        ? 'Stripe account connected successfully'
+        : 'Stripe onboarding incomplete'),
     data: result,
   })
 })

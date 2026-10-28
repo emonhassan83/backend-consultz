@@ -9,6 +9,21 @@ import { modeType } from '../notification/notification.interface'
 import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
 import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
 
+const isStripeOnboardingComplete = (account: {
+  details_submitted?: boolean | null
+  charges_enabled?: boolean | null
+  payouts_enabled?: boolean | null
+}) =>
+  Boolean(
+    account.details_submitted &&
+      (account.charges_enabled || account.payouts_enabled),
+  )
+
+const buildStripeReturnUrls = (userId: string, accountId: string) => ({
+  refresh_url: `${config.server_url}/stripe/refresh/${accountId}?userId=${userId}`,
+  return_url: `${config.server_url}/stripe/return?userId=${userId}&stripeAccountId=${accountId}`,
+})
+
 // Create Stripe Express account and return onboarding link
 const stripLinkAccount = async (userId: string) => {
   const user = await User.findById(userId)
@@ -17,34 +32,52 @@ const stripLinkAccount = async (userId: string) => {
   }
 
   try {
-    const account = await StripeService.getStripe().accounts.create({
-      type: 'express',
-      country: 'US',
-      email: user.email,
+    let accountId = user.stripeAccountId || null
 
-      business_type: 'individual',
+    // Reuse an already-linked but incomplete account; never mark connected on create.
+    if (accountId) {
+      try {
+        const existing = await StripeService.getStripe().accounts.retrieve(
+          accountId,
+        )
+        if (isStripeOnboardingComplete(existing)) {
+          throw new AppError(
+            httpStatus.BAD_REQUEST,
+            'Stripe account is already connected and onboarded',
+          )
+        }
+      } catch {
+        accountId = null
+      }
+    }
 
-      individual: {
+    if (!accountId) {
+      const account = await StripeService.getStripe().accounts.create({
+        type: 'express',
+        country: 'US',
         email: user.email,
-        first_name: user.firstName,
-        last_name: user.lastName,
-      },
+        business_type: 'individual',
+        individual: {
+          email: user.email,
+          first_name: user.firstName,
+          last_name: user.lastName,
+        },
+        business_profile: {
+          url: `https://consultz-e39b8.web.app/expert/${user._id}`,
+          product_description: 'Expert services on platform',
+        },
+        capabilities: {
+          card_payments: { requested: true },
+          transfers: { requested: true },
+        },
+      })
+      accountId = account.id
+    }
 
-      business_profile: {
-        url: `https://consultz-e39b8.web.app/expert/${user._id}`,
-        product_description: 'Expert services on platform',
-      },
-
-      capabilities: {
-        card_payments: { requested: true },
-        transfers: { requested: true },
-      },
-    })
-
-    const accountId = account.id
-
-    const refresh_url = `${config.server_url}/stripe/refresh/${accountId}?userId=${user._id}`
-    const return_url = `${config.server_url}/stripe/return?userId=${user._id}&stripeAccountId=${accountId}&success=true&statusCode=${httpStatus.OK}`
+    const { refresh_url, return_url } = buildStripeReturnUrls(
+      String(user._id),
+      accountId,
+    )
 
     const accountLink = await StripeService.connectAccount(
       return_url,
@@ -122,9 +155,41 @@ const checkStripeConnected = async (userId: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found')
   }
 
-  return {
-    isConnected: !!user.stripeAccountId,
-    stripeAccountId: user.stripeAccountId || null,
+  if (!user.stripeAccountId) {
+    return {
+      isConnected: false,
+      stripeAccountId: null,
+    }
+  }
+
+  try {
+    const account = await StripeService.getStripe().accounts.retrieve(
+      user.stripeAccountId,
+    )
+    const connected = isStripeOnboardingComplete(account)
+
+    if (!connected) {
+      return {
+        isConnected: false,
+        stripeAccountId: user.stripeAccountId,
+        detailsSubmitted: Boolean(account.details_submitted),
+        chargesEnabled: Boolean(account.charges_enabled),
+        payoutsEnabled: Boolean(account.payouts_enabled),
+      }
+    }
+
+    return {
+      isConnected: true,
+      stripeAccountId: user.stripeAccountId,
+      detailsSubmitted: true,
+      chargesEnabled: Boolean(account.charges_enabled),
+      payoutsEnabled: Boolean(account.payouts_enabled),
+    }
+  } catch {
+    return {
+      isConnected: false,
+      stripeAccountId: user.stripeAccountId,
+    }
   }
 }
 
@@ -176,8 +241,7 @@ const refresh = async (accountId: string, query: Record<string, any>) => {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found')
   }
 
-  const refresh_url = `${config.server_url}/stripe/refresh/${accountId}?userId=${userId}`
-  const return_url = `${config.server_url}/stripe/return?userId=${userId}&stripeAccountId=${accountId}&success=true&statusCode=${httpStatus.OK}`
+  const { refresh_url, return_url } = buildStripeReturnUrls(userId, accountId)
 
   const accountLink = await StripeService.connectAccount(
     return_url,
@@ -199,6 +263,31 @@ const returnUrl = async (query: Record<string, any>) => {
     )
   }
 
+  // Stripe's "Return to ..." link also hits return_url — never trust that alone.
+  let stripeAccount
+  try {
+    stripeAccount =
+      await StripeService.getStripe().accounts.retrieve(stripeAccountId)
+  } catch (error: any) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      error?.message || 'Unable to verify Stripe account',
+    )
+  }
+
+  if (!isStripeOnboardingComplete(stripeAccount)) {
+    return {
+      connected: false,
+      stripeAccountId: null,
+      pointsAdded: 0,
+      detailsSubmitted: Boolean(stripeAccount.details_submitted),
+      chargesEnabled: Boolean(stripeAccount.charges_enabled),
+      payoutsEnabled: Boolean(stripeAccount.payouts_enabled),
+      message:
+        'Stripe onboarding is incomplete. Account was not connected. Please finish Connect onboarding.',
+    }
+  }
+
   const session = await mongoose.startSession()
   session.startTransaction()
 
@@ -208,13 +297,10 @@ const returnUrl = async (query: Record<string, any>) => {
       throw new AppError(httpStatus.NOT_FOUND, 'User not found')
     }
 
-    // Check if this is the FIRST time Stripe account is being linked
     const isFirstTimeConnect = !user.stripeAccountId
 
-    // Update Stripe account ID
     user.stripeAccountId = stripeAccountId
 
-    // Award 200 points ONLY on first successful connection
     const pointsToAdd = 200
     if (isFirstTimeConnect) {
       user.points = (user.points || 0) + pointsToAdd
@@ -229,7 +315,6 @@ const returnUrl = async (query: Record<string, any>) => {
         session,
       )
 
-      // 1. Send push notification (if enabled)
       if (user.fcmToken && user.pushNotify?.points) {
         await sendNotification([user.fcmToken], {
           receiver: user._id,
@@ -241,14 +326,17 @@ const returnUrl = async (query: Record<string, any>) => {
       }
     }
 
-    // Save all changes
     await user.save({ session })
-
     await session.commitTransaction()
 
     return {
-      stripeAccountId: stripeAccountId,
+      connected: true,
+      stripeAccountId,
       pointsAdded: isFirstTimeConnect ? 200 : 0,
+      detailsSubmitted: true,
+      chargesEnabled: Boolean(stripeAccount.charges_enabled),
+      payoutsEnabled: Boolean(stripeAccount.payouts_enabled),
+      message: 'Stripe account connected successfully',
     }
   } catch (error) {
     await session.abortTransaction()
