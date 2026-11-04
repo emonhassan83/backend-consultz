@@ -85,7 +85,7 @@ const isTransientMongoNetworkError = (error: any): boolean => {
 }
 
 const runAutoMarkNotRespondedJobOnce = async (): Promise<void> => {
-  console.log('Auto-mark Not Responded Job Started')
+  // console.log('Auto-mark Not Responded Job Started')
 
   const session = await mongoose.startSession()
   session.startTransaction()
@@ -100,7 +100,7 @@ const runAutoMarkNotRespondedJobOnce = async (): Promise<void> => {
       isDeleted: false,
     }).session(session)
 
-    console.log(`Found ${oldBookings.length} bookings to check`)
+    // console.log(`Found ${oldBookings.length} bookings to check`)
 
     // âœ… postCommitTasks â€” session commit à¦à¦° à¦ªà¦°à§‡ email/push à¦ªà¦¾à¦ à¦¾à¦¬à§‹
     const postCommitTasks: (() => Promise<void>)[] = []
@@ -378,7 +378,7 @@ const runAutoMarkNotRespondedJobOnce = async (): Promise<void> => {
     }
 
     await session.commitTransaction()
-    console.log(`Auto-mark Not Responded Job Completed â€” ${updatedCount} bookings updated`)
+    // console.log(`Auto-mark Not Responded Job Completed — ${updatedCount} bookings updated`)
 
     // âœ… Session commit à¦à¦° à¦ªà¦°à§‡ push/email à¦ªà¦¾à¦ à¦¾à¦“
     await Promise.allSettled(postCommitTasks.map((task) => task()))

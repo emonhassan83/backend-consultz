@@ -10,7 +10,7 @@ import { User } from '../modules/user/user.model'
 import { sendSessionCompletedToConsultant } from '../utils/emailNotify'
 
 export const sessionCompleteCheckJob = async (): Promise<void> => {
-  console.log('Session Complete Check Job started')
+  // console.log('Session Complete Check Job started')
 
   const now = dayjs()
 
@@ -22,13 +22,13 @@ export const sessionCompleteCheckJob = async (): Promise<void> => {
   }).lean()
 
   if (runningBookings.length === 0) {
-    console.log('Session Complete Check Job: no running bookings')
+    // console.log('Session Complete Check Job: no running bookings')
     return
   }
 
-  console.log(
-    `Session Complete Check Job: ${runningBookings.length} running bookings found`,
-  )
+  // console.log(
+  //   `Session Complete Check Job: ${runningBookings.length} running bookings found`,
+  // )
 
   const holdDays = await getGeneralSettingNumber('paymentHoldDays', 7)
   let completedCount = 0
@@ -129,7 +129,7 @@ export const sessionCompleteCheckJob = async (): Promise<void> => {
     }
   }
 
-  console.log(
-    `Session Complete Check Job done - ${completedCount} bookings auto-completed`,
-  )
+  // console.log(
+  //   `Session Complete Check Job done - ${completedCount} bookings auto-completed`,
+  // )
 }

@@ -13,7 +13,7 @@ dayjs.extend(timezone)
 dayjs.extend(customParseFormat)
 
 export const pendingBookingReminderJob = async (): Promise<void> => {
-  console.log('Pending Booking Reminder Job Started')
+  // console.log('Pending Booking Reminder Job Started')
 
   const nowUtc = dayjs.utc()
   const tenMinutesAgo = nowUtc.subtract(10, 'minute').toDate()
@@ -33,7 +33,7 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
     .populate('consult')
     .populate('user')
 
-  console.log(`Found ${pendingBookings.length} pending bookings to check for reminders`)
+  // console.log(`Found ${pendingBookings.length} pending bookings to check for reminders`)
 
   for (const booking of pendingBookings) {
     const expert = booking.consult as any
@@ -86,5 +86,5 @@ export const pendingBookingReminderJob = async (): Promise<void> => {
     }
   }
 
-  console.log('Pending Booking Reminder Job Completed')
+  // console.log('Pending Booking Reminder Job Completed')
 }

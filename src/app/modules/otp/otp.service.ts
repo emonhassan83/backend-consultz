@@ -16,6 +16,22 @@ import { modeType } from '../notification/notification.interface'
 import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
 import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
 
+const logTwilioSmsError = (
+  context: 'sendOtpViaTokenInPhone' | 'sendOtpViaDirectPhone',
+  phoneNumber: string,
+  error: any,
+) => {
+  console.error(`[Twilio SMS Error][${context}]`, {
+    phoneNumber,
+    code: error?.code,
+    status: error?.status,
+    message: error?.message,
+    moreInfo: error?.moreInfo,
+    details: error?.details,
+    raw: error,
+  })
+}
+
 const verifyWithEmail = async (token: string, otp: string | number) => {
   const now = new Date()
   if (!token) {
@@ -342,13 +358,17 @@ const sendOtpViaTokenInPhone = async (
       from: config.twilio.phoneNumber,
       to: phoneNumber,
     })
-    console.log(res)
+    console.log('[Twilio SMS Success][sendOtpViaTokenInPhone]', {
+      phoneNumber,
+      sid: res?.sid,
+      status: res?.status,
+    })
 
     return {
       token,
     }
   } catch (error: any) {
-    console.error('Twilio SMS Error:', error)
+    logTwilioSmsError('sendOtpViaTokenInPhone', phoneNumber, error)
 
     if (error.code === 21612) {
       throw new AppError(
@@ -431,21 +451,25 @@ const sendOtpViaDirectPhone = async (payload: { phoneNumber: string }) => {
       from: config.twilio.phoneNumber,
       to: phoneNumber,
     })
-    console.log(res)
+    console.log('[Twilio SMS Success][sendOtpViaDirectPhone]', {
+      phoneNumber,
+      sid: res?.sid,
+      status: res?.status,
+    })
 
     return {
       token,
     }
   } catch (error: any) {
-    console.error('Twilio SMS Error:', error)
+    logTwilioSmsError('sendOtpViaDirectPhone', phoneNumber, error)
 
     if (error.code === 21612) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        'This country code is currently not supported for OTP. Please try another number or contact support.'
-      );
+        'This country code is currently not supported for OTP. Please try another number or contact support.',
+      )
     }
-    
+
     throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to send OTP')
   }
 }

@@ -292,7 +292,7 @@ export const timeSensitiveNotificationsJob = async (bookingId?: string): Promise
     )
   }
 
-  console.log(
-    `Time-sensitive notifications processed for ${notificationsToSend.length} recipients`,
-  )
+  // console.log(
+  //   `Time-sensitive notifications processed for ${notificationsToSend.length} recipients`,
+  // )
 }

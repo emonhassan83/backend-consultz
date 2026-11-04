@@ -6,7 +6,7 @@ import {
 import { Payment } from '../modules/payment/payment.model'
 
 export const paymentSettlementClearJob = async (): Promise<void> => {
-  console.log('Payment Settlement Clear Job started')
+  // console.log('Payment Settlement Clear Job started')
 
   const now = dayjs().toDate()
 
@@ -27,7 +27,8 @@ export const paymentSettlementClearJob = async (): Promise<void> => {
     },
   )
 
-  console.log(
-    `Payment Settlement Clear Job done - ${result.modifiedCount || 0} payments cleared`,
-  )
+  void result
+  // console.log(
+  //   `Payment Settlement Clear Job done - ${result.modifiedCount || 0} payments cleared`,
+  // )
 }
