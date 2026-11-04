@@ -96,7 +96,27 @@ const createPaymentIntent = async (payload: {
   }
 
   /* ========= 3. Create / Reuse Stripe Customer ========= */
-  let stripeCustomerId = user.stripeCustomerId
+  let stripeCustomerId = user.stripeCustomerId || null
+
+  if (stripeCustomerId) {
+    try {
+      await stripe.customers.retrieve(stripeCustomerId)
+    } catch (error: any) {
+      // Stale ID after Stripe account/key switch, or deleted customer
+      const missingCustomer =
+        error?.code === 'resource_missing' ||
+        /No such customer/i.test(String(error?.message || ''))
+
+      if (!missingCustomer) {
+        throw error
+      }
+
+      console.warn(
+        `Stripe customer ${stripeCustomerId} missing for user ${userId}; creating a new one`,
+      )
+      stripeCustomerId = null
+    }
+  }
 
   if (!stripeCustomerId) {
     const customer = await stripe.customers.create({
