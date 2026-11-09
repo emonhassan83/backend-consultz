@@ -22,14 +22,56 @@ export const expertReliabilityRewardJob = async (): Promise<void> => {
     status: USER_STATUS.active,
     isDeleted: false,
     $or: [
-      { lastNoShowBonusAt: null },
-      { lastNoShowBonusAt: { $lte: thirtyDaysAgo } },
+      {
+        lastNoShowBonusAt: null,
+        createdAt: { $lte: thirtyDaysAgo },
+      },
+      {
+        lastNoShowBonusAt: { $exists: false },
+        createdAt: { $lte: thirtyDaysAgo },
+      },
+      {
+        lastNoShowBonusAt: { $lte: thirtyDaysAgo, $ne: null },
+      },
     ],
-  }).select('_id fcmToken pushNotify lastNoShowBonusAt')
+  }).select('_id fcmToken pushNotify lastNoShowBonusAt createdAt')
 
   console.log(`[Reliability Reward] Checking ${experts.length} eligible experts`)
 
   for (const expert of experts) {
+    // If expert has never received this bonus, ensure they have been registered for at least 30 days
+    if (!expert.lastNoShowBonusAt) {
+      if (!expert.createdAt || dayjs.utc(expert.createdAt).isAfter(thirtyDaysAgo)) {
+        console.log(
+          `[Reliability Reward] Expert ${expert._id} registered less than 30 days ago - skipping`,
+        )
+        continue
+      }
+    } else if (dayjs.utc(expert.lastNoShowBonusAt).isAfter(thirtyDaysAgo)) {
+      console.log(
+        `[Reliability Reward] Expert ${expert._id} received bonus within last 30 days - skipping`,
+      )
+      continue
+    }
+
+    // Must have at least 1 completed booking in the last 30 days to qualify for reliability reward
+    const completedBookingCount = await Booking.countDocuments({
+      consult: expert._id,
+      status: BOOKING_STATUS.completed,
+      paymentStatus: { $ne: PAYMENT_STATUS.unpaid },
+      isDeleted: false,
+      $or: [
+        { updatedAt: { $gte: thirtyDaysAgo } },
+        { startAt: { $gte: thirtyDaysAgo } },
+      ],
+    })
+
+    if (completedBookingCount === 0) {
+      console.log(
+        `[Reliability Reward] Expert ${expert._id} has no completed bookings in the last 30 days - skipping`,
+      )
+      continue
+    }
     const noShowCount = await Booking.countDocuments({
       consult: expert._id,
       status: BOOKING_STATUS.not_responded,
