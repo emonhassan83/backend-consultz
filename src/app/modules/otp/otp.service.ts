@@ -13,8 +13,8 @@ import { USER_ROLE, USER_STATUS } from '../user/user.constant'
 import { sendExpertPendingEmail } from '../user/user.utils'
 import { sendNotification } from '../../utils/sentNotification'
 import { modeType } from '../notification/notification.interface'
-import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
-import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
+import { PointsService } from '../points/points.service'
+import { POINTS_REWARD_KEY } from '../points/points.constant'
 
 const logTwilioSmsError = (
   context: 'sendOtpViaTokenInPhone' | 'sendOtpViaDirectPhone',
@@ -137,14 +137,6 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'OTP did not match')
   }
 
-  // Points for first time phone verification
-  let pointsToAdd = 0
-  if (!user.isPhoneOtpVerified) {
-    pointsToAdd = 100
-  }
-
-  const newPoints = (user.points || 0) + pointsToAdd
-
   const updateUser = await User.findByIdAndUpdate(
     user._id,
     {
@@ -155,7 +147,6 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
           status: true,
         },
         expireAt: null,
-        points: newPoints,
         isPhoneOtpVerified: true,
         lastLogAt: now,
       },
@@ -163,25 +154,11 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
     { returnDocument: 'after' },
   )
 
-  if (pointsToAdd > 0) {
-    await PointsLogsService.createPointsLog({
-      user: user._id,
-      type: POINTS_LOG_TYPE.credit,
-      points: pointsToAdd,
+  if (!user.isPhoneOtpVerified) {
+    await PointsService.awardByKey({
+      userId: user._id,
+      key: POINTS_REWARD_KEY.phone_verify,
       reason: 'Phone number verification reward',
-      source: POINTS_LOG_SOURCE.reword,
-    })
-  }
-
-  // Push notification for points
-  if (pointsToAdd > 0 && user.fcmToken && user.pushNotify?.points) {
-    await sendNotification([user.fcmToken], {
-      receiver: user._id,
-      message: 'Earn Points!',
-      description:
-        'Congratulations! You have earned 100 points for verifying your phone number 🎉',
-      reference: user._id,
-      modelType: modeType.Achievement,
     })
   }
 

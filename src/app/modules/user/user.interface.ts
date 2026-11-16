@@ -102,6 +102,9 @@ export interface TUser {
   ratingCount: number
   referralCode: string,
   referredBy: Types.ObjectId
+  attributedExpert?: Types.ObjectId | null
+  attributedAt?: Date | null
+  pendingReferralReward?: boolean
   stripeAccountId: string
   country: string
   vatRegistrationNumber: string | null

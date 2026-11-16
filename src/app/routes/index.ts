@@ -1,4 +1,5 @@
 import { Router } from 'express'
+
 import { UserRoutes } from '../modules/user/user.route'
 import { AuthRoutes } from '../modules/auth/auth.route'
 import { otpRoutes } from '../modules/otp/otp.route'
@@ -27,6 +28,7 @@ import { CallingRoutes } from '../modules/calling/calling.route'
 import { MetaRoutes } from '../modules/meta/meta.route'
 import { SupportRoutes } from '../modules/support/support.route'
 import { PointsLogsRoutes } from '../modules/pointsLogs/pointsLogs.route'
+import { PointsRoutes } from '../modules/points/points.route'
 import { AppealRoutes } from '../modules/appeal/appeal.route'
 import { SettingsLogsRoutes } from '../modules/settingsLogs/settingsLogs.route'
 
@@ -136,6 +138,10 @@ const moduleRoutes = [
   {
     path: '/supports',
     route: SupportRoutes,
+  },
+  {
+    path: '/points',
+    route: PointsRoutes,
   },
   {
     path: '/points-logs',

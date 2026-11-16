@@ -17,9 +17,13 @@ const pointsLogSchema = new Schema<TPointsLog>(
       enum: Object.values(POINTS_LOG_SOURCE),
       required: true,
     },
+    rewardKey: { type: String, default: null, index: true },
+    meta: { type: Schema.Types.Mixed, default: null },
   },
   { timestamps: true },
 )
+
+pointsLogSchema.index({ user: 1, rewardKey: 1, createdAt: -1 })
 
 export const PointsLog = model<TPointsLog, TPointsLogModel>(
   'PointsLog',

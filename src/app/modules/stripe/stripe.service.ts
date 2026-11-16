@@ -6,8 +6,8 @@ import StripeService from '../../class/stripe/stripe'
 import { sendNotification } from '../../utils/sentNotification'
 import mongoose from 'mongoose'
 import { modeType } from '../notification/notification.interface'
-import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
-import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
+import { PointsService } from '../points/points.service'
+import { POINTS_REWARD_KEY } from '../points/points.constant'
 
 const isStripeOnboardingComplete = (account: {
   details_submitted?: boolean | null
@@ -300,39 +300,36 @@ const returnUrl = async (query: Record<string, any>) => {
     const isFirstTimeConnect = !user.stripeAccountId
 
     user.stripeAccountId = stripeAccountId
+    await user.save({ session })
 
-    const pointsToAdd = 200
+    let pointsAdded = 0
     if (isFirstTimeConnect) {
-      user.points = (user.points || 0) + pointsToAdd
-      await PointsLogsService.createPointsLog(
-        {
-          user: user._id,
-          type: POINTS_LOG_TYPE.credit,
-          points: pointsToAdd,
-          reason: 'Stripe account connection reward',
-          source: POINTS_LOG_SOURCE.reword,
-        },
+      const awarded = await PointsService.awardByKey({
+        userId: user._id,
+        key: POINTS_REWARD_KEY.stripe_connect,
+        reason: 'Stripe account connection reward',
         session,
-      )
-
-      if (user.fcmToken && user.pushNotify?.points) {
-        await sendNotification([user.fcmToken], {
-          receiver: user._id,
-          message: 'Payment Method Added!',
-          description: `Congratulations! You have earned 200 points for successfully adding your payment method via Stripe. 🎉`,
-          reference: user._id,
-          modelType: modeType.Achievement,
-        })
-      }
+        skipPush: true,
+      })
+      pointsAdded = awarded?.points || 0
     }
 
-    await user.save({ session })
     await session.commitTransaction()
+
+    if (pointsAdded > 0 && user.fcmToken && user.pushNotify?.points) {
+      await sendNotification([user.fcmToken], {
+        receiver: user._id,
+        message: 'Payment Method Added!',
+        description: `Congratulations! You have earned ${pointsAdded} points for successfully adding your payment method via Stripe.`,
+        reference: user._id,
+        modelType: modeType.Achievement,
+      }).catch(() => undefined)
+    }
 
     return {
       connected: true,
       stripeAccountId,
-      pointsAdded: isFirstTimeConnect ? 200 : 0,
+      pointsAdded,
       detailsSubmitted: true,
       chargesEnabled: Boolean(stripeAccount.charges_enabled),
       payoutsEnabled: Boolean(stripeAccount.payouts_enabled),

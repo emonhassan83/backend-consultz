@@ -162,6 +162,7 @@ const createValidationSchema = z.object({
       .min(6, { message: 'Contact number must be at least 6 digits long' })
       .max(15, { message: 'Contact number must be at most 15 digits long' }),
     referralCode: z.string().trim().min(1).optional(),
+    expertRef: z.string().trim().min(1).optional(),
   }),
 })
 

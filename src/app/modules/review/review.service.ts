@@ -10,6 +10,8 @@ import { sendNotification } from '../../utils/sentNotification'
 import { modeType } from '../notification/notification.interface'
 import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
 import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
+import { PointsService } from '../points/points.service'
+import { POINTS_REWARD_KEY } from '../points/points.constant'
 
 const createReviews = async (
   payload: Omit<TReviews, 'user' | 'expert'>,
@@ -77,76 +79,51 @@ const createReviews = async (
       expert.avgRating = Number(newAvgRating.toFixed(2));
       expert.ratingCount = (expert.ratingCount || 0) + 1;
 
-      // Reward #1: Expert gets 200 points for each 5-star review
-      if (payload.rating === 5) {
-        expert.points = (expert.points || 0) + 200;
-        await PointsLogsService.createPointsLog(
-          {
-            user: expert._id,
-            type: POINTS_LOG_TYPE.credit,
-            points: 200,
-            reason: '5-star review reward',
-            source: POINTS_LOG_SOURCE.reword,
-          },
-          session,
-        );
+      // 5-star per-review reward removed (PDF approved). Monthly rating bonus remains.
+      const ratingRule = await PointsService.getRuleOrNull(
+        POINTS_REWARD_KEY.monthly_rating_bonus,
+      )
+      const windowDays = ratingRule?.conditions?.windowDays || 30
+      const minReviews = ratingRule?.conditions?.minReviews || 5
+      const minAvgRating = ratingRule?.conditions?.minAvgRating || 4.7
 
-        // Send push notification to expert (if enabled)
-        if (expert.fcmToken && expert.pushNotify?.points) {
-          await sendNotification([expert.fcmToken], {
-            receiver: expert._id,
-            message: '5-Star Review Received!',
-            description: 'Congratulations! You earned 200 points for receiving a 5-star review. Keep up the great work! 🎉',
-            reference: newReview._id,
-            modelType: modeType.Achievement
-          });
-        }
-      }
+      const windowStart = new Date()
+      windowStart.setDate(windowStart.getDate() - windowDays)
 
-      // Reward #2: Expert gets 500 points if average rating is 4.7+ over last 30 days
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-      // Get all reviews in last 30 days for this expert
       const recentReviews = await Reviews.find(
         {
           expert: expert._id,
-          createdAt: { $gte: thirtyDaysAgo },
+          createdAt: { $gte: windowStart },
         },
-        { rating: 1 }
-      ).session(session).lean();
+        { rating: 1 },
+      )
+        .session(session)
+        .lean()
 
-      const recentCount = recentReviews.length;
-      const recentTotal = recentReviews.reduce((sum, r) => sum + r.rating, 0);
-      const recentAvg = recentCount > 0 ? recentTotal / recentCount : 0;
+      const recentCount = recentReviews.length
+      const recentTotal = recentReviews.reduce((sum, r) => sum + r.rating, 0)
+      const recentAvg = recentCount > 0 ? recentTotal / recentCount : 0
 
-      if (recentAvg >= 4.7 && recentCount >= 1) { // at least 1 review in 30 days
-        expert.points = (expert.points || 0) + 500;
-        await PointsLogsService.createPointsLog(
-          {
-            user: expert._id,
-            type: POINTS_LOG_TYPE.credit,
-            points: 500,
-            reason: 'High rating streak reward',
-            source: POINTS_LOG_SOURCE.reword,
-          },
+      if (recentAvg >= minAvgRating && recentCount >= minReviews) {
+        const already = await PointsService.hasAwardedReward(
+          expert._id,
+          POINTS_REWARD_KEY.monthly_rating_bonus,
+          { 'meta.windowStart': windowStart },
           session,
-        );
-
-        // Send bonus notification
-        if (expert.fcmToken && expert.pushNotify?.points) {
-          await sendNotification([expert.fcmToken], {
-            receiver: expert._id,
-            message: 'High Rating Streak Bonus!',
-            description: 'You maintained 4.7+ average rating over the last 30 days and earned 500 bonus points! Excellent work! 🎉',
-            reference: newReview._id,
-            modelType: modeType.Achievement
-          });
+        )
+        if (!already) {
+          await PointsService.awardByKey({
+            userId: expert._id,
+            key: POINTS_REWARD_KEY.monthly_rating_bonus,
+            reason: 'High rating streak reward',
+            meta: { windowStart, windowEnd: new Date() },
+            session,
+            skipPush: true,
+          })
         }
       }
 
-      // Save expert updates (points, avgRating, ratingCount)
-      await expert.save({ session });
+      await expert.save({ session })
     }
 
     // 7. Award points to reviewer (user who left the review) - existing logic

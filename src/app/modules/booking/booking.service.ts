@@ -40,6 +40,8 @@ import {
 } from './bookingRules.utils'
 import { PointsLogsService } from '../pointsLogs/pointsLogs.service'
 import { POINTS_LOG_SOURCE, POINTS_LOG_TYPE } from '../pointsLogs/pointsLogs.constant'
+import { PointsService } from '../points/points.service'
+import { POINTS_REWARD_KEY } from '../points/points.constant'
 import { getGeneralSettingNumber, getPartyPolicyMinutes } from '../contents/contents.utils'
 import { Reviews } from '../review/review.models'
 import { REFUND_BY } from '../refund/refund.constant'
@@ -1611,81 +1613,75 @@ const completedBooking = async (
       paymentRecordForAmount?.consultAmount ??
       updatedBooking.price
 
-    // Award 100 points to the USER
+    // Session completed rewards (config-driven)
+    const bookingIdForPoints = String(updatedBooking._id)
     const booker = await User.findById(updatedBooking.user).session(session)
     if (booker) {
-      booker.points = (booker.points || 0) + 100
-      await User.findByIdAndUpdate(
-        booker._id,
-        { points: booker.points },
-        { session },
-      )
-      await createRewardPointsLog(
-        booker._id,
-        100,
-        'Session completed reward for consultee',
+      await PointsService.awardByKey({
+        userId: booker._id,
+        key: POINTS_REWARD_KEY.session_completed,
+        reason: 'Session completed reward for consultee',
+        meta: { bookingId: bookingIdForPoints },
         session,
-      )
+        skipPush: true,
+      })
 
-      if (booker.fcmToken && booker.pushNotify?.points) {
-        await sendNotification([booker.fcmToken], {
-          receiver: booker._id,
-          message: 'Session Completed!',
-          description: `You have earned 100 points for attending and completing your consultation. Great job! ðŸŽ‰`,
-          reference: updatedBooking._id as string,
-          modelType: modeType.Achievement,
-        })
-      }
+      await PointsService.settlePendingReferralRewards(booker._id, session)
     }
 
-    // Award points to the CONSULTANT
     const consultant = await User.findById(updatedBooking.consult).session(
       session,
     )
     if (consultant) {
-      consultant.points = (consultant.points || 0) + 100
+      await PointsService.awardByKey({
+        userId: consultant._id,
+        key: POINTS_REWARD_KEY.session_completed,
+        reason: 'Session completed reward for consultant',
+        meta: { bookingId: bookingIdForPoints },
+        session,
+        skipPush: true,
+      })
 
-      const sevenDaysAgo = new Date()
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+      await PointsService.settleExpertLinkFirstPaid(
+        String(updatedBooking.user),
+        consultant._id,
+        bookingIdForPoints,
+        session,
+      )
+      await PointsService.settlePendingReferralRewards(consultant._id, session)
 
-      const completedInLastWeek = await Booking.countDocuments({
+      const weeklyRule = await PointsService.getRuleOrNull(
+        POINTS_REWARD_KEY.weekly_bonus,
+      )
+      const minSessions = weeklyRule?.conditions?.minSessions || 5
+      const { start: weekStart, end: weekEnd } =
+        PointsService.getCurrentIsoWeekWindow()
+
+      const completedThisWeek = await Booking.countDocuments({
         consult: consultant._id,
         status: BOOKING_STATUS.completed,
-        updatedAt: { $gte: sevenDaysAgo },
+        updatedAt: { $gte: weekStart, $lte: weekEnd },
         isDeleted: false,
       }).session(session)
 
-      if (completedInLastWeek >= 5) {
-        consultant.points += 300
-        await createRewardPointsLog(
+      if (completedThisWeek >= minSessions) {
+        const alreadyWeekly = await PointsService.hasAwardedReward(
           consultant._id,
-          300,
-          'Weekly performance bonus for completing 5+ sessions',
+          POINTS_REWARD_KEY.weekly_bonus,
+          { 'meta.windowStart': weekStart },
           session,
         )
-
-        if (consultant.fcmToken && consultant.pushNotify?.points) {
-          await sendNotification([consultant.fcmToken], {
-            receiver: consultant._id,
-            message: 'Weekly Performance Bonus!',
-            description: `Congratulations! You completed 5+ sessions this week and earned 300 bonus points! Keep it up! ðŸŽ‰`,
-            reference: updatedBooking._id as string,
-            modelType: modeType.Achievement,
+        if (!alreadyWeekly) {
+          await PointsService.awardByKey({
+            userId: consultant._id,
+            key: POINTS_REWARD_KEY.weekly_bonus,
+            reason: 'Weekly performance bonus for completing 5+ sessions',
+            meta: { windowStart: weekStart, windowEnd: weekEnd },
+            session,
+            skipPush: true,
           })
         }
       }
-
-      await User.findByIdAndUpdate(
-        consultant._id,
-        { points: consultant.points },
-        { session },
-      )
-      await createRewardPointsLog(
-        consultant._id,
-        100,
-        'Session completed reward for consultant',
-        session,
-      )
 
       if (consultant.fcmToken && consultant.pushNotify?.payment) {
         await sendBookingsNotification(

@@ -43,6 +43,35 @@ import {
   POINTS_LOG_TYPE,
   TPointsLogType,
 } from '../pointsLogs/pointsLogs.constant'
+import { PointsService } from '../points/points.service'
+import { POINTS_REWARD_KEY } from '../points/points.constant'
+import { getLast90DaysPointsByUsers } from '../points/points.utils'
+
+const withLast90DaysRanking = async <T extends { _id: any; createdAt?: Date; avgRating?: number }>(
+  experts: T[],
+) => {
+  const map = await getLast90DaysPointsByUsers(experts.map((e) => e._id))
+  const thirtyDaysAgo = dayjs().subtract(30, 'day')
+
+  return [...experts]
+    .map((expert) => {
+      const recent = map.get(String(expert._id)) || 0
+      const isNewExpert =
+        expert.createdAt && dayjs(expert.createdAt).isAfter(thirtyDaysAgo)
+      const rankingPoints = isNewExpert ? Math.max(recent, 1) : recent
+      return {
+        ...expert,
+        last90DaysPoints: recent,
+        rankingPoints,
+      }
+    })
+    .sort((a, b) => {
+      if (b.rankingPoints !== a.rankingPoints) {
+        return b.rankingPoints - a.rankingPoints
+      }
+      return Number(b.avgRating || 0) - Number(a.avgRating || 0)
+    })
+}
 dayjs.extend(utc)
 
 const createPointsLog = async (
@@ -95,36 +124,16 @@ const applyReferralCodeToUser = async (userId: string, referralCode: string) => 
     }
 
     user.referredBy = referrer._id
-    user.points = (user.points || 0) + 500
-    referrer.points = (referrer.points || 0) + 500
+    user.pendingReferralReward = true
 
-    await Promise.all([
-      user.save({ session }),
-      referrer.save({ session }),
-      createPointsLog(
-        user._id,
-        500,
-        'Referral code reward for using a valid referral code',
-        POINTS_LOG_SOURCE.reword,
-        POINTS_LOG_TYPE.credit,
-        session,
-      ),
-      createPointsLog(
-        referrer._id,
-        500,
-        'Referral reward for inviting a new user',
-        POINTS_LOG_SOURCE.reword,
-        POINTS_LOG_TYPE.credit,
-        session,
-      ),
-    ])
-
+    await user.save({ session })
     await session.commitTransaction()
 
     return {
       _id: user._id,
       referredBy: user.referredBy,
       points: user.points,
+      pendingReferralReward: true,
       referrer: {
         _id: referrer._id,
         firstName: referrer.firstName,
@@ -140,12 +149,17 @@ const applyReferralCodeToUser = async (userId: string, referralCode: string) => 
 }
 
 const registerUserIntoDB = async (
-  payload: TUser & { referralCode?: string },
+  payload: TUser & { referralCode?: string; expertRef?: string },
 ) => {
-  const { email, password, referralCode, ...rest } = payload
+  const { email, password, referralCode, expertRef, ...rest } = payload
   const userPayload = { ...rest, email, password }
   const applyReferralAndReturnUser = async (userId: string) => {
-    if (!referralCode) return null
+    if (expertRef) {
+      await PointsService.applyExpertRefOnRegister(userId, expertRef)
+    }
+    if (!referralCode) {
+      return expertRef ? await User.findById(userId) : null
+    }
 
     await applyReferralCodeToUser(userId, referralCode)
     const updatedUser = await User.findById(userId)
@@ -416,7 +430,7 @@ const getInterestExpertsFromDB = async (
 
   const usersQuery = new QueryBuilder(
     User.find(baseFilter).select(
-      '_id firstName lastName photoUrl headline followers avgRating ratingCount hourlyRate',
+      '_id firstName lastName photoUrl headline followers avgRating ratingCount hourlyRate createdAt',
     ),
     query,
   )
@@ -433,11 +447,12 @@ const getInterestExpertsFromDB = async (
     getTotalBookingsBatch(expertIds),
   ])
 
-  const result = experts.map((expert) => ({
+  const mapped = experts.map((expert) => ({
     ...expert.toObject(),
     isFollowing: followingMap.get(expert._id.toString()) || false,
     totalBookings: totalBookingsMap.get(expert._id.toString()) || 0,
   }))
+  const result = await withLast90DaysRanking(mapped)
 
   const meta = await usersQuery.countTotal()
 
@@ -462,14 +477,13 @@ const getPropertyExpertsFromDB = async (
 
   const usersQuery = new QueryBuilder(
     User.find(filter).select(
-      '_id firstName lastName photoUrl headline followers avgRating ratingCount hourlyRate',
+      '_id firstName lastName photoUrl headline followers avgRating ratingCount hourlyRate createdAt',
     ),
     query,
   )
     .sortByCustom({
       avgRating: -1,
       followers: -1,
-      points: -1,
     })
     .paginate()
     .fields()
@@ -483,11 +497,12 @@ const getPropertyExpertsFromDB = async (
     getTotalBookingsBatch(expertIds),
   ])
 
-  const result = experts.map((expert) => ({
+  const mapped = experts.map((expert) => ({
     ...expert.toObject(),
     isFollowing: followingMap.get(expert._id.toString()) || false,
     totalBookings: totalBookingsMap.get(expert._id.toString()) || 0,
   }))
+  const result = await withLast90DaysRanking(mapped)
 
   const meta = await usersQuery.countTotal()
 
@@ -509,7 +524,7 @@ const getTopExpertsFromDB = async (
 
   const usersQuery = new QueryBuilder(
     User.find(filter).select(
-      '_id firstName lastName photoUrl headline avgRating ratingCount followers hourlyRate',
+      '_id firstName lastName photoUrl headline avgRating ratingCount followers hourlyRate createdAt',
     ),
     query,
   )
@@ -530,11 +545,12 @@ const getTopExpertsFromDB = async (
     getTotalBookingsBatch(expertIds),
   ])
 
-  const result = experts.map((expert) => ({
+  const mapped = experts.map((expert) => ({
     ...expert.toObject(),
     isFollowing: followingMap.get(expert._id.toString()) || false,
     totalBookings: totalBookingsMap.get(expert._id.toString()) || 0,
   }))
+  const result = await withLast90DaysRanking(mapped)
 
   const meta = await usersQuery.countTotal()
 
@@ -577,14 +593,13 @@ const getPublicInterestExpertsFromDB = async (
 
   const usersQuery = new QueryBuilder(
     User.find(baseFilter).select(
-      '_id firstName lastName photoUrl headline followers avgRating ratingCount hourlyRate',
+      '_id firstName lastName photoUrl headline followers avgRating ratingCount hourlyRate createdAt',
     ),
     query,
   )
     .sortByCustom({
       avgRating: -1,
       followers: -1,
-      points: -1,
     })
     .paginate()
     .fields()
@@ -592,11 +607,12 @@ const getPublicInterestExpertsFromDB = async (
   const experts = await usersQuery.modelQuery
   const meta = await usersQuery.countTotal()
 
-  const result = experts.map((expert: any) => ({
+  const mapped = experts.map((expert: any) => ({
     ...expert.toObject(),
     isFollowing: false, // non-auth user → always false
     totalBookings: 0, // non-auth → hide sensitive count
   }))
+  const result = await withLast90DaysRanking(mapped)
 
   return { meta, result }
 }
@@ -617,14 +633,13 @@ const getPublicPropertyExpertsFromDB = async (
 
   const usersQuery = new QueryBuilder(
     User.find(baseFilter).select(
-      '_id firstName lastName photoUrl headline followers avgRating ratingCount hourlyRate',
+      '_id firstName lastName photoUrl headline followers avgRating ratingCount hourlyRate createdAt',
     ),
     query,
   )
     .sortByCustom({
       avgRating: -1,
       followers: -1,
-      points: -1,
     })
     .paginate()
     .fields()
@@ -632,11 +647,12 @@ const getPublicPropertyExpertsFromDB = async (
   const experts = await usersQuery.modelQuery
   const meta = await usersQuery.countTotal()
 
-  const result = experts.map((expert: any) => ({
+  const mapped = experts.map((expert: any) => ({
     ...expert.toObject(),
     isFollowing: false,
     totalBookings: 0,
   }))
+  const result = await withLast90DaysRanking(mapped)
 
   return { meta, result }
 }
@@ -652,7 +668,7 @@ const getPublicTopExpertsFromDB = async (query: Record<string, unknown>) => {
 
   const usersQuery = new QueryBuilder(
     User.find(baseFilter).select(
-      '_id firstName lastName photoUrl headline avgRating ratingCount followers hourlyRate',
+      '_id firstName lastName photoUrl headline avgRating ratingCount followers hourlyRate createdAt',
     ),
     query,
   )
@@ -667,11 +683,12 @@ const getPublicTopExpertsFromDB = async (query: Record<string, unknown>) => {
   const experts = await usersQuery.modelQuery
   const meta = await usersQuery.countTotal()
 
-  const result = experts.map((expert: any) => ({
+  const mapped = experts.map((expert: any) => ({
     ...expert.toObject(),
     isFollowing: false,
     totalBookings: 0,
   }))
+  const result = await withLast90DaysRanking(mapped)
 
   return { meta, result }
 }
@@ -1015,26 +1032,16 @@ const changeUserStatusFromDB = async (payload: {
     user.status === USER_STATUS.pending &&
     user.role === USER_ROLE.expert
   ) {
-    // Award 300 points to the expert
-    const pointsToAdd = 300
-    updatedUser.points = (updatedUser.points || 0) + pointsToAdd
-    await updatedUser.save()
-    await createPointsLog(
-      updatedUser._id,
-      pointsToAdd,
-      'Expert account approval reward',
-    )
-
-    // Send push notification to expert (if enabled)
-    if (updatedUser.fcmToken && updatedUser.pushNotify?.points) {
-      await sendNotification([updatedUser.fcmToken], {
-        receiver: updatedUser._id,
-        message: 'Expert Account Approved!',
-        description: `You have earned 300 points. Start accepting bookings now! 🎉`,
-        reference: updatedUser._id,
-        modelType: modeType.Achievement,
-      })
+    const awarded = await PointsService.awardByKey({
+      userId: updatedUser._id,
+      key: POINTS_REWARD_KEY.admin_approval,
+      reason: 'Expert account approval reward',
+    })
+    if (awarded) {
+      updatedUser.points = (updatedUser.points || 0) + awarded.points
     }
+    // Referral stays pending until first paid session completes
+    // (settlePendingReferralRewards also requires expert status === active).
   }
 
   // 4. notify to admin and user
@@ -1150,27 +1157,17 @@ const updateUserInfoFromDB = async (
         !user.socialProfiles || user.socialProfiles.length === 0
 
       if (previouslyEmpty && !user.socialProofBonusClaimed) {
-        user.points = (user.points || 0) + 150
-        finalPayload.points = user.points
-        finalPayload.socialProofBonusClaimed = true
-        await createPointsLog(
-          user._id,
-          150,
-          'Social profile addition reward',
-          POINTS_LOG_SOURCE.reword,
-          POINTS_LOG_TYPE.credit,
+        const awarded = await PointsService.awardByKey({
+          userId: user._id,
+          key: POINTS_REWARD_KEY.social_links,
+          reason: 'Social profile addition reward',
           session,
-        )
-
-        if (user.fcmToken && user.pushNotify?.points) {
-          await sendNotification([user.fcmToken], {
-            receiver: user._id,
-            message: 'Social Profiles Added!',
-            description:
-              'Congratulations! You earned 150 points for adding your social profiles. 🎉',
-            reference: user._id,
-            modelType: modeType.Achievement,
-          })
+          skipPush: true,
+        })
+        if (awarded) {
+          user.points = (user.points || 0) + awarded.points
+          finalPayload.points = user.points
+          finalPayload.socialProofBonusClaimed = true
         }
       }
     }
@@ -1222,30 +1219,17 @@ const updateUserInfoFromDB = async (
     })
 
     if (isProfileNowComplete && !user.profileCompletionBonusClaimed) {
-      const pointsToAdd = isExpert ? 300 : isConsult ? 150 : 0
-
-      if (pointsToAdd > 0) {
-        user.points = (user.points || 0) + pointsToAdd
+      const awarded = await PointsService.awardByKey({
+        userId: user._id,
+        key: POINTS_REWARD_KEY.profile_complete,
+        reason: `${isExpert ? 'Expert' : 'Consult'} profile completion reward`,
+        session,
+        skipPush: true,
+      })
+      if (awarded) {
+        user.points = (user.points || 0) + awarded.points
         finalPayload.points = user.points
         finalPayload.profileCompletionBonusClaimed = true
-        await createPointsLog(
-          user._id,
-          pointsToAdd,
-          `${isExpert ? 'Expert' : 'Consult'} profile completion reward`,
-          POINTS_LOG_SOURCE.reword,
-          POINTS_LOG_TYPE.credit,
-          session,
-        )
-
-        if (user.fcmToken && user.pushNotify?.points) {
-          await sendNotification([user.fcmToken], {
-            receiver: user._id,
-            message: 'Profile Completed!',
-            description: `Congratulations! You have earned ${pointsToAdd} points for fully completing your ${isExpert ? 'expert' : 'consult'} profile. 🎉`,
-            reference: user._id,
-            modelType: modeType.Achievement,
-          })
-        }
       }
     }
 
