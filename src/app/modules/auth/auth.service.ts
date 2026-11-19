@@ -193,15 +193,19 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
       const updatedUser = await User.findByIdAndUpdate(
         user._id,
         {
-          ...updateData,
-          isDeleted: false,
-          referredBy: null,
-          pendingReferralReward: false,
-          attributedExpert: null,
-          attributedAt: null,
-          verification: { otp: 0, expiresAt: new Date(), status: true },
-          expireAt: null,
-          lastLogAt: now,
+          $set: {
+            ...updateData,
+            isDeleted: false,
+            pendingReferralReward: false,
+            verification: { otp: 0, expiresAt: new Date(), status: true },
+            expireAt: null,
+            lastLogAt: now,
+          },
+          $unset: {
+            referredBy: 1,
+            attributedExpert: 1,
+            attributedAt: 1,
+          },
         },
         { returnDocument: 'after' },
       )
@@ -292,15 +296,19 @@ const registerWithApple = async (payload: TAppleLoginPayload) => {
       const updatedUser = await User.findByIdAndUpdate(
         user._id,
         {
-          ...updateData,
-          isDeleted: false,
-          referredBy: null,
-          pendingReferralReward: false,
-          attributedExpert: null,
-          attributedAt: null,
-          verification: { otp: 0, expiresAt: new Date(), status: true },
-          expireAt: null,
-          lastLogAt: now,
+          $set: {
+            ...updateData,
+            isDeleted: false,
+            pendingReferralReward: false,
+            verification: { otp: 0, expiresAt: new Date(), status: true },
+            expireAt: null,
+            lastLogAt: now,
+          },
+          $unset: {
+            referredBy: 1,
+            attributedExpert: 1,
+            attributedAt: 1,
+          },
         },
         { returnDocument: 'after' },
       )

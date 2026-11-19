@@ -97,7 +97,11 @@ const createPointsLog = async (
   )
 }
 
-const applyReferralCodeToUser = async (userId: string, referralCode: string) => {
+const applyReferralCodeToUser = async (
+  userId: string,
+  referralCode: string,
+  options?: { replaceExisting?: boolean },
+) => {
   const session = await mongoose.startSession()
   session.startTransaction()
 
@@ -107,7 +111,7 @@ const applyReferralCodeToUser = async (userId: string, referralCode: string) => 
       throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
     }
 
-    if (user.referredBy) {
+    if (user.referredBy && !options?.replaceExisting) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Referral code already used')
     }
 
@@ -153,7 +157,10 @@ const registerUserIntoDB = async (
 ) => {
   const { email, password, referralCode, expertRef, ...rest } = payload
   const userPayload = { ...rest, email, password }
-  const applyReferralAndReturnUser = async (userId: string) => {
+  const applyReferralAndReturnUser = async (
+    userId: string,
+    options?: { replaceExisting?: boolean },
+  ) => {
     if (expertRef) {
       await PointsService.applyExpertRefOnRegister(userId, expertRef)
     }
@@ -161,7 +168,7 @@ const registerUserIntoDB = async (
       return expertRef ? await User.findById(userId) : null
     }
 
-    await applyReferralCodeToUser(userId, referralCode)
+    await applyReferralCodeToUser(userId, referralCode, options)
     const updatedUser = await User.findById(userId)
     if (!updatedUser) {
       throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
@@ -183,13 +190,15 @@ const registerUserIntoDB = async (
       existingUser.set({
         ...userPayload,
         isDeleted: false,
-        referredBy: null,
         pendingReferralReward: false,
         attributedExpert: null,
         attributedAt: null,
       })
+      existingUser.set('referredBy', undefined)
       const user = await existingUser.save()
-      const updatedUser = await applyReferralAndReturnUser(user._id.toString())
+      const updatedUser = await applyReferralAndReturnUser(user._id.toString(), {
+        replaceExisting: true,
+      })
       if (updatedUser) return updatedUser
       return user
     }
@@ -771,7 +780,7 @@ const geUserByIdFromDB = async (viewerId: string, viewedUserId: string) => {
   try {
     const user = await User.findById(viewedUserId)
       .select(
-        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role languages education stripeAccountId isTopExpert pushNotify emailNotify isVatRegistered vatRegistrationNumber country status createdAt bookingRules lastLogAt',
+        '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto headline points referralCode socialProfiles hourlyRate priceRange interests learningStyles availability advisingTime advisingStyles timeZone sessionDurations avgRating skills languages expertise availability role registerWith languages education stripeAccountId isTopExpert pushNotify emailNotify isVatRegistered vatRegistrationNumber country status createdAt bookingRules lastLogAt',
       )
       .lean()
 
@@ -1312,11 +1321,15 @@ const softDeleteUserFromDB = async (userId: string) => {
     const result = await User.findByIdAndUpdate(
       userId,
       {
-        isDeleted: true,
-        referredBy: null,
-        pendingReferralReward: false,
-        attributedExpert: null,
-        attributedAt: null,
+        $set: {
+          isDeleted: true,
+          pendingReferralReward: false,
+        },
+        $unset: {
+          referredBy: 1,
+          attributedExpert: 1,
+          attributedAt: 1,
+        },
       },
       { returnDocument: 'after', session },
     ).select(
