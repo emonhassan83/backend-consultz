@@ -101,7 +101,7 @@ export interface TUser {
   avgRating: number
   ratingCount: number
   referralCode: string,
-  referredBy: Types.ObjectId
+  referredBy?: Types.ObjectId | null
   attributedExpert?: Types.ObjectId | null
   attributedAt?: Date | null
   pendingReferralReward?: boolean

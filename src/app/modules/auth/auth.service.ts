@@ -195,6 +195,10 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
         {
           ...updateData,
           isDeleted: false,
+          referredBy: null,
+          pendingReferralReward: false,
+          attributedExpert: null,
+          attributedAt: null,
           verification: { otp: 0, expiresAt: new Date(), status: true },
           expireAt: null,
           lastLogAt: now,
@@ -290,6 +294,10 @@ const registerWithApple = async (payload: TAppleLoginPayload) => {
         {
           ...updateData,
           isDeleted: false,
+          referredBy: null,
+          pendingReferralReward: false,
+          attributedExpert: null,
+          attributedAt: null,
           verification: { otp: 0, expiresAt: new Date(), status: true },
           expireAt: null,
           lastLogAt: now,

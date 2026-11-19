@@ -180,7 +180,14 @@ const registerUserIntoDB = async (
   if (existingUser) {
     // Soft deleted user — recreate
     if (existingUser.isDeleted) {
-      existingUser.set({ ...userPayload, isDeleted: false })
+      existingUser.set({
+        ...userPayload,
+        isDeleted: false,
+        referredBy: null,
+        pendingReferralReward: false,
+        attributedExpert: null,
+        attributedAt: null,
+      })
       const user = await existingUser.save()
       const updatedUser = await applyReferralAndReturnUser(user._id.toString())
       if (updatedUser) return updatedUser
@@ -1304,7 +1311,13 @@ const softDeleteUserFromDB = async (userId: string) => {
 
     const result = await User.findByIdAndUpdate(
       userId,
-      { isDeleted: true },
+      {
+        isDeleted: true,
+        referredBy: null,
+        pendingReferralReward: false,
+        attributedExpert: null,
+        attributedAt: null,
+      },
       { returnDocument: 'after', session },
     ).select(
       '_id id firstName lastName email phoneNumber photoUrl bio coverPhoto status createdAt',

@@ -331,7 +331,7 @@ const sendOtpViaTokenInPhone = async (
 
   try {
     const res = await client.messages.create({
-      body: `Welcome to Consultz, your verification code is ${otp}. It expires in 5 minutes. Please do not sharing.`,
+      body: `Welcome to Consultz. Your verification code is ${otp}. It expires in 5 minutes. Please do not share this code.`,
       from: config.twilio.phoneNumber,
       to: phoneNumber,
     })
@@ -424,7 +424,7 @@ const sendOtpViaDirectPhone = async (payload: { phoneNumber: string }) => {
 
   try {
     const res = await client.messages.create({
-      body: `Your verification code is ${otp}. It expires in 5 minutes. Please do not sharing.`,
+      body: `Welcome to Consultz. Your verification code is ${otp}. It expires in 5 minutes. Please do not share this code.`,
       from: config.twilio.phoneNumber,
       to: phoneNumber,
     })

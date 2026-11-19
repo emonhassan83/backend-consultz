@@ -201,7 +201,7 @@ const userSchema = new Schema<TUser, UserModel>(
       type: Date,
       default: () => {
         const expireAt = new Date()
-        return expireAt.setMinutes(expireAt.getMinutes() + 30)
+        return expireAt.setMinutes(expireAt.getMinutes() + 60)
       },
     },
     pushNotify: {
