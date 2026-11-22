@@ -7,14 +7,16 @@ const objectIdSchema = z.string().refine((val) => Types.ObjectId.isValid(val), {
 
 const createValidationSchema = z.object({
   body: z.object({
-    account: objectIdSchema,
+    // Ignored: the payer comes from the token. Kept optional for older apps.
+    account: objectIdSchema.optional(),
     booking: objectIdSchema,
   }),
 })
 
 const confirmPaymentSchema = z.object({
   body: z.object({
-    user: objectIdSchema,
+    // Ignored: the payer comes from the token. Kept optional for older apps.
+    user: objectIdSchema.optional(),
     booking: objectIdSchema,
     paymentIntentId: z.string({
       message: 'Payment IntentId is required!',

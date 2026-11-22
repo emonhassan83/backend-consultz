@@ -1,36 +1,75 @@
-import config from '../config'
-import axios from 'axios';
+import nodemailer from 'nodemailer'
 import httpStatus from 'http-status'
-import AppError from '../errors/AppError';
+import config from '../config'
+import AppError from '../errors/AppError'
 
-const emailSender = async (email: string, subject: string, html: string) => {
- try {
-    const emailData = {
+// Sends mail directly over SMTP: Brevo (smtp-relay.brevo.com) when the Brevo
+// credentials are set, otherwise the older Gmail setup. See emailConfig.ts.
+// The SMTP login is not the From address: Brevo logs in with its own login
+// and sends as the verified sender (e.g. info@consultz.com).
+const transporter = nodemailer.createTransport({
+  host: config.emailSender.smtp_host,
+  port: config.emailSender.smtp_port,
+  secure: config.emailSender.smtp_secure,
+  // On 587 / 2525 the connection must upgrade to TLS before logging in
+  requireTLS: !config.emailSender.smtp_secure,
+  auth: {
+    user: config.emailSender.smtp_user,
+    pass: config.emailSender.smtp_pass,
+  },
+  connectionTimeout: 15000,
+  greetingTimeout: 15000,
+  socketTimeout: 30000,
+})
+
+const fromAddress = () => config.emailSender.from
+
+const emailSender = async (
+  email: string,
+  subject: string,
+  html: string,
+): Promise<void> => {
+  try {
+    await transporter.sendMail({
+      from: fromAddress(),
       to: email,
       subject,
       html,
-      nodemailer_host_email: config.emailSender.email,
-      nodemailer_host_pass: config.emailSender.app_pass,
-    };
+    })
+  } catch (error: any) {
+    console.error('Email sending error:', {
+      to: email,
+      subject,
+      code: error?.code,
+      command: error?.command,
+      responseCode: error?.responseCode,
+      response: error?.response,
+      message: error?.message,
+    })
+    throw new AppError(httpStatus.BAD_REQUEST, 'Error sending email')
+  }
+}
 
-    const res = await axios.post(
-      'https://consultz.vercel.app/', // Replace with your email sending service URL
-      emailData,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    const result = res?.data;
-    if (!result.success) {
-      throw new AppError(httpStatus.BAD_REQUEST, result.message);
-    }
-    return result;
-  } catch (error) {
-    console.error('Email sending error:', error);
-    throw new AppError(httpStatus.BAD_REQUEST, 'Error sending email');
+// Called once at startup so a bad SMTP setup shows up in the logs right away
+// instead of on the first forgot-password request.
+export const verifyEmailTransport = async (): Promise<boolean> => {
+  for (const warning of config.emailSender.warnings) {
+    console.warn(`Email config: ${warning}`)
+  }
+  try {
+    await transporter.verify()
+    console.log(
+      `SMTP ready (${config.emailSender.provider}, ${config.emailSender.smtp_host}:${config.emailSender.smtp_port}, from ${config.emailSender.email})`,
+    )
+    return true
+  } catch (error: any) {
+    console.error('SMTP verify failed:', {
+      code: error?.code,
+      responseCode: error?.responseCode,
+      response: error?.response,
+      message: error?.message,
+    })
+    return false
   }
 }
 

@@ -10,12 +10,8 @@ import { USER_ROLE, USER_STATUS } from './user.constant'
 
 const registerUser = catchAsync(async (req, res) => {
   const result = await UserService.registerUserIntoDB(req?.body)
-  const sendOtp = await otpServices.sendOtpViaTokenInPhone(
-    result._id.toString(),
-    {
-      phoneNumber: result.phoneNumber as string,
-    },
-  )
+  // Sign-up OTP goes to the email address (not SMS)
+  const sendOtp = await otpServices.sendOtpInEmail(result.email)
   const { _id, id, firstName, lastName, email, phoneNumber, status } = result
 
   sendResponse(res, {
@@ -129,7 +125,9 @@ const getInvestmentExperts = catchAsync(async (req, res) => {
 })
 
 const getAllUsers = catchAsync(async (req, res) => {
-  const result = await UserService.getAllUsersFromDB(req.query, req.user._id)
+  const result = await UserService.getAllUsersFromDB(req.query, req.user._id, {
+    includeDob: req.user.role === USER_ROLE.admin,
+  })
 
   sendResponse(res, {
     success: true,
@@ -162,6 +160,7 @@ const getUserById = catchAsync(async (req: Request, res: Response) => {
   const result = await UserService.geUserByIdFromDB(
     req.user._id,
     req.params.id as string,
+    req.user.role,
   )
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -188,7 +187,7 @@ const getMyProfile = catchAsync(
 )
 
 const changeUserStatus = catchAsync(async (req, res) => {
-  const result = await UserService.changeUserStatusFromDB(req.body)
+  const result = await UserService.changeUserStatusFromDB(req.body, req.user._id)
 
   sendResponse(res, {
     success: true,
@@ -208,6 +207,99 @@ const changeUserNotify = catchAsync(async (req, res) => {
     success: true,
     statusCode: 200,
     message: 'User notify status changed successfully!',
+    data: result,
+  })
+})
+
+const completeOnboarding = catchAsync(async (req, res) => {
+  const result = await UserService.completeOnboardingIntoDB(
+    req.user._id,
+    req.body,
+  )
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: 'Onboarding details saved successfully!',
+    data: result,
+  })
+})
+
+const requestEmailChange = catchAsync(async (req, res) => {
+  const result = await UserService.requestEmailChange(
+    req.user._id,
+    req.body.newEmail,
+  )
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: 'We sent a code to your new email address.',
+    data: result,
+  })
+})
+
+const verifyEmailChange = catchAsync(async (req, res) => {
+  const result = await UserService.verifyEmailChange(req.user._id, req.body.otp)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: 'Your email has been changed.',
+    data: result,
+  })
+})
+
+const uploadIntroVideo = catchAsync(async (req, res) => {
+  const result = await UserService.uploadIntroVideo(req.user._id, req.file)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: 'Intro video saved.',
+    data: result,
+  })
+})
+
+const removeIntroVideo = catchAsync(async (req, res) => {
+  const result = await UserService.removeIntroVideo(req.user._id)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: 'Intro video removed.',
+    data: result,
+  })
+})
+
+const adminUpdateUserEmail = catchAsync(async (req, res) => {
+  const result = await UserService.adminUpdateUserEmail(
+    req.user._id,
+    req.params.id as string,
+    req.body.email,
+    req.body.reason,
+  )
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: 'User email updated. They need to log in again with the new email.',
+    data: result,
+  })
+})
+
+const adminUpdateUserPhone = catchAsync(async (req, res) => {
+  const result = await UserService.adminUpdateUserPhone(
+    req.user._id,
+    req.params.id as string,
+    req.body.phoneNumber,
+    req.body.reason,
+  )
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: 'User phone number updated.',
     data: result,
   })
 })
@@ -324,6 +416,13 @@ export const UserControllers = {
   getPublicTopExperts,
   getUserById,
   getMyProfile,
+  completeOnboarding,
+  requestEmailChange,
+  verifyEmailChange,
+  adminUpdateUserEmail,
+  adminUpdateUserPhone,
+  uploadIntroVideo,
+  removeIntroVideo,
   changeUserStatus,
   useReferralCode,
   adjustUserPoints,

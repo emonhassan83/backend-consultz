@@ -25,6 +25,10 @@ export interface TBookings {
   challengeQuestion: string
   backgroundQuestion: string
   isExpertVatRegistered: boolean
+  // Price snapshot taken at booking time (#32); null on older bookings
+  expertVatRate?: number | null
+  expertVat?: number
+  totalAmount?: number | null
   sessionStartedAt?: Date
   paymentStatus: TPaymentStatus
   recordDuration: number

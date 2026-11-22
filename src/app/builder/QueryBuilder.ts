@@ -1,5 +1,15 @@
 import { Query } from 'mongoose'
 
+// Secrets that must never be returned through `?fields=`, on any model
+const NEVER_SELECTABLE_FIELDS = new Set([
+  'password',
+  'verification',
+  'verification.otp',
+  'passwordChangedAt',
+  'fcmToken',
+  'voipToken',
+])
+
 class QueryBuilder<T> {
   public modelQuery: Query<T[], T>
   public query: Record<string, unknown>
@@ -93,10 +103,34 @@ class QueryBuilder<T> {
   }
 
   fields() {
-    const fields =
-      (this?.query?.fields as string)?.split(',')?.join(' ') || '-__v'
+    const raw = typeof this?.query?.fields === 'string' ? this.query.fields : ''
+    let requested = raw
+      .split(',')
+      .map((f) => f.trim())
+      .filter(
+        (f) =>
+          f &&
+          !f.startsWith('+') && // never force-select hidden (select:false) fields
+          !NEVER_SELECTABLE_FIELDS.has(f.replace(/^-/, '')),
+      )
 
-    this.modelQuery = this.modelQuery.select(fields)
+    // Mongoose merges this select into any earlier inclusive .select(), so
+    // `?fields=password,dob` would otherwise ADD fields the service never
+    // meant to expose. When the service already picked fields, only allow
+    // narrowing to a subset of them.
+    const existing = this.modelQuery.projection() as
+      | Record<string, unknown>
+      | undefined
+    const isInclusive =
+      !!existing &&
+      Object.values(existing).some((v) => v === 1 || v === true)
+    if (isInclusive) {
+      requested = requested.filter((f) => !f.startsWith('-') && f in existing)
+    }
+
+    this.modelQuery = this.modelQuery.select(
+      requested.length ? requested.join(' ') : '-__v',
+    )
     return this
   }
 

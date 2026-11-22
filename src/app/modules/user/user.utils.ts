@@ -6,7 +6,18 @@ import { messages } from '../notification/notification.constant'
 import { TUser } from './user.interface'
 import { findAdmin } from '../../utils/findAdmin'
 import { sendNotification } from '../../utils/sentNotification'
-import { TUserStatus, USER_ROLE, USER_STATUS } from './user.constant'
+import {
+  INTRO_VIDEO_MAX_MB,
+  INTRO_VIDEO_MAX_SECONDS,
+  INTRO_VIDEO_MIME_TYPES,
+  MAX_AGE,
+  MIN_AGE,
+  PROFILE_PROTECTED_FIELDS,
+  REGISTER_WITH,
+  TUserStatus,
+  USER_ROLE,
+  USER_STATUS,
+} from './user.constant'
 import emailSender from '../../utils/emailSender'
 import config from '../../config'
 import { BOOKING_STATUS } from '../booking/booking.constants'
@@ -25,6 +36,352 @@ import { BlockProfile } from '../blockProfile/blockProfile.models'
 import { Reviews } from '../review/review.models'
 import { Notification } from '../notification/notification.model'
 import { PointsLog } from '../pointsLogs/pointsLogs.model'
+import {
+  normalizePhone,
+  PHONE_ALREADY_EXISTS_MESSAGE,
+} from '../../utils/normalizePhone'
+import { emailCaseInsensitiveFilter } from '../../utils/normalizeEmail'
+import { escapeHtml, truncate } from '../report/report.helpers'
+
+/**
+ * Another live, completed account (email or phone verified) that owns this
+ * phone number (QA #12). Unverified sign-ups don't own their number, so a
+ * user who typed a wrong number can't lock someone else out. The raw trimmed
+ * value is also matched for numbers stored before normalization.
+ */
+export const findPhoneOwner = async (
+  phone: string | null | undefined,
+  excludeUserId?: string | Types.ObjectId | null,
+  session?: ClientSession,
+) => {
+  const normalized = normalizePhone(phone)
+  if (!normalized) return null
+
+  const candidates = Array.from(new Set([normalized, (phone ?? '').trim()]))
+
+  return User.findOne({
+    phoneNumber: { $in: candidates },
+    isDeleted: false,
+    $or: [{ isPhoneOtpVerified: true }, { isEmailVerified: true }],
+    ...(excludeUserId ? { _id: { $ne: excludeUserId } } : {}),
+  })
+    .select('_id')
+    .session(session ?? null)
+}
+
+export type TReferralApplyAction =
+  | { action: 'apply' }
+  | { action: 'noop' }
+  | { action: 'error'; message: string }
+
+/**
+ * What to do when a referral code is applied to a user (#14, #16). Codes are
+ * reusable across users; each user can join with one referrer. Applying the
+ * same referrer again (e.g. register body + use-referral-code) is a no-op,
+ * not an error.
+ */
+export const getReferralApplyAction = (params: {
+  userId: string | Types.ObjectId
+  currentReferredBy?: string | Types.ObjectId | null
+  referrerId: string | Types.ObjectId
+  replaceExisting?: boolean
+}): TReferralApplyAction => {
+  const userId = String(params.userId)
+  const referrerId = String(params.referrerId)
+  const current = params.currentReferredBy
+    ? String(params.currentReferredBy)
+    : null
+
+  if (referrerId === userId) {
+    return { action: 'error', message: 'Cannot use your own referral code' }
+  }
+  if (current === referrerId) {
+    return { action: 'noop' }
+  }
+  if (current && !params.replaceExisting) {
+    return {
+      action: 'error',
+      message: 'You have already joined with a different referral code',
+    }
+  }
+  return { action: 'apply' }
+}
+
+/** Google/Apple accounts sign in through the provider and have no Consultz password. */
+export const isSocialAccount = (registerWith?: string | null): boolean =>
+  registerWith === REGISTER_WITH.google || registerWith === REGISTER_WITH.apple
+
+/** Message for a social user who tries to change a password they don't have (#23). */
+export const getSocialPasswordMessage = (registerWith?: string | null) => {
+  const isApple = registerWith === REGISTER_WITH.apple
+  const provider = isApple ? 'Apple' : 'Google'
+  const settings = isApple ? 'Apple ID settings' : 'Google Account settings'
+  return `You sign in with ${provider}. There's no separate Consultz password. To change your password, go to your ${settings}.`
+}
+
+/** Login / forgot-password message for a Google/Apple account (#25). */
+export const getSocialSignInMessage = (registerWith?: string | null) => {
+  const provider = registerWith === REGISTER_WITH.apple ? 'Apple' : 'Google'
+  return `This email is linked to ${provider} sign-in. Please sign in with ${provider} instead.`
+}
+
+/**
+ * Why an email change request can't go ahead, or null if it can (#26).
+ * Both emails must already be normalized.
+ */
+export const getEmailChangeError = (params: {
+  registerWith?: string | null
+  currentEmail: string
+  newEmail: string
+  // An unverified email may be "changed" to itself, which just verifies it (#65)
+  isEmailVerified?: boolean | null
+}): string | null => {
+  if (isSocialAccount(params.registerWith)) {
+    const provider = params.registerWith === REGISTER_WITH.apple ? 'Apple' : 'Google'
+    return `Your email comes from your ${provider} sign-in and can't be changed here.`
+  }
+  if (!params.newEmail) return 'Please enter a valid email address.'
+  if (params.newEmail === params.currentEmail && params.isEmailVerified !== false) {
+    return 'This is already your email address.'
+  }
+  return null
+}
+
+/**
+ * Why an admin can't set this email on the user, or null if they can (#67).
+ * Both emails must already be normalized.
+ */
+export const getAdminEmailChangeError = (params: {
+  registerWith?: string | null
+  currentEmail: string
+  newEmail: string
+}): string | null => {
+  if (isSocialAccount(params.registerWith)) {
+    const provider = params.registerWith === REGISTER_WITH.apple ? 'Apple' : 'Google'
+    return `This user signs in with ${provider}, so their email comes from ${provider} and can't be changed here.`
+  }
+  if (!params.newEmail) return 'Please enter a valid email address.'
+  if (params.newEmail === params.currentEmail) {
+    return "This is already the user's email address."
+  }
+  return null
+}
+
+/**
+ * Why the email of a sign-up still waiting for its OTP can't be corrected,
+ * or null if it can (#65). Both emails must already be normalized.
+ */
+export const getSignupEmailChangeError = (params: {
+  registerWith?: string | null
+  isEmailVerified?: boolean | null
+  isPhoneOtpVerified?: boolean | null
+  currentEmail: string
+  newEmail: string
+}): string | null => {
+  if (
+    isSocialAccount(params.registerWith) ||
+    params.isEmailVerified ||
+    params.isPhoneOtpVerified
+  ) {
+    return 'Your account is already verified. Change your email from Settings.'
+  }
+  if (!params.newEmail) return 'Please enter a valid email address.'
+  if (params.newEmail === params.currentEmail) {
+    return 'This is already the email for this sign-up.'
+  }
+  return null
+}
+
+/** Throws 409 if any other account (deleted ones too: the email index is unique) has this email. */
+export const assertEmailAvailable = async (
+  email: string,
+  userId: string | Types.ObjectId,
+) => {
+  const taken = await User.exists({
+    ...emailCaseInsensitiveFilter(email),
+    _id: { $ne: userId },
+  })
+  if (taken) {
+    throw new AppError(httpStatus.CONFLICT, 'This email is already in use.')
+  }
+}
+
+/** Why this file can't be an intro video, or null if it can (#31). */
+export const getIntroVideoFileError = (mimetype?: string | null): string | null => {
+  if (!mimetype || !INTRO_VIDEO_MIME_TYPES.includes(mimetype.toLowerCase())) {
+    return 'Intro video must be an MP4, MOV or WebM file.'
+  }
+  return null
+}
+
+export const INTRO_VIDEO_TOO_LARGE_MESSAGE = `Video is too large. The maximum size is ${INTRO_VIDEO_MAX_MB} MB (about ${INTRO_VIDEO_MAX_SECONDS / 60} minutes). Please choose a shorter video.`
+
+export const getIntroVideoExtension = (mimetype: string): string => {
+  switch (mimetype.toLowerCase()) {
+    case 'video/quicktime':
+      return 'mov'
+    case 'video/webm':
+      return 'webm'
+    default:
+      return 'mp4'
+  }
+}
+
+/**
+ * The S3 object key for a URL that uploadToS3 returned (`<s3BaseUrl>/<key>`),
+ * or null when the URL isn't under that base.
+ */
+export const getS3KeyFromUrl = (
+  url?: string | null,
+  baseUrl?: string | null,
+): string | null => {
+  if (!url || !baseUrl) return null
+  const base = baseUrl.replace(/\/+$/, '') + '/'
+  if (!url.startsWith(base)) return null
+  const key = decodeURIComponent(url.slice(base.length).split(/[?#]/)[0])
+  return key || null
+}
+
+/** One warning entry for User.warnings (#70). */
+export const buildWarningEntry = (params: {
+  reason?: string | null
+  source: 'post' | 'admin'
+  feedId?: string | Types.ObjectId | null
+  adminId?: string | Types.ObjectId | null
+  now?: Date
+}) => ({
+  reason: truncate(params.reason || '', 500),
+  source: params.source,
+  feed: params.feedId ? new Types.ObjectId(String(params.feedId)) : null,
+  issuedBy: params.adminId ? new Types.ObjectId(String(params.adminId)) : null,
+  createdAt: params.now ?? new Date(),
+})
+
+/**
+ * Records a warning against the account (#70): history entry, count, date,
+ * and status "warning". Returns the updated user.
+ */
+export const recordUserWarning = async (
+  params: Parameters<typeof buildWarningEntry>[0] & {
+    userId: string | Types.ObjectId
+    session?: ClientSession
+  },
+) => {
+  const entry = buildWarningEntry(params)
+  return User.findByIdAndUpdate(
+    params.userId,
+    {
+      $push: { warnings: entry },
+      $inc: { warningCount: 1 },
+      $set: { lastWarnedAt: entry.createdAt, status: USER_STATUS.warning },
+    },
+    { returnDocument: 'after', session: params.session },
+  )
+}
+
+/** Copy for the account-warning notification and email (#70). Reason is HTML-escaped in html. */
+export const getWarningCopy = (reason?: string | null) => {
+  const plainReason = (reason || '').trim() || 'Not provided'
+  return {
+    subject: 'Your Consultz account has received a warning',
+    message: 'Account warning issued.',
+    description: `Our team has issued a warning on your account. Reason: ${truncate(plainReason, 200)}. Please review our community guidelines; repeated issues may lead to suspension.`,
+    reasonHtml: escapeHtml(plainReason),
+  }
+}
+
+export const ONBOARDING_FIELDS =
+  'registerWith isPhoneOtpVerified phoneNumber dob termsAcceptedAt'
+
+/**
+ * Social (Google/Apple) users skip the credentials sign-up steps, so they must
+ * finish onboarding: verified phone, date of birth and accepted terms (#13).
+ * Credentials users give phone and dob at register and verify by email, so
+ * this is always false for them.
+ */
+export const getNeedsOnboarding = (
+  user?: Partial<
+    Pick<
+      TUser,
+      | 'registerWith'
+      | 'isPhoneOtpVerified'
+      | 'phoneNumber'
+      | 'dob'
+      | 'termsAcceptedAt'
+    >
+  > | null,
+): boolean => {
+  if (!user) return false
+  if (!isSocialAccount(user.registerWith)) return false
+
+  return (
+    !user.isPhoneOtpVerified ||
+    !user.phoneNumber ||
+    !user.dob ||
+    !user.termsAcceptedAt
+  )
+}
+
+/** Throws 409 if another completed account already owns this phone number. */
+export const assertPhoneAvailable = async (
+  phone: string | null | undefined,
+  excludeUserId?: string | Types.ObjectId | null,
+  session?: ClientSession,
+) => {
+  const owner = await findPhoneOwner(phone, excludeUserId, session)
+  if (owner) {
+    throw new AppError(httpStatus.CONFLICT, PHONE_ALREADY_EXISTS_MESSAGE)
+  }
+}
+
+const DOB_FORMAT = /^(\d{4})-(\d{2})-(\d{2})$/
+
+/**
+ * Age in full years from a `YYYY-MM-DD` date of birth (the zod `z.iso.date()`
+ * format), compared against today's date in UTC. Returns null if the date is
+ * not a real calendar date (e.g. 2001-02-30).
+ */
+export const getAgeFromDob = (dob: string, now: Date = new Date()) => {
+  const match = DOB_FORMAT.exec(dob ?? '')
+  if (!match) return null
+
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const date = new Date(Date.UTC(year, month - 1, day))
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null
+  }
+
+  const nowMonth = now.getUTCMonth() + 1
+  const nowDay = now.getUTCDate()
+  let age = now.getUTCFullYear() - year
+  if (nowMonth < month || (nowMonth === month && nowDay < day)) age--
+  return age
+}
+
+/** Returns a user-facing error message, or null when the dob is acceptable. */
+export const getDobError = (dob: string, now: Date = new Date()) => {
+  const age = getAgeFromDob(dob, now)
+  if (age === null) {
+    return 'Date of birth must be a valid date in YYYY-MM-DD format'
+  }
+  const today = now.toISOString().slice(0, 10)
+  if (dob > today) {
+    return 'Date of birth cannot be in the future'
+  }
+  if (age < MIN_AGE) {
+    return `You must be at least ${MIN_AGE} years old to use Consultz`
+  }
+  if (age > MAX_AGE) {
+    return 'Please enter a valid date of birth'
+  }
+  return null
+}
 
 const ACTIVE_BOOKING_STATUSES_FOR_PROFILE_DELETE = [
   BOOKING_STATUS.pending,
@@ -314,6 +671,27 @@ export const generateUserStatusEmail = async (
   }
 }
 
+export const sendWarningEmail = async (user: TUser, reason?: string | null) => {
+  if (!user?.email) return
+  const supportEmail = config.emailSender.email
+  const copy = getWarningCopy(reason)
+  await emailSender(
+    user.email,
+    copy.subject,
+    `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px; background-color: #ffffff;">
+        <h2 style="color: #333;">Account Warning</h2>
+        <p style="color: #333; font-size: 16px; line-height: 1.6;">Dear <strong>${escapeHtml(user.firstName)}</strong>,</p>
+        <p style="color: #333; font-size: 16px; line-height: 1.6;">Our team has issued a <strong>warning</strong> on your Consultz account.</p>
+        <p style="color: #333; font-size: 16px; line-height: 1.6;"><strong>Reason:</strong> ${copy.reasonHtml}</p>
+        <p style="color: #333; font-size: 16px; line-height: 1.6;">Please review our community guidelines. Repeated issues may lead to your account being suspended.</p>
+        <p style="color: #333; font-size: 16px; line-height: 1.6;">If you think this is a mistake, contact us at <a href="mailto:${supportEmail}" style="color: #D83578; text-decoration: none;">${supportEmail}</a>.</p>
+        <p style="color: #333; font-size: 16px; line-height: 1.6;">Consultz Support Team</p>
+      </div>
+    `,
+  )
+}
+
 export const sendExpertPendingEmail = async (user: TUser) => {
   const supportEmail = config.emailSender.email
 
@@ -525,3 +903,22 @@ export const sendSlotRegenerationNotification = async (expertId: string) => {
     modelType: modeType.User,
   });
 };
+
+const PROTECTED_PROFILE_KEYS = new Set<string>(PROFILE_PROTECTED_FIELDS)
+
+/**
+ * Removes fields update-profile must never set (role, points, status, ...),
+ * plus Mongo operator / dotted keys. Phase 0 security: before this, any
+ * logged-in user could send {"role":"admin"} and become an admin.
+ */
+export const stripProtectedProfileFields = <T extends Record<string, any>>(
+  payload: T | null | undefined,
+): Partial<T> => {
+  const clean: Record<string, any> = {}
+  for (const [key, value] of Object.entries(payload ?? {})) {
+    if (PROTECTED_PROFILE_KEYS.has(key)) continue
+    if (key.startsWith('$') || key.includes('.')) continue
+    clean[key] = value
+  }
+  return clean as Partial<T>
+}

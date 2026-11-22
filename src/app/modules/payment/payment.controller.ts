@@ -4,7 +4,10 @@ import sendResponse from '../../utils/sendResponse'
 import { PaymentService } from './payment.service'
 
 const checkout = catchAsync(async (req, res) => {
-  const result = await PaymentService.createPaymentIntent(req.body)
+  const result = await PaymentService.createPaymentIntent({
+    booking: req.body.booking,
+    account: String(req.user._id),
+  })
 
   sendResponse(res, {
     success: true,
@@ -15,7 +18,11 @@ const checkout = catchAsync(async (req, res) => {
 })
 
 const confirmPayment = catchAsync(async (req, res) => {
-  const result = await PaymentService.confirmPayment(req.body)
+  const result = await PaymentService.confirmPayment({
+    paymentIntentId: req.body.paymentIntentId,
+    booking: req.body.booking,
+    user: String(req.user._id),
+  })
 
   sendResponse(res, {
     success: true,

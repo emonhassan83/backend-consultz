@@ -65,6 +65,11 @@ const bookingsSchema = new Schema<TBookings>(
       type: Boolean,
       default: false,
     },
+    // Price snapshot taken at booking time (#32). Payment charges totalAmount.
+    // Null on bookings made before this field existed.
+    expertVatRate: { type: Number, default: null },
+    expertVat: { type: Number, default: 0 },
+    totalAmount: { type: Number, default: null },
     sessionStartedAt: {
       type: Date,
       default: null,

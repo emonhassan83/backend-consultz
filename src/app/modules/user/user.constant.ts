@@ -21,6 +21,19 @@ export const REGISTER_WITH = {
   credentials: 'credentials',
 } as const
 
+// Minimum age for every account (consultee and expert) — QA #5
+export const MIN_AGE = 18
+export const MAX_AGE = 120
+
+// Expert intro video (QA #31). Duration is checked in the app; the backend has no ffprobe.
+export const INTRO_VIDEO_MAX_MB = 50
+export const INTRO_VIDEO_MAX_SECONDS = 120
+export const INTRO_VIDEO_MIME_TYPES: readonly string[] = [
+  'video/mp4',
+  'video/quicktime',
+  'video/webm',
+]
+
 export const USER_STATUS = {
   pending: 'pending',
   active: 'active',
@@ -74,3 +87,57 @@ export const PROPERTY_SKILLS = [
   'Property Business Growth',
   'Property Marketing & Lead Generation',
 ]
+
+// Fields PUT /users/update-profile must never set (mass assignment). Each has
+// its own flow (OTP, vat-info, admin, points, ...) or is system-managed.
+// A deny-list, not an allow-list: the app also sets fields such as
+// isProfileSetup through this endpoint.
+export const PROFILE_PROTECTED_FIELDS = [
+  '_id',
+  'id',
+  'role',
+  'status',
+  'registerWith',
+  'isDeleted',
+  'expireAt',
+  'email',
+  'pendingEmail',
+  'phoneNumber',
+  'pendingPhoneNumber',
+  'password',
+  'passwordChangedAt',
+  'needsPasswordChange',
+  'verification',
+  'isPhoneOtpVerified',
+  'isEmailVerified',
+  'termsAcceptedAt',
+  'introVideoUrl',
+  'points',
+  'level',
+  'advisingTime',
+  'avgRating',
+  'ratingCount',
+  'balance',
+  'isTopExpert',
+  'following',
+  'followers',
+  'referralCode',
+  'referredBy',
+  'pendingReferralReward',
+  'attributedExpert',
+  'attributedAt',
+  'stripeAccountId',
+  'stripeCustomerId',
+  'country',
+  'vatRegistrationNumber',
+  'isVatRegistered',
+  'profileCompletionBonusClaimed',
+  'socialProofBonusClaimed',
+  'lastNoShowBonusAt',
+  'warnings',
+  'warningCount',
+  'lastWarnedAt',
+  'lastLogAt',
+  'createdAt',
+  'updatedAt',
+] as const

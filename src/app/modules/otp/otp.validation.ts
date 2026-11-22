@@ -29,7 +29,14 @@ const resentOtpInPhone = z.object({
   }),
 })
 
+const changeSignupEmail = z.object({
+  body: z.object({
+    newEmail: z.string({ message: 'New email is required' }).email(),
+  }),
+})
+
 export const resentOtpValidations = {
+  changeSignupEmail,
   resentOtpInEmail,
   verifyOtpZodSchema,
   resentOtpInPhone,

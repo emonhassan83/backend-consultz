@@ -10,11 +10,28 @@ import { createToken, TExpiresIn } from '../auth/auth.utils'
 import { Types } from 'mongoose'
 import twilio from 'twilio'
 import { USER_ROLE, USER_STATUS } from '../user/user.constant'
-import { sendExpertPendingEmail } from '../user/user.utils'
+import {
+  assertEmailAvailable,
+  assertPhoneAvailable,
+  getSignupEmailChangeError,
+  sendExpertPendingEmail,
+} from '../user/user.utils'
+import { normalizePhone } from '../../utils/normalizePhone'
 import { sendNotification } from '../../utils/sentNotification'
 import { modeType } from '../notification/notification.interface'
 import { PointsService } from '../points/points.service'
 import { POINTS_REWARD_KEY } from '../points/points.constant'
+import {
+  emailCaseInsensitiveFilter,
+  normalizeEmail,
+} from '../../utils/normalizeEmail'
+
+// Resend OTP when no live account / sign-up exists (#15). The app should send
+// the user back to the start of sign-up on this 404.
+export const RESEND_EMAIL_NOT_FOUND_MESSAGE =
+  'No account or sign-up in progress was found for this email. Please start sign-up again.'
+export const RESEND_PHONE_NOT_FOUND_MESSAGE =
+  'No account or sign-up in progress was found for this phone number. Please start sign-up again.'
 
 const logTwilioSmsError = (
   context: 'sendOtpViaTokenInPhone' | 'sendOtpViaDirectPhone',
@@ -49,22 +66,34 @@ const verifyWithEmail = async (token: string, otp: string | number) => {
     )
   }
 
-  // console.log(decode)
-
-  const user = await User.findOne({ email: decode?.email }).select(
-    'verification status ',
+  // Sign-up / resend tokens carry userId; forget-password tokens carry _id + email
+  const userId = decode?.userId || decode?._id
+  const user = await User.findOne(
+    userId
+      ? { _id: userId, isDeleted: false }
+      : { ...emailCaseInsensitiveFilter(decode?.email), isDeleted: false },
+  ).select(
+    'verification status isEmailVerified isPhoneOtpVerified phoneNumber role email firstName lastName',
   )
   if (!user) {
     throw new AppError(httpStatus.BAD_REQUEST, 'User not found')
   }
-  if (new Date() > user!.verification!.expiresAt!) {
+  if (!user.verification?.expiresAt || new Date() > user.verification.expiresAt) {
     throw new AppError(
       httpStatus.FORBIDDEN,
       'OTP has expired. Please resend it',
     )
   }
-  if (Number(otp) !== Number(user?.verification?.otp)) {
+  if (!user.verification?.otp || Number(otp) !== Number(user.verification.otp)) {
     throw new AppError(httpStatus.BAD_REQUEST, 'OTP did not match')
+  }
+
+  const wasEmailVerified = Boolean(user.isEmailVerified)
+
+  // Completing sign-up claims the phone number. If two unverified sign-ups
+  // used the same number, the first to verify keeps it (#12).
+  if (!wasEmailVerified && !user.isPhoneOtpVerified) {
+    await assertPhoneAvailable(user.phoneNumber, user._id)
   }
 
   const updateUser = await User.findByIdAndUpdate(
@@ -76,12 +105,22 @@ const verifyWithEmail = async (token: string, otp: string | number) => {
           expiresAt: moment().add(5, 'minute'),
           status: true,
         },
+        isEmailVerified: true,
         expireAt: null, // set null to prevent verify user deletion data
         lastLogAt: now,
       },
     },
     { returnDocument: 'after' },
   ).select('email _id name role')
+
+  // First-time email verification completes sign-up: expert pending review email
+  if (
+    !wasEmailVerified &&
+    user.status === USER_STATUS.pending &&
+    user.role === USER_ROLE.expert
+  ) {
+    await sendExpertPendingEmail(user)
+  }
 
   const jwtPayload = {
     _id: updateUser?._id as Types.ObjectId,
@@ -119,10 +158,10 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
   }
 
   const user = await User.findById(decode.userId).select(
-    'verification status points isPhoneOtpVerified fcmToken pushNotify role email firstName lastName',
+    'verification status points isPhoneOtpVerified phoneNumber pendingPhoneNumber isDeleted fcmToken pushNotify role email firstName lastName',
   )
 
-  if (!user) {
+  if (!user || user.isDeleted) {
     throw new AppError(httpStatus.BAD_REQUEST, 'User not found')
   }
 
@@ -133,8 +172,21 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
     )
   }
 
-  if (Number(otp) !== Number(user.verification?.otp)) {
+  // A used OTP is stored as 0, so 0 must never match
+  if (
+    !user.verification?.otp ||
+    Number(otp) !== Number(user.verification.otp)
+  ) {
     throw new AppError(httpStatus.BAD_REQUEST, 'OTP did not match')
+  }
+
+  // The number being verified: a pending one from send-otp-via-token-in-phone
+  // (social onboarding / phone change, #13), else the one given at register.
+  const claimedPhone = user.pendingPhoneNumber || user.phoneNumber
+
+  // Verifying claims the number; first to verify keeps it (#12)
+  if (!user.isPhoneOtpVerified || user.pendingPhoneNumber) {
+    await assertPhoneAvailable(claimedPhone, user._id)
   }
 
   const updateUser = await User.findByIdAndUpdate(
@@ -148,6 +200,8 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
         },
         expireAt: null,
         isPhoneOtpVerified: true,
+        phoneNumber: claimedPhone,
+        pendingPhoneNumber: null,
         lastLogAt: now,
       },
     },
@@ -196,15 +250,23 @@ const verifyWithPhoneNumber = async (token: string, otp: string | number) => {
 }
 
 const sendOtpInEmail = async (email: string) => {
-  const user = await User.findOne({ email })
+  const normalized = normalizeEmail(email)
+  const user =
+    (await User.findOne({ email: normalized, isDeleted: false })) ??
+    (await User.findOne({
+      ...emailCaseInsensitiveFilter(normalized),
+      isDeleted: false,
+    }))
 
+  // No live record: deleted, or an unverified sign-up removed by the TTL (#15)
   if (!user) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'User not found')
+    throw new AppError(httpStatus.NOT_FOUND, RESEND_EMAIL_NOT_FOUND_MESSAGE)
   }
 
   const otp = generateOtp()
   const expiresAt = moment().add(5, 'minute')
 
+  // status stays false until the OTP is actually verified (verifyWithEmail)
   const updateOtp = await User.findByIdAndUpdate(
     user?._id,
     {
@@ -212,7 +274,7 @@ const sendOtpInEmail = async (email: string) => {
         verification: {
           otp,
           expiresAt,
-          status: true,
+          status: false,
         },
       },
     },
@@ -234,10 +296,7 @@ const sendOtpInEmail = async (email: string) => {
     expiresIn: '5m',
   })
 
-  await emailSender(
-    user?.email,
-    'Your One-Time OTP',
-    `
+  const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
         <div style="text-align: left; padding: 10px 20px;">
           <h2 style="color: #333;">Your One-Time OTP</h2>
@@ -256,27 +315,104 @@ const sendOtpInEmail = async (email: string) => {
           <p>&copy; ${new Date().getFullYear()} Consultz App. All rights reserved.</p>
         </div>
       </div>
-    `,
-  )
+    `
 
-  return { token }
+  // === Mock mode (same behaviour as phone OTP) ===
+  // In development the OTP is returned in the response so sign-up can be
+  // tested even when email delivery is not working. Real email is still tried.
+  const isDevelopment = config.node_env !== 'production'
+
+  if (isDevelopment) {
+    console.log('🔑 [MOCK OTP] Email:', user.email)
+    console.log('🔑 [MOCK OTP] Code:', otp)
+    try {
+      await emailSender(user.email, 'Your One-Time OTP', html)
+    } catch (error) {
+      console.error('[Email OTP Error][sendOtpInEmail] (ignored in dev)', error)
+    }
+    return { email: user.email, token, otp, mock: true }
+  }
+
+  await emailSender(user.email, 'Your One-Time OTP', html)
+
+  // email lets the OTP screen show where the code went (#65)
+  return { email: user.email, token }
+}
+
+/**
+ * Fix a typo in the email of a sign-up that is still waiting for its OTP (#65).
+ * Authorised by the sign-up token from register / send-otp-in-email.
+ * Keeps the same record (phone, referral) and sends a new OTP to the new email.
+ */
+const changeSignupEmail = async (token: string, newEmailInput: string) => {
+  if (!token) {
+    throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized')
+  }
+
+  let decode: JwtPayload
+  try {
+    decode = jwt.verify(token, config.jwt_access_secret as Secret) as JwtPayload
+  } catch {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Session has expired. Please resend the code and try again.',
+    )
+  }
+
+  const userId = decode?.userId
+  if (!userId) {
+    throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized')
+  }
+
+  const user = await User.findOne({ _id: userId, isDeleted: false }).select(
+    'email registerWith isEmailVerified isPhoneOtpVerified',
+  )
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, RESEND_EMAIL_NOT_FOUND_MESSAGE)
+  }
+
+  const newEmail = normalizeEmail(newEmailInput)
+  const error = getSignupEmailChangeError({
+    registerWith: user.registerWith,
+    isEmailVerified: user.isEmailVerified,
+    isPhoneOtpVerified: user.isPhoneOtpVerified,
+    currentEmail: normalizeEmail(user.email),
+    newEmail,
+  })
+  if (error) throw new AppError(httpStatus.BAD_REQUEST, error)
+
+  await assertEmailAvailable(newEmail, user._id)
+
+  await User.findByIdAndUpdate(user._id, {
+    $set: {
+      email: newEmail,
+      // give the corrected sign-up a fresh hour before the TTL removes it
+      expireAt: moment().add(60, 'minute').toDate(),
+    },
+  })
+
+  return sendOtpInEmail(newEmail)
 }
 
 const sendOtpViaTokenInPhone = async (
   userId: string,
   payload: { phoneNumber: string },
 ) => {
-  const { phoneNumber } = payload
+  const phoneNumber = normalizePhone(payload.phoneNumber)
 
   const user = await User.findById(userId)
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.BAD_REQUEST, 'User not found')
   }
 
+  // Don't send an OTP for a number another completed account owns (#12)
+  await assertPhoneAvailable(phoneNumber, user._id)
+
   const otp = generateOtp()
   const expiresAt = moment().add(5, 'minute')
 
-  // Save OTP in the database
+  // Save OTP and the number to verify. It only becomes phoneNumber after
+  // verify-with-phone (#13).
   const updateOtp = await User.findByIdAndUpdate(
     user?._id,
     {
@@ -284,8 +420,9 @@ const sendOtpViaTokenInPhone = async (
         verification: {
           otp,
           expiresAt,
-          status: true,
+          status: false,
         },
+        pendingPhoneNumber: phoneNumber,
       },
     },
     { returnDocument: 'after' },
@@ -299,7 +436,7 @@ const sendOtpViaTokenInPhone = async (
   }
 
   const jwtPayload = {
-    phoneNumber: user?.phoneNumber,
+    phoneNumber,
     userId: user?._id,
   }
   const token = jwt.sign(jwtPayload, config.jwt_access_secret as Secret, {
@@ -361,9 +498,18 @@ const sendOtpViaTokenInPhone = async (
 const sendOtpViaDirectPhone = async (payload: { phoneNumber: string }) => {
   const { phoneNumber } = payload
 
-  const user = await User.findOne({ phoneNumber })
-  if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'User not found')
+  // A soft-deleted account keeps its phone number, so without the isDeleted
+  // filter the old record could be found first ("User not found", #15).
+  // Newest live record wins.
+  const normalizedPhone = normalizePhone(phoneNumber)
+  const user = await User.findOne({
+    phoneNumber: {
+      $in: Array.from(new Set([normalizedPhone, phoneNumber.trim()])),
+    },
+    isDeleted: false,
+  }).sort({ createdAt: -1 })
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, RESEND_PHONE_NOT_FOUND_MESSAGE)
   }
 
   const otp = generateOtp()
@@ -377,8 +523,10 @@ const sendOtpViaDirectPhone = async (payload: { phoneNumber: string }) => {
         verification: {
           otp,
           expiresAt,
-          status: true,
+          status: false,
         },
+        // This OTP goes to the stored number, so verify must claim that one
+        pendingPhoneNumber: null,
       },
     },
     { returnDocument: 'after' },
@@ -452,6 +600,7 @@ const sendOtpViaDirectPhone = async (payload: { phoneNumber: string }) => {
 }
 
 export const otpServices = {
+  changeSignupEmail,
   verifyWithEmail,
   verifyWithPhoneNumber,
   sendOtpInEmail,

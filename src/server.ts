@@ -6,6 +6,7 @@ import { errorlogger, logger } from './app/utils/logger'
 import colors from 'colors'
 import initializeSocketIO from './app/socket/socket.init'
 import { initializeCronJobs } from './app/job/jobScheduler'
+import { verifyEmailTransport } from './app/utils/emailSender'
 
 let server: Server
 export const io = initializeSocketIO(createServer(app))
@@ -18,6 +19,9 @@ async function main() {
 
     // run the corn job
     initializeCronJobs()
+
+    // Log whether SMTP works; does not block startup
+    void verifyEmailTransport()
 
     server = app.listen(Number(config.port), config.ip as string, () => {
       console.log(

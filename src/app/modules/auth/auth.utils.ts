@@ -5,6 +5,7 @@ import { messages } from '../notification/notification.constant'
 import { modeType } from '../notification/notification.interface'
 import { sendNotification } from '../../utils/sentNotification'
 import config from '../../config'
+import { getNeedsOnboarding } from '../user/user.utils'
 
 export type TExpiresIn =
   | number
@@ -44,6 +45,8 @@ export const generateTokens = (user: TUser) => {
     deviceType: user.deviceType,
     timeZone: user.timeZone,
     lastLogAt: user.lastLogAt,
+    // Social users must add a verified phone, dob and accept terms (#13)
+    needsOnboarding: getNeedsOnboarding(user),
   }
 
   const accessToken = createToken(

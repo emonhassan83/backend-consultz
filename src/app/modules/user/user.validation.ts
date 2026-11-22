@@ -1,6 +1,7 @@
 import { Types } from 'mongoose'
 import { z } from 'zod'
 import { DAY_MAP, USER_STATUS } from './user.constant'
+import { getAgeFromDob, getDobError } from './user.utils'
 
 const objectIdSchema = z.string().refine((val) => Types.ObjectId.isValid(val), {
   message: 'Invalid ObjectId format',
@@ -141,6 +142,17 @@ const BookingRulesSchema = z.object({
   bufferRules: z.array(BookingBufferRuleSchema).optional(),
 })
 
+// Date of birth: `YYYY-MM-DD` (zod iso date), real date, not in the future,
+// at least MIN_AGE (18) for every role — QA #5
+const dobSchema = z
+  .iso.date({ message: 'Date of birth must be a valid date in YYYY-MM-DD format' })
+  .superRefine((dob, ctx) => {
+    // Bad format is already reported by z.iso.date(); don't report it twice
+    if (getAgeFromDob(dob) === null) return
+    const error = getDobError(dob)
+    if (error) ctx.addIssue({ code: 'custom', message: error })
+  })
+
 const createValidationSchema = z.object({
   body: z.object({
     firstName: z.string({ message: 'First name is required!' }),
@@ -156,7 +168,7 @@ const createValidationSchema = z.object({
       .string({ message: 'Confirm password is required' })
       .min(8, { message: 'Confirm password must be at least 8 characters' })
        .max(20, { message: 'Password cannot be more than 20 characters' }),
-    dob: z.string({ message: 'Date of birth is required!' }),
+    dob: dobSchema,
     phoneNumber: z
       .string({ message: 'Phone number is required!' })
       .min(6, { message: 'Contact number must be at least 6 digits long' })
@@ -172,7 +184,7 @@ const updateValidationSchema = z.object({
     firstName: z.string().optional(),
     lastName: z.string().optional(),
     phoneNumber: z.string().optional(),
-    dob: z.string().optional(),
+    dob: dobSchema.optional(),
     bio: z.string().optional(),
     coverPhoto: z.string().optional(),
     timeZone: z.string().optional(),
@@ -273,6 +285,8 @@ const changeStatusValidationSchema = z.object({
     status: z.enum(Object.values(USER_STATUS) as [string, ...string[]], {
       message: 'User status is required!',
     }),
+    // Shown to the user with a warning (#70)
+    reason: z.string().trim().max(500).optional(),
   }),
 })
 
@@ -325,8 +339,70 @@ const updateVatInfoValidationSchema = z.object({
   }),
 })
 
+// Social sign-up onboarding (#13). dob is optional only for users who already have one.
+const completeOnboardingValidationSchema = z.object({
+  body: z.object({
+    dob: dobSchema.optional(),
+    termsAccepted: z.literal(true, {
+      message: 'You must accept the terms and conditions',
+    }),
+  }),
+})
+
+// Email change (#26)
+const changeEmailRequestValidationSchema = z.object({
+  body: z.object({
+    newEmail: z
+      .string({ message: 'New email is required' })
+      .trim()
+      .email({ message: 'Please enter a valid email address' }),
+  }),
+})
+
+// Admin corrects a user's email (#67)
+// Admin corrects a user's phone number (#67)
+const adminUpdatePhoneValidationSchema = z.object({
+  params: z.object({
+    id: objectIdSchema,
+  }),
+  body: z.object({
+    phoneNumber: z
+      .string({ message: 'Phone number is required' })
+      .trim()
+      .min(6, { message: 'Phone number must be at least 6 digits long' })
+      .max(20, { message: 'Phone number is too long' }),
+    reason: z.string().trim().max(300).optional(),
+  }),
+})
+
+const adminUpdateEmailValidationSchema = z.object({
+  params: z.object({
+    id: objectIdSchema,
+  }),
+  body: z.object({
+    email: z
+      .string({ message: 'Email is required' })
+      .trim()
+      .email({ message: 'Please enter a valid email address' }),
+    reason: z.string().trim().max(300).optional(),
+  }),
+})
+
+const changeEmailVerifyValidationSchema = z.object({
+  body: z.object({
+    otp: z
+      .string({ message: 'otp is required' })
+      .length(4, { message: 'otp must be exactly 4 characters long' }),
+  }),
+})
+
 export const UserValidation = {
+  changeEmailRequestValidationSchema,
+  changeEmailVerifyValidationSchema,
+  adminUpdateEmailValidationSchema,
+  adminUpdatePhoneValidationSchema,
   createValidationSchema,
+  completeOnboardingValidationSchema,
   updateValidationSchema,
   changeStatusValidationSchema,
   useReferralCodeValidationSchema,

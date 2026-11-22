@@ -7,14 +7,17 @@ import { PaymentControllers } from './payment.controller'
 
 const router = express.Router()
 
+// Logged-in only: the payer is always the token's user, never the body (Phase 0)
 router.post(
   '/checkout',
+  auth(USER_ROLE.consult, USER_ROLE.expert),
   zodValidationRequest(PaymentValidation.createValidationSchema),
   PaymentControllers.checkout,
 )
 
 router.post(
   '/confirm-payment',
+  auth(USER_ROLE.consult, USER_ROLE.expert),
   zodValidationRequest(PaymentValidation.confirmPaymentSchema),
   PaymentControllers.confirmPayment,
 )

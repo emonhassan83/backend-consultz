@@ -24,6 +24,13 @@ router.post(
   otpControllers.sendOtpInEmail,
 )
 
+// Fix a typo'd email from the sign-up OTP screen (#65)
+router.post(
+  '/change-signup-email',
+  validateRequest(resentOtpValidations.changeSignupEmail),
+  otpControllers.changeSignupEmail,
+)
+
 router.post(
   '/send-otp-via-token-in-phone',
   auth(USER_ROLE.admin, USER_ROLE.expert, USER_ROLE.consult),

@@ -144,24 +144,32 @@ const createPaymentIntent = async (payload: {
 
   const PLATFORM_VAT_RATE = 0.2
 
-  const isExpertVatRegistered = !!(
-    consultant?.isVatRegistered && consultant?.vatRegistrationNumber
-  )
-
   // What consultee pays
   const consultationFee = booking.price
-  
-  // Expert's country-based VAT rate from jsonvat.com (live fetch)
-  const expertVatRate = isExpertVatRegistered && consultant?.country
-    ? await getVatRateForCountry(consultant.country)
-    : null
-  
-  // Expert VAT calculated based on country's current VAT rate
-  const expertVat = expertVatRate
-    ? parseFloat((consultationFee * (expertVatRate / 100)).toFixed(2))
-    : 0
-  
-  const amount = parseFloat((consultationFee + expertVat).toFixed(2))
+
+  // New bookings carry the total agreed at booking time (#32). Older ones
+  // fall back to the live VAT lookup.
+  const hasSnapshot = typeof booking.totalAmount === 'number'
+
+  const isExpertVatRegistered = hasSnapshot
+    ? !!booking.isExpertVatRegistered
+    : !!(consultant?.isVatRegistered && consultant?.vatRegistrationNumber)
+
+  const expertVatRate = hasSnapshot
+    ? null
+    : isExpertVatRegistered && consultant?.country
+      ? await getVatRateForCountry(consultant.country)
+      : null
+
+  const expertVat = hasSnapshot
+    ? Number(booking.expertVat || 0)
+    : expertVatRate
+      ? parseFloat((consultationFee * (expertVatRate / 100)).toFixed(2))
+      : 0
+
+  const amount = hasSnapshot
+    ? Number(booking.totalAmount)
+    : parseFloat((consultationFee + expertVat).toFixed(2))
   const grossBookingValue = amount
 
   // Platform breakdown
@@ -251,6 +259,34 @@ const confirmPayment = async (payload: {
     )
   }
 
+  // Phase 0: the intent must belong to this booking, this payer, and the
+  // amount we created it for. userId comes from the token, not the body.
+  const ownBooking = await Booking.findById(bookingId).select('user isDeleted')
+  if (!ownBooking || ownBooking.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Booking not found')
+  }
+  if (String(ownBooking.user) !== String(userId)) {
+    throw new AppError(httpStatus.FORBIDDEN, 'This booking is not yours.')
+  }
+  const PAYMENT_MISMATCH = 'Payment does not match this booking.'
+  if (
+    String(paymentIntent.metadata?.bookingId) !== String(bookingId) ||
+    String(paymentIntent.metadata?.userId) !== String(userId)
+  ) {
+    throw new AppError(httpStatus.BAD_REQUEST, PAYMENT_MISMATCH)
+  }
+  const pendingPayment = await Payment.findOne({
+    paymentIntentId,
+    booking: bookingId,
+    account: userId,
+  }).select('amount')
+  if (
+    !pendingPayment ||
+    Math.round(Number(pendingPayment.amount) * 100) !== Number(paymentIntent.amount)
+  ) {
+    throw new AppError(httpStatus.BAD_REQUEST, PAYMENT_MISMATCH)
+  }
+
   const session = await mongoose.startSession()
   session.startTransaction()
 
@@ -261,7 +297,7 @@ const confirmPayment = async (payload: {
   try {
     /* ========= 2. Update Payment ========= */
     const payment = await Payment.findOneAndUpdate(
-      { paymentIntentId, isPaid: false },
+      { paymentIntentId, booking: bookingId, account: userId, isPaid: false },
       isAuthorizedPayment
         ? {
             isPaid: false,

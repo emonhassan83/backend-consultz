@@ -1,5 +1,6 @@
 import dotenv from 'dotenv'
 import path from 'path'
+import { resolveEmailConfig } from '../utils/emailConfig'
 
 dotenv.config({ path: path.join((process.cwd(), '.env')) })
 
@@ -26,11 +27,13 @@ export default {
     client_id: process.env.FIREBASE_CLIENT_ID,
     client_x509_cert_url: process.env.FIREBASE_CLIENT_CERT_URL,
   },
-  emailSender: {
-    email: process.env.EMAIL,
-    app_pass: process.env.APP_PASS,
-  },
+  // Brevo SMTP when BREVO_SMTP_LOGIN / BREVO_SMTP_KEY are set, otherwise the
+  // older EMAIL / APP_PASS setup. `email` is the From (and support) address.
+  emailSender: resolveEmailConfig(process.env),
   admin_pass: process.env.ADMIN_PASS,
+  // Where admin alerts (e.g. new post reports, #68) are emailed. Comma-separated.
+  // Falls back to the admin accounts' own emails.
+  admin_notify_email: process.env.ADMIN_NOTIFY_EMAIL,
   stripe: {
     stripe_api_key: process.env.STRIPE_API_KEY,
     stripe_api_secret: process.env.STRIPE_API_SECRET,

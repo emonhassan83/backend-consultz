@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from 'express'
 import { ZodError } from 'zod'
+import multer from 'multer'
 import config from '../config'
 import { TErrorSources } from '../interface/error'
 import AppError from '../errors/AppError'
@@ -45,6 +46,11 @@ const globalErrorHandler = (
     statusCode = simplifiedError?.statusCode
     message = simplifiedError?.message
     errorSources = simplifiedError?.errorSources
+  } else if (err instanceof multer.MulterError) {
+    // Upload limits (file too large, too many files…) are the client's fault, not a 500
+    statusCode = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400
+    message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large.' : err.message
+    errorSources = [{ path: err.field ?? '', message }]
   } else if (err instanceof AppError) {
     statusCode = err?.statusCode
     message = err.message
@@ -68,6 +74,7 @@ const globalErrorHandler = (
   return res.status(statusCode).json({
     success: false,
     message,
+    ...(err instanceof AppError && err.data ? { data: err.data } : {}),
     errorSources,
     err,
     stack: config.node_env === 'development' ? err?.stack : null,

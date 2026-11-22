@@ -44,10 +44,13 @@ import { PointsService } from '../points/points.service'
 import { POINTS_REWARD_KEY } from '../points/points.constant'
 import { getGeneralSettingNumber, getPartyPolicyMinutes } from '../contents/contents.utils'
 import { Reviews } from '../review/review.models'
+import { getNeedsOnboarding } from '../user/user.utils'
 import { REFUND_BY } from '../refund/refund.constant'
 import { RefundService } from '../refund/refund.service'
 import { paymentNotifyToUser } from '../payment/payment.utils'
 import config from '../../config'
+import { calculateBookingTotal, calculateSessionPrice } from '../../utils/sessionPrice'
+import { getVatRateForCountry } from '../../utils/vatRate'
 
 const stripe = new Stripe(config.stripe?.stripe_api_secret as string, {
   apiVersion: '2026-06-24.dahlia',
@@ -128,7 +131,7 @@ const getSessionPrice = (expert: any, duration: number) => {
     )
   }
 
-  return Number(((expert.hourlyRate / 60) * duration).toFixed(2))
+  return calculateSessionPrice(expert.hourlyRate, duration)
 }
 
 const buildLegacyBookingInterval = ({
@@ -246,6 +249,22 @@ const createBookings = async (payload: TBookings, userId: string) => {
     const userData = await User.findById(userId).session(session)
     if (!userData || userData.isDeleted) {
       throw new AppError(httpStatus.BAD_REQUEST, 'User not found!')
+    }
+
+    // Social sign-ups must finish onboarding before booking (#13)
+    if (getNeedsOnboarding(userData)) {
+      throw new AppError(
+        httpStatus.FORBIDDEN,
+        'Please complete your profile (phone, date of birth, terms) before booking.',
+      )
+    }
+
+    // An expert can't book a session with themselves (#38)
+    if (String(consultId) === String(userData._id)) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        "You can't book a session with yourself.",
+      )
     }
 
     // 2. Consultant validation
@@ -379,6 +398,14 @@ const createBookings = async (payload: TBookings, userId: string) => {
         consult.isVatRegistered && consult.vatRegistrationNumber
       )
       payload.price = getSessionPrice(consult, payload.sessionDuration)
+
+      // Lock the agreed total now, so a later rate or VAT change can't alter
+      // what this booking costs (#32). createPaymentIntent charges this.
+      const expertVatRate =
+        payload.isExpertVatRegistered && consult.country
+          ? await getVatRateForCountry(consult.country)
+          : null
+      Object.assign(payload, calculateBookingTotal(payload.price, expertVatRate))
       payload.date = interval.date
       payload.startTime = interval.startTime
       payload.endTime = interval.endTime

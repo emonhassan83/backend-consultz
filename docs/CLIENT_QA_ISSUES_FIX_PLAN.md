@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-22
 - **Source:** client QA sheet (72 rows, tested 18–19 Nov 2026)
-- **Status:** Planned, not implemented
+- **Status:** Implemented (22 Nov), except Google/Apple token verification (not done, by decision) and #14 ops. See [CLIENT_QA_ISSUES_CHANGES.md](CLIENT_QA_ISSUES_CHANGES.md).
 
 ## Context
 
@@ -51,6 +51,8 @@ Frontend/config only, handed off and not in this plan:
 | SEC | `/payments/checkout` and `/payments/confirm-payment` have no `auth()`. The user comes from the request body, and confirm doesn't check the intent's amount or bookingId. | `payment.route.ts:10-20` |
 
 ## Phase 0: Security (first, separate commits)
+
+> **Outcome (22 Nov):** 2–5 done. 1 (social token verification) is **not done, by decision**. Details are in section 24 of the changes log.
 
 1. **Social token verification:** in `auth.service.ts` `registerWithGoogle` and `registerWithApple`, verify `payload.token` and take the email from the verified claims; ignore the email in the body.
    - Google: `google-auth-library` `OAuth2Client.verifyIdToken`, audience from the new env `GOOGLE_CLIENT_IDS`.

@@ -15,16 +15,10 @@ npm run start:prod       # node dist/server.js
 npm run lint             # eslint src (.js,.ts)
 npm run lint:fix
 npm run prettier:fix     # prettier config: no semicolons, single quotes
-npm test                 # runs only src/app/modules/user/user.utils.test.ts
-
-# Run any single test file (node:test + ts-node, no Jest/Mocha):
-node --require ts-node/register/transpile-only --test path/to/file.test.ts
 
 # Seeders (need a DB connection from .env)
 npm run seed:admin | seed:content | seed:category | seed:points
 ```
-
-Tests use `node:test` and `node:assert/strict` and live next to the code they test (`*.test.ts`). The `test` script names one file explicitly, so add any new test file to it.
 
 ## Architecture
 
@@ -47,7 +41,6 @@ Tests use `node:test` and `node:assert/strict` and live next to the code they te
 **Bookings.** Bookings have moved from fixed, pre-generated `BookingSlots` to dynamic slots. New bookings compute and store `startAt`, `endAt`, and `bufferEndAt` from the expert's `bookingRules`. Legacy bookings still exist and fall back to `localDate`/`localStartTime`/`timezone` or the old `slot.date`/`slot.time`.
 - Any read or job logic must handle both shapes. Use the shared helpers: `bookingRules.utils.ts`, `booking.utils.ts`, and `src/app/job/bookingJobTime.utils.ts`.
 - Booking responses expose `displayDate`, `displayStartTime`, `displayEndTime`, and `displayTimezone`.
-- `docs/BOOKING_RULES_PHASE_*.md` describes each migration phase and the intended behavior. Read the relevant phase before changing booking, slot, reschedule, payment confirmation, or job logic.
 
 **Money flow.**
 - Payment is confirmed through the payment module's `/confirm-payment` endpoint after Stripe checkout. There is no Stripe webhook.
@@ -65,10 +58,10 @@ Tests use `node:test` and `node:assert/strict` and live next to the code they te
 - Event names are mapped to handlers in `socket/socket.event.ts`. Chat handlers live in `handlers/chat/*` and call/booking-complete handlers in `handlers/calling/*`.
 - Handlers reply through ack callbacks (`utils/ackHandler.ts`).
 
-**Notifications.** `utils/sentNotification.ts` sends a Firebase push and also saves a `Notification` document. Email goes through nodemailer (`utils/emailSender.ts`, `utils/emailNotify.ts`) using HTML templates in `src/app/templates/`. iOS VoIP call pushes go through APNs (`utils/voipService.ts`). Whether a user gets a push or email depends on their per-user preferences and on having an FCM token.
+**Notifications.** `utils/sentNotification.ts` sends a Firebase push and also saves a `Notification` document. Email goes through nodemailer over Brevo SMTP (`utils/emailSender.ts`, `utils/emailNotify.ts`; settings resolved in `utils/emailConfig.ts`, check with `npm run email:test -- you@example.com`) using HTML templates in `src/app/templates/`. iOS VoIP call pushes go through APNs (`utils/voipService.ts`). Whether a user gets a push or email depends on their per-user preferences and on having an FCM token.
 
 **Files.** `uploads` module plus `utils/s3.ts`: AWS S3 / DigitalOcean Spaces (`SPACES_API` endpoint). `middleware/fileUpload.ts` is multer disk storage.
 
 ## Docs
 
-`docs/` holds the feature specs and API change logs: booking rules phases 1–8, booking notifications, points, payments/refunds/payouts scope (written in Bengali), and planning notes. Use them as the source of truth for intended behavior. Some code comments are also in Bengali.
+`docs/` holds the feature specs and API change logs: client QA fix plan and change log, booking notifications, points, payments/refunds/payouts scope (written in Bengali), and planning notes. Use them as the source of truth for intended behavior. Some code comments are also in Bengali.

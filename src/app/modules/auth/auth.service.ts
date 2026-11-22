@@ -20,6 +20,13 @@ import {
 import { generateOtp } from '../../utils/generateOtp'
 import moment from 'moment'
 import { REGISTER_WITH, USER_STATUS } from '../user/user.constant'
+import { normalizeEmail } from '../../utils/normalizeEmail'
+import {
+  getNeedsOnboarding,
+  getSocialPasswordMessage,
+  getSocialSignInMessage,
+  isSocialAccount,
+} from '../user/user.utils'
 
 const getEmailNameFallback = (email?: string) => {
   const emailName = email?.split('@')?.[0]?.trim()
@@ -58,15 +65,20 @@ const loginUser = async (payload: TLoginUser) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Password is required')
   }
 
-  // Social / password-less accounts cannot use email+password login
+  // Social / password-less accounts cannot use email+password login.
+  // `data.registerWith` lets the app show a "Sign in with Google/Apple" button (#25).
   if (!user.password) {
-    const registerWith = user.registerWith || 'social'
+    if (isSocialAccount(user.registerWith)) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        getSocialSignInMessage(user.registerWith),
+        '',
+        { registerWith: user.registerWith },
+      )
+    }
     throw new AppError(
       httpStatus.BAD_REQUEST,
-      registerWith === REGISTER_WITH.google ||
-        registerWith === REGISTER_WITH.apple
-        ? `This account was created with ${registerWith}. Please continue with ${registerWith} login.`
-        : 'Password is not set for this account. Please reset your password or use social login.',
+      'Password is not set for this account. Please reset your password or use social login.',
     )
   }
 
@@ -75,9 +87,13 @@ const loginUser = async (payload: TLoginUser) => {
     throw new AppError(httpStatus.FORBIDDEN, 'Password do not matched')
   }
 
-  // if user is not verify yet throw error
-  if (!user?.verification?.status && !user?.isPhoneOtpVerified) {
-    throw new AppError(httpStatus.FORBIDDEN, 'Your profile is not verified')
+  // Sign-up is verified by email OTP. isPhoneOtpVerified keeps older
+  // (phone-verified) accounts working.
+  if (!user?.isEmailVerified && !user?.isPhoneOtpVerified) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Your email is not verified. Please verify your email with the OTP to continue.',
+    )
   }
 
   // CHECK USER PROFILE ACTIVE
@@ -142,6 +158,7 @@ const loginUser = async (payload: TLoginUser) => {
       deviceType: updatedUser?.deviceType || payload.deviceType || user.deviceType,
       timeZone: updatedUser?.timeZone || user.timeZone,
       lastLogAt: updatedUser?.lastLogAt || now,
+      needsOnboarding: getNeedsOnboarding(updatedUser || user),
     },
   }
 }
@@ -361,6 +378,14 @@ const changePassword = async (
     throw new AppError(httpStatus.NOT_FOUND, 'This user is not found !')
   }
 
+  // Google/Apple users have no Consultz password to change (#23)
+  if (isSocialAccount(user.registerWith) || !user.password) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      getSocialPasswordMessage(user.registerWith),
+    )
+  }
+
   //* checking if the password is correct
   if (!(await User.isPasswordMatched(payload.oldPassword, user?.password)))
     throw new AppError(httpStatus.FORBIDDEN, 'Password do not matched')
@@ -434,6 +459,17 @@ const forgetPassword = async (payload: { email: string }) => {
     throw new AppError(httpStatus.NOT_FOUND, 'This user is not found !')
   }
 
+  // Google/Apple accounts have no password to reset: point them to their
+  // provider instead of sending an OTP (#25)
+  if (isSocialAccount(user.registerWith)) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      getSocialSignInMessage(user.registerWith),
+      '',
+      { registerWith: user.registerWith },
+    )
+  }
+
   //* create token and sent to the  client
   const jwtPayload = {
     _id: user._id,
@@ -451,11 +487,12 @@ const forgetPassword = async (payload: { email: string }) => {
   const otp = generateOtp()
   const expiresAt = moment(currentTime).add(5, 'minute')
 
+  // status stays false until verify-with-email checks the OTP
   await User.findByIdAndUpdate(user?._id, {
     verification: {
       otp,
       expiresAt,
-      status: true,
+      status: false,
     },
   })
 
@@ -510,7 +547,7 @@ const resetPassword = async (
   }
 
   const decoded = verifyToken(token, config.jwt_access_secret as string)
-  if (payload.email !== decoded.email) {
+  if (normalizeEmail(payload.email) !== normalizeEmail(decoded.email)) {
     throw new AppError(httpStatus.FORBIDDEN, 'You are forbidden!')
   }
 
@@ -537,9 +574,10 @@ const resetPassword = async (
       $set: {
         password: newHashedPassword,
         passwordChangedAt: new Date(),
+        // Reset is single-use: a new OTP must be verified to reset again
         verification: {
           otp: 0,
-          status: true,
+          status: false,
         },
       },
     },

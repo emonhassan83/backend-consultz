@@ -50,6 +50,7 @@ export interface TUser {
   deviceType?: TDeviceType
   photoUrl?: string
   coverPhoto?: string
+  introVideoUrl?: string | null
   phoneNumber?: string
   timeZone: string
   priceRange: string
@@ -111,6 +112,9 @@ export interface TUser {
   isVatRegistered: boolean
   balance: number
   status: TUserStatus
+  warnings?: TUserWarning[]
+  warningCount?: number
+  lastWarnedAt?: Date | null
   expireAt: Date
   isTopExpert: boolean
   isProfileSetup: boolean
@@ -118,6 +122,12 @@ export interface TUser {
   profileCompletionBonusClaimed: boolean
   socialProofBonusClaimed: boolean
   isPhoneOtpVerified: boolean
+  isEmailVerified: boolean
+  // Phone number awaiting OTP verification (social onboarding / phone change)
+  pendingPhoneNumber?: string | null
+  // New email awaiting OTP verification (#26)
+  pendingEmail?: string | null
+  termsAcceptedAt?: Date | null
   isDeleted: boolean
   lastNoShowBonusAt: Date
   createdAt?: Date
@@ -140,4 +150,13 @@ export interface UserModel extends Model<TUser> {
     plainTextPassword: string,
     hashedPassword: string,
   ): Promise<boolean>
+}
+
+// An admin warning recorded on the account (#70)
+export type TUserWarning = {
+  reason: string
+  source: 'post' | 'admin'
+  feed?: Types.ObjectId | string | null
+  issuedBy?: Types.ObjectId | string | null
+  createdAt: Date
 }

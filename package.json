@@ -10,11 +10,13 @@
     "lint:fix": "npx eslint src --fix",
     "prettier": "prettier --ignore-path .gitignore --write \"./src/**/*.+(js|ts|json)\"",
     "prettier:fix": "npx prettier --write src",
-    "test": "node --require ts-node/register/transpile-only --test src/app/modules/user/user.utils.test.ts",
+    "email:test": "ts-node --transpile-only src/app/seeder/sendTestEmail.ts",
     "seed:admin": "ts-node-dev --transpile-only src/app/seeder/seedAdmin.ts",
     "seed:content": "ts-node-dev --transpile-only src/app/seeder/seedContent.ts",
     "seed:category": "ts-node-dev --transpile-only src/app/seeder/seedCategory.ts",
-    "seed:points": "ts-node-dev --transpile-only src/app/seeder/seedPointsRules.ts"
+    "seed:points": "ts-node-dev --transpile-only src/app/seeder/seedPointsRules.ts",
+    "migrate:lowercase-emails": "ts-node --transpile-only src/app/seeder/migrateLowercaseEmails.ts",
+    "check:indexes": "ts-node --transpile-only src/app/seeder/checkUserIndexes.ts"
   },
   "keywords": [],
   "author": "",

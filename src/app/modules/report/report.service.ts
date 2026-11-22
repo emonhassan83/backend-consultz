@@ -9,6 +9,11 @@ import mongoose from 'mongoose'
 import { sendContentModerationNotification } from '../feed/feed.utils'
 import { TUser } from '../user/user.interface'
 import { Appeal } from '../appeal/appeal.model'
+import { notifyAdminsOfReport } from './report.utils'
+import {
+  getStatusAfterReport,
+  getStatusAfterReportWithdrawn,
+} from './report.helpers'
 
 const createReport = async (payload: IReport, userId: string) => {
   const { feed: feedId } = payload
@@ -47,6 +52,16 @@ const createReport = async (payload: IReport, userId: string) => {
   if (!report) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Report creation failed!')
   }
+
+  // Put the post in the admin review queue (#68)
+  const nextStatus = getStatusAfterReport(feed.moderationStatus)
+  if (nextStatus !== feed.moderationStatus) {
+    await Feed.updateOne({ _id: feed._id }, { $set: { moderationStatus: nextStatus } })
+  }
+
+  // Alert admins straight away (#68). Runs first and never throws, so a
+  // failing push to the post author can't stop the admin alert.
+  await notifyAdminsOfReport({ feed, reporter: author, reason: payload.reason })
 
   const feedAuthor = feed.author as unknown as TUser
   await sendContentModerationNotification(
@@ -227,6 +242,16 @@ const deleteReportByFeedId = async (feedId: string, userId: string) => {
     Report.deleteMany({ feed: feedId, author: userId }),
     Appeal.deleteMany({ feed: feedId, user: userId }),
   ])
+
+  // Leave the review queue if nobody else reported it (#68)
+  const remainingReports = await Report.countDocuments({ feed: feedId })
+  const nextStatus = getStatusAfterReportWithdrawn(
+    feed.moderationStatus,
+    remainingReports,
+  )
+  if (nextStatus !== feed.moderationStatus) {
+    await Feed.updateOne({ _id: feed._id }, { $set: { moderationStatus: nextStatus } })
+  }
 
   await sendContentModerationNotification(
     'reportWithdrawn',

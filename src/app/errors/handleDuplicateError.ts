@@ -1,26 +1,37 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { TErrorSources, TGenericErrorResponse } from '../interface/error'
+import httpStatus from 'http-status'
+import { TGenericErrorResponse } from '../interface/error'
+
+/** Field names from a Mongo E11000 error, without exposing the values. */
+export const getDuplicateFields = (err: any): string[] => {
+  const fromPattern = Object.keys(err?.keyPattern ?? {})
+  if (fromPattern.length) return fromPattern
+  const fromValue = Object.keys(err?.keyValue ?? {})
+  if (fromValue.length) return fromValue
+
+  // Older drivers: "... index: email_1 dup key: { email: ... }"
+  const match = String(err?.message ?? '').match(/index:\s+(\S+?)_-?\d/)
+  return match ? [match[1]] : []
+}
 
 const handleDuplicateError = (err: any): TGenericErrorResponse => {
-  // Extract value within double quotes using regex
-  const match = err.message.match(/"([^"]*)"/)
+  const fields = getDuplicateFields(err)
+  const indexName = String(err?.message ?? '').match(/index:\s+(\S+)/)?.[1]
 
-  // The extracted value will be in the first capturing group
-  const extractedMessage = match && match[1]
+  // Log the index so a stale unique index can be found from server logs (#14).
+  // Values are not logged: they can be emails or phone numbers.
+  console.error('[DuplicateKeyError]', {
+    index: indexName ?? null,
+    keyPattern: err?.keyPattern ?? null,
+  })
 
-  const errorSources: TErrorSources = [
-    {
-      path: '',
-      message: `${extractedMessage} is already exists`,
-    },
-  ]
-
-  const statusCode = 400
+  const label = fields.length ? fields.join(', ') : 'Value'
+  const message = `${label} already exists`
 
   return {
-    statusCode,
-    message: 'Invalid ID',
-    errorSources,
+    statusCode: httpStatus.CONFLICT,
+    message,
+    errorSources: [{ path: fields[0] ?? '', message }],
   }
 }
 

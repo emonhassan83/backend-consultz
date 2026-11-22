@@ -39,6 +39,21 @@ const sendOtpInEmail = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
+const changeSignupEmail = catchAsync(async (req: Request, res: Response) => {
+  const token = req?.headers?.authorization
+  const result = await otpServices.changeSignupEmail(
+    token as string,
+    req.body.newEmail,
+  )
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Email updated. We sent a new code to it.',
+    data: result,
+  })
+})
+
 const sendOtpViaTokenInPhone = catchAsync(async (req: Request, res: Response) => {
   const result = await otpServices.sendOtpViaTokenInPhone(req.user._id, req.body)
 
@@ -65,6 +80,7 @@ export const otpControllers = {
   verifyWithEmail,
   verifyWithPhoneNumber,
   sendOtpInEmail,
+  changeSignupEmail,
   sendOtpViaTokenInPhone,
   sendOtpViaDirectPhone
 }

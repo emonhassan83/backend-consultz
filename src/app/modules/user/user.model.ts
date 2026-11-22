@@ -12,6 +12,10 @@ import {
 } from './user.constant'
 import { generateCryptoString } from '../../utils/generateCryptoString'
 import { generateReferralCode } from '../../utils/generateReferralCode'
+import {
+  emailCaseInsensitiveFilter,
+  normalizeEmail,
+} from '../../utils/normalizeEmail'
 
 // 🎓 Education
 const EducationSchema = new Schema(
@@ -91,7 +95,13 @@ const userSchema = new Schema<TUser, UserModel>(
     },
     firstName: { type: String, required: true },
     lastName: { type: String, default: '' },
-    email: { type: String, required: true, unique: true },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
     password: { type: String, required: false },
 
     dob: { type: String, default: '' },
@@ -105,6 +115,8 @@ const userSchema = new Schema<TUser, UserModel>(
     },
     photoUrl: { type: String, default: null },
     coverPhoto: { type: String, default: null },
+    // Expert intro video (#31), set only via /users/intro-video
+    introVideoUrl: { type: String, default: null },
     phoneNumber: { type: String, default: null },
     timeZone: { type: String, default: 'UTC' },
     priceRange: { type: String, default: '' },
@@ -197,6 +209,25 @@ const userSchema = new Schema<TUser, UserModel>(
       default: USER_STATUS.active,
     },
 
+    // Warnings issued by admins (#70): history, count and latest date
+    warnings: {
+      type: [
+        new Schema(
+          {
+            reason: { type: String, default: '' },
+            source: { type: String, enum: ['post', 'admin'], required: true },
+            feed: { type: Schema.Types.ObjectId, ref: 'Feed', default: null },
+            issuedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+            createdAt: { type: Date, default: Date.now },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
+    warningCount: { type: Number, default: 0 },
+    lastWarnedAt: { type: Date, default: null },
+
     expireAt: {
       type: Date,
       default: () => {
@@ -224,6 +255,10 @@ const userSchema = new Schema<TUser, UserModel>(
     profileCompletionBonusClaimed: { type: Boolean, default: false },
     socialProofBonusClaimed: { type: Boolean, default: false },
     isPhoneOtpVerified: { type: Boolean, default: false },
+    isEmailVerified: { type: Boolean, default: false },
+    pendingPhoneNumber: { type: String, default: null },
+    pendingEmail: { type: String, default: null, lowercase: true, trim: true },
+    termsAcceptedAt: { type: Date, default: null },
     lastNoShowBonusAt: {
       type: Date,
       default: null,
@@ -262,7 +297,14 @@ userSchema.pre('save', async function () {
 userSchema.statics.isUserExistsByEmail = async function (
   email: string,
 ): Promise<TUser | null> {
-  return await this.findOne({ email })
+  const normalized = normalizeEmail(email)
+  if (!normalized) return null
+  // Exact (indexed) match first; case-insensitive fallback for legacy
+  // mixed-case emails stored before normalization.
+  return (
+    (await this.findOne({ email: normalized })) ??
+    (await this.findOne(emailCaseInsensitiveFilter(normalized)))
+  )
 }
 
 //* Static method: compare passwords

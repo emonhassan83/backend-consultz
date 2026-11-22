@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import { escapeHtml, truncate } from '../report/report.helpers';
 import { TUser } from '../user/user.interface';
 import { messages } from '../notification/notification.constant';
 import { modeType } from '../notification/notification.interface';
@@ -12,6 +13,7 @@ import { getMessaging } from 'firebase-admin/messaging'
 import { Notification } from '../notification/notification.model';
 import { Report } from '../report/report.models';
 import emailSender from '../../utils/emailSender';
+import { notifyUserInApp } from '../../utils/notifyInApp';
 
 /**
  * Batch check if any report exists for multiple feeds
@@ -282,15 +284,16 @@ export const sendContentModerationNotification = async (
   const copy = moderationCopy[event]
   const description = copy.description(reason)
 
-  if (user?.fcmToken && canSendPushNotification(user, 'post')) {
-    await sendNotification([user.fcmToken], {
-      receiver: user._id,
-      message: copy.message,
-      description,
-      reference: feed._id,
-      modelType: modeType.Feed,
-    })
-  }
+  // The in-app notification is always saved, even without an FCM token or
+  // when the push fails; a failing push never stops the email (#70)
+  await notifyUserInApp({
+    receiver: user._id,
+    message: copy.message,
+    description,
+    reference: feed._id,
+    modelType: modeType.Feed,
+    fcmToken: canSendPushNotification(user, 'post') ? user.fcmToken : null,
+  })
 
   if (user?.email) {
     await emailSender(
@@ -299,7 +302,8 @@ export const sendContentModerationNotification = async (
       `
         <div style="font-family: Arial, sans-serif; color: #222; line-height: 1.6;">
           <h2>${copy.subject}</h2>
-          <p>${description}</p>
+          <p>${escapeHtml(description)}</p>
+          ${feed?.description ? `<p><strong>Post:</strong> ${escapeHtml(truncate(feed.description, 200))}</p>` : ''}
           <p><strong>Appeal route:</strong> If your post is restricted, open the restricted post in the app and submit an appeal with your reason and optional evidence file URL.</p>
           <p>Best regards,<br/>Consultz Team</p>
         </div>

@@ -1,4 +1,5 @@
 import httpStatus from 'http-status'
+import { recordUserWarning } from '../user/user.utils'
 import { Types } from 'mongoose'
 import AppError from '../../errors/AppError'
 import QueryBuilder from '../../builder/QueryBuilder'
@@ -347,7 +348,7 @@ const changeFeedStatus = async (
 
 const moderateFeedFromDB = async (
   id: string,
-  _adminId: string,
+  adminId: string,
   payload: { moderationStatus: TFeedModerationAction; reason: string },
 ) => {
   const feed = await Feed.findOne({ _id: id, isDeleted: false }).populate(
@@ -394,8 +395,13 @@ const moderateFeedFromDB = async (
       break
 
     case FEED_MODERATION_ACTION.warn_user:
-      await User.findByIdAndUpdate(author._id, {
-        status: USER_STATUS.warning,
+      // Recorded against the account: history, count, date (#70)
+      await recordUserWarning({
+        userId: author._id,
+        reason: payload.reason,
+        source: 'post',
+        feedId: feed._id,
+        adminId,
       })
       await sendContentModerationNotification(
         'warning',
