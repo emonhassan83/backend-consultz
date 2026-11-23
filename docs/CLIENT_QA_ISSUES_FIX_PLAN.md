@@ -111,7 +111,7 @@ Frontend/config only, handed off and not in this plan:
 ## Verification
 
 - `npm run build` and `npm run lint`.
-- New `node:test` files for the age helper, `normalizePhone`, `calculateSessionPrice` and the register resume and referral logic, added to the `test` script in `package.json`.
+- New `node:test` files for the age helper, `normalizePhone`, `calculateSessionPrice` and the register resume and referral logic, added to the `test` script in `package.json`. *(Done and passed on 22 Nov, plus a full E2E run; all test files were removed on 23 Nov on request.)*
 - Manual API checks (Postman/curl, dev mode returns the mock OTP), reproducing each sheet row's steps:
   - Register with a wrong phone, then re-register with the correct one: succeeds (#2).
   - Reuse a referral code across two new emails: both succeed and both link to the referrer (#14).

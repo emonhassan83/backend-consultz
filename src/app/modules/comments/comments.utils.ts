@@ -87,8 +87,8 @@ export const sendCommentNotificationToAuthor = async (
   const { postId, commentBy, authorId} = payload
 
   // Determine the message from constants
-  let message = messages.comment.add
-  let description = `${commentBy.name} commented on your feed post.`
+  const message = messages.comment.add
+  const description = `${commentBy.name} commented on your feed post.`
 
   // Send the notification
   await NotificationService.createNotificationIntoDB({

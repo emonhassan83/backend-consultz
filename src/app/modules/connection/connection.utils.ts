@@ -55,8 +55,8 @@ export const sendUserFollowNotify = async (
     const batch = followBatchStore[key];
     if (!batch || batch.count === 0) return;
 
-    let message = '';
-    let description = '';
+    let message: string;
+    let description: string;
 
     if (batch.count === 1) {
       message = 'New Follower';

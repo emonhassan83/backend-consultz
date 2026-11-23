@@ -172,7 +172,7 @@ const registerWithGoogle = async (payload: TGoogleLoginPayload) => {
     )
   }
 
-  let user = await User.isUserExistsByEmail(payload.email as string)
+  const user = await User.isUserExistsByEmail(payload.email as string)
   const normalizedName = normalizeSocialName(payload)
 
   const updateData: any = removeUndefinedFields({
@@ -420,7 +420,7 @@ const changePassword = async (
   }
 
   // Send a notification to the user informing them about the successful password change
-  user?.role === 'admin' && (await authNotifyUser('PASSWORD_CHANGE', user))
+  if (user?.role === 'admin') await authNotifyUser('PASSWORD_CHANGE', user)
 
   return null
 }
@@ -593,7 +593,7 @@ const resetPassword = async (
   }
 
   // Send a notification to the admin informing them about the password reset
-  user?.role === 'admin' && (await authNotifyUser('PASSWORD_RESET', user))
+  if (user?.role === 'admin') await authNotifyUser('PASSWORD_RESET', user)
 }
 
 export const AuthServices = {

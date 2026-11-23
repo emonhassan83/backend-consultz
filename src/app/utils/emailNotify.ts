@@ -220,7 +220,7 @@ export const sendNotRespondedEmail = async (
   const tasks: Promise<void>[] = []
 
   if (user?.email && user.emailNotify?.booking) {
-    let userSubject = refundProcessed
+    const userSubject = refundProcessed
       ? 'Your Booking Has Been Cancelled – Full Refund Initiated'
       : 'Your Booking Has Been Cancelled – Refund Processing Update'
 

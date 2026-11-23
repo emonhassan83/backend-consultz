@@ -134,8 +134,8 @@ export const sendBookingsNotification = async (
     ? expert?.firstName || 'your expert'
     : 'your client')
 
-  let message = ''
-  let description = ''
+  let message: string
+  let description: string
 
   switch (action) {
     case 'pending':

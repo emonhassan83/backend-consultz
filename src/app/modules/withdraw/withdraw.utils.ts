@@ -16,8 +16,8 @@ export const sendWithdrawNotify = async (
 ) => {
   if (!user?.fcmToken || !user.pushNotify.payment) return
   
-  let message = ''
-  let description = ''
+  let message: string
+  let description: string
 
   const formattedAmount = `${withdraw.amount.toFixed(2)}`
 

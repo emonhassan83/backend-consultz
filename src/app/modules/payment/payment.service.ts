@@ -292,7 +292,7 @@ const confirmPayment = async (payload: {
 
   let confirmedPayment: any
   let confirmedBooking: any
-  let shouldAwardFirstPaidBookingBonus = false
+  let shouldAwardFirstPaidBookingBonus: boolean
 
   try {
     /* ========= 2. Update Payment ========= */

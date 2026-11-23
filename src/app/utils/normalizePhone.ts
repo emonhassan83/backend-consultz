@@ -8,7 +8,7 @@ export const normalizePhone = (phone?: string | null): string => {
   if (!trimmed) return ''
 
   const hasPlus = trimmed.startsWith('+')
-  let digits = trimmed.replace(/\D/g, '')
+  const digits = trimmed.replace(/\D/g, '')
 
   // International `00` prefix is the same as `+`
   if (!hasPlus && digits.startsWith('00')) {

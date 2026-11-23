@@ -182,8 +182,8 @@ export const sendFeedNotificationToUser = async (
 ) => {
   if (!user?.fcmToken || !canSendPushNotification(user, 'post')) return;
 
-  let message = '';
-  let description = '';
+  let message: string
+  let description: string
 
   if (status === 'active') {
     message = messages.feed.active || 'Your post is now live';

@@ -86,6 +86,8 @@ const sendApnsRequest = (
     let settled = false
     let statusCode: number | undefined
     let body = ''
+    // Assigned once below, but `fail` reads it first, so it can't be const
+    // eslint-disable-next-line prefer-const
     let timeout: NodeJS.Timeout
 
     const fail = (error: Error) => {

@@ -3,7 +3,7 @@
 - **Date:** 2026-11-22
 - **Rows:** #1, 2, 4, 5, 6, 12, 13, 14, 15, 16, 18, 23, 25, 26, 32, 38, 65, 67, 68, 70
 - **Full details:** [CLIENT_QA_ISSUES_CHANGES.md](CLIENT_QA_ISSUES_CHANGES.md)
-- **Status:** the backend is done and passes the E2E run (`npm run test:e2e`, 48/48). Not deployed yet.
+- **Status:** the backend is done. It passed a full E2E run on 22 Nov (48/48); the test files have since been removed. Not deployed yet.
 
 All paths are under `/api/v1`. `Authorization` takes the raw token, with no `Bearer` prefix. On an error, show the response `message` as it is. Where an error includes `data`, use it to decide which screen or button to show.
 
@@ -165,4 +165,4 @@ All paths are under `/api/v1`. `Authorization` takes the raw token, with no `Bea
 - Google/Apple token verification: not done for now.
 - Reporting a user: not built.
 - #14: run `npm run check:indexes` on QA's server DB (ops).
-- Not covered by tests: real Gmail, FCM, Twilio and Stripe delivery. The E2E run used fakes for these.
+- Never tested: real email (Brevo), FCM, Twilio and Stripe delivery. The E2E run used fakes for these.

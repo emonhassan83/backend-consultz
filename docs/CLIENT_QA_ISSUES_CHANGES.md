@@ -633,19 +633,21 @@ App emails (OTP, booking, payment, moderation) are sent through Brevo's SMTP rel
 
 - The SMTP login (`…@smtp-brevo.com`) is **not** the From address. From is `EMAIL_FROM_ADDRESS` (falls back to `EMAIL`), with the name from `EMAIL_FROM_NAME` (default "Consultz").
 - Startup warns if: only one Brevo value is set; the key is an API key (`xkeysib-…`) and not an SMTP key (`xsmtpsib-…`); `SMTP_HOST` still points elsewhere; the From address is missing, invalid, or the Brevo login.
-- **Tests:** `emailConfig.test.ts` (13 unit tests). E2E runs in Brevo mode with old Gmail values left in the environment: the transport uses the Brevo host, port and login, every email carries the configured From, and a send failure returns 400.
+- **Checked (22 Nov, before the test files were removed):** 13 unit tests on the config, and an E2E run in Brevo mode with old Gmail values left in the environment (Brevo host, port and login used; every email had the configured From; a send failure returned 400). To check a server now, use `npm run email:test`.
 - **To go live:** put the two Brevo values in `.env`, verify the `consultz.com` domain (SPF/DKIM) and the sender in Brevo, restart, then run `npm run email:test`. Real Brevo delivery has not been tested; no credentials yet.
 
 ## 23. End-to-end test run (all rows)
 
-`npm run test:e2e` replays every row in this log against the real HTTP API. It runs `e2e/run.js`, which:
+> **23 Nov: the test files were removed from the repo** (`e2e/` and every `*.test.ts`), on request. `npm run test:e2e` and `npm test` no longer exist. This section records what the run checked on 22 Nov, before removal. The removed files are in git history only for `user.utils.test.ts`; the rest were never committed.
+
+On 22 Nov, `npm run test:e2e` replayed every row in this log against the real HTTP API. It ran `e2e/run.js`, which:
 1. starts a throwaway MongoDB replica set in Docker (`consultz-e2e-mongo`, port 27099);
 2. boots `src/server.ts` with `NODE_ENV=production`, so OTPs only arrive by email or SMS and are never in the response;
 3. runs `e2e/qa.e2e.test.ts`, then removes the container.
 
 Outside services are faked in memory by `e2e/harness.ts`: SMTP, FCM, Twilio, Stripe and S3. Any other outbound `fetch` is blocked, and cron jobs are off. The tests read OTPs from the captured emails and SMS, the Stripe amount from the captured PaymentIntent, and so on. **The `.env` database is never used.** The suite drops the database it is given, so never point `E2E_MONGO_URL` at a real one.
 
-**Result (22 Nov): 48/48 pass, no TODO.**
+**Result (22 Nov, before removal): 48/48 pass, no TODO.**
 
 | Row | What the E2E run checks |
 |---|---|
@@ -677,35 +679,25 @@ Outside services are faked in memory by `e2e/harness.ts`: SMTP, FCM, Twilio, Str
 
 **Not covered by E2E:** real delivery through Gmail, FCM, Twilio and Stripe (all faked), socket events, cron jobs, and the app and dashboard screens.
 
-## Tests
+## Verification (current, 23 Nov)
 
-- `npx tsc --noEmit`: passes.
-- `npm test`: 70/70 pass. New tests:
-  - `src/app/modules/user/user.utils.test.ts`: `stripProtectedProfileFields` (protected fields, `$`/dotted keys, normal fields kept) (Phase 0).
-  - `src/app/modules/user/user.utils.test.ts`: `buildWarningEntry`, `getWarningCopy` (escaping, fallback) (#70).
-- Module graph loads from `src/server.ts` (checked with a stubbed DB connection and APNs key, because the `.p8` cert isn't in the repo).
-  - `src/app/modules/report/report.helpers.test.ts`: moderation status after report/withdrawal, admin message, recipients, HTML escaping (#68).
-  - `src/app/modules/user/user.utils.test.ts`: `getAdminEmailChangeError` (#67).
-  - `src/app/modules/user/user.utils.test.ts`: `getSignupEmailChangeError`, same-email verify in `getEmailChangeError` (#65).
-  - `src/app/utils/sessionPrice.test.ts`: session price, stale `offeredPrice` ignored, VAT total (#32).
-  - `src/app/modules/user/user.utils.test.ts`: intro video type check, extension, S3 key from URL (#31).
-  - `src/app/modules/user/user.utils.test.ts`: `getEmailChangeError` (#26).
-  - `src/app/modules/user/user.utils.test.ts`: `getSocialSignInMessage` (#25).
-  - `src/app/modules/user/user.utils.test.ts`: `isSocialAccount`, `getSocialPasswordMessage` (#23).
-  - `src/app/modules/user/user.utils.test.ts`: `getReferralApplyAction` (#14, #16).
-  - `src/app/errors/handleDuplicateError.test.ts`: 409, field name without the value, fallbacks (#14).
-  - `src/app/modules/user/user.utils.test.ts`: `getNeedsOnboarding` (#13).
-  - `src/app/utils/normalizePhone.test.ts`: spaces, dashes, brackets, `00` prefix, empty input.
-  - `src/app/utils/normalizeEmail.test.ts`: normalizing, regex escaping.
-  - `src/app/modules/user/user.utils.test.ts`: age calculation, under 18, future dates, invalid dates, 29 Feb.
-- The register schema and `QueryBuilder.fields()` were exercised with sample inputs.
-- `npm run test:e2e`: 48/48 pass (section 23). Needs Docker.
-- **Not done:** real Gmail/FCM/Twilio/Stripe delivery. `npm run lint` doesn't run because the repo has no `eslint.config.*` (ESLint v10). That problem was there before these changes.
+- `npx tsc --noEmit` and `npm run build`: pass.
+- `npm run lint`: runs again, **0 errors** (654 warnings in older code, mostly `any` and `console`; they don't fail the run). See "Lint" below.
+- **No automated tests in the repo.** The unit tests (70/70) and the E2E run (48/48) passed on 22 Nov and were then removed (section 23). Any later change has to be checked by hand (Postman/curl) or by adding tests back.
+- **Never tested:** real delivery through Brevo/Gmail, FCM, Twilio and Stripe.
+
+## Lint
+
+ESLint 10 no longer reads `.eslintrc.json` / `.eslintignore`, and dropped `--ignore-path` / `--ext`, so `npm run lint` failed before any of these changes.
+- New `eslint.config.mjs` (flat config) with the same rules as the old `.eslintrc.json`, which is deleted along with `.eslintignore`. Node globals; `no-undef` off (TypeScript checks names).
+- `package.json`: `lint` is `eslint src`, `lint:fix` is `eslint src --fix`.
+- Code fixes (no behavior change): `prefer-const` in 7 places; unused initial values removed (`let message: string`) in the notify helpers, `requiredFields` and `shouldAwardFirstPaidBookingBonus`; `role === 'admin' && await …` written as `if` in `auth.service.ts`.
+- Downgraded to warnings: `@ts-ignore` comments (14 existing), `preserve-caught-error` (`new Error(msg, { cause })` needs an ES2022 lib; `tsconfig` targets es2016). `no-irregular-whitespace` skips comments (some old comments have broken encoding).
 
 ## Other files
 
-- `package.json`: added `normalizeEmail.test.ts`, `normalizePhone.test.ts`, `handleDuplicateError.test.ts`, `sessionPrice.test.ts` and `report.helpers.test.ts` to `test`, and new `migrate:lowercase-emails`, `check:indexes` and `test:e2e` scripts.
-- `e2e/` (new): `run.js` (Docker MongoDB + test run), `harness.ts` (boots the app, fakes outside services), `qa.e2e.test.ts` (one `describe` per row), `tsconfig.json` (editor types only; not part of `npm run build`).
+- `package.json`: new `migrate:lowercase-emails`, `check:indexes` and `email:test` scripts. The `test` and `test:e2e` scripts were removed with the test files.
+- `.env.example`: rewritten with every key the server reads (Brevo, Stripe, S3/Spaces, Twilio, Agora, Firebase, APNs, VAT lookup), placeholders only.
 
 ## Still open
 

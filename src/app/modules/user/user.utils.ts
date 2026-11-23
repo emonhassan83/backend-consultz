@@ -414,7 +414,7 @@ export const calculateProfileSetupProgress = (user: any): number => {
     return 0
   }
 
-  let requiredFields: string[] = []
+  let requiredFields: string[]
 
   // Required fields for 'consult' role
   if (user.role === USER_ROLE.consult) {
@@ -554,8 +554,8 @@ export const sendUserStatusNotifYToAdmin = async (
   const admin = await findAdmin()
   if (!admin || !admin?.fcmToken) return
 
-  let message = ''
-  let description = ''
+  let message: string
+  let description: string
 
   if (status === 'active') {
     message = messages.userManagement.accountActivated

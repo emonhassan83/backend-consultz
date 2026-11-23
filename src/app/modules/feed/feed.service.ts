@@ -110,7 +110,7 @@ const getAllFeedsFromDB = async (
   if (!currentUser) throw new AppError(httpStatus.NOT_FOUND, 'User not found');
 
   // ── Base filter ───────────────────────────────────────────────────────────
-  let feedFilter: any = { isDeleted: false };
+  const feedFilter: any = { isDeleted: false };
 
   // ── Blocked users filter ──────────────────────────────────────────────────
   if (currentUser.role !== USER_ROLE.admin) {
