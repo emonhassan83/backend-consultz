@@ -337,6 +337,20 @@ export const assertPhoneAvailable = async (
 const DOB_FORMAT = /^(\d{4})-(\d{2})-(\d{2})$/
 
 /**
+ * Accepts `YYYY-MM-DD` or `YYYY/MM/DD` (also with a trailing time part, e.g.
+ * `2000-01-31T00:00:00.000Z`) and returns `YYYY-MM-DD`. Anything else is
+ * returned unchanged so the format check can reject it.
+ */
+export const normalizeDobInput = <T>(value: T): T | string => {
+  if (typeof value !== 'string') return value
+  const match = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s].*)?$/.exec(
+    value.trim(),
+  )
+  if (!match) return value
+  return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`
+}
+
+/**
  * Age in full years from a `YYYY-MM-DD` date of birth (the zod `z.iso.date()`
  * format), compared against today's date in UTC. Returns null if the date is
  * not a real calendar date (e.g. 2001-02-30).

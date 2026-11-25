@@ -1,7 +1,7 @@
 import { Types } from 'mongoose'
 import { z } from 'zod'
 import { DAY_MAP, USER_STATUS } from './user.constant'
-import { getAgeFromDob, getDobError } from './user.utils'
+import { getAgeFromDob, getDobError, normalizeDobInput } from './user.utils'
 
 const objectIdSchema = z.string().refine((val) => Types.ObjectId.isValid(val), {
   message: 'Invalid ObjectId format',
@@ -144,8 +144,12 @@ const BookingRulesSchema = z.object({
 
 // Date of birth: `YYYY-MM-DD` (zod iso date), real date, not in the future,
 // at least MIN_AGE (18) for every role — QA #5
-const dobSchema = z
-  .iso.date({ message: 'Date of birth must be a valid date in YYYY-MM-DD format' })
+const dobSchema = z.preprocess(
+  normalizeDobInput,
+  z.iso.date({
+    message: 'Date of birth must be a valid date in YYYY-MM-DD format',
+  }),
+)
   .superRefine((dob, ctx) => {
     // Bad format is already reported by z.iso.date(); don't report it twice
     if (getAgeFromDob(dob) === null) return
@@ -169,10 +173,14 @@ const createValidationSchema = z.object({
       .min(8, { message: 'Confirm password must be at least 8 characters' })
        .max(20, { message: 'Password cannot be more than 20 characters' }),
     dob: dobSchema,
+    // Optional at sign-up; can be added/verified later via the phone OTP flow
     phoneNumber: z
-      .string({ message: 'Phone number is required!' })
+      .string()
+      .trim()
       .min(6, { message: 'Contact number must be at least 6 digits long' })
-      .max(15, { message: 'Contact number must be at most 15 digits long' }),
+      .max(15, { message: 'Contact number must be at most 15 digits long' })
+      .optional()
+      .or(z.literal('')),
     referralCode: z.string().trim().min(1).optional(),
     expertRef: z.string().trim().min(1).optional(),
   }),

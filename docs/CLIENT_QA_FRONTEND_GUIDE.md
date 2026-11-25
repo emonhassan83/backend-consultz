@@ -15,7 +15,8 @@
 | What | Why |
 |---|---|
 | Send `Authorization` on `POST /payments/checkout` and `POST /payments/confirm-payment` | Both return 401 without it. **Ship the app with this backend.** |
-| Send `dob` as `YYYY-MM-DD` | Any other format fails sign-up with a 400 |
+| Send `dob` as `YYYY-MM-DD` (`YYYY/MM/DD` also works) | Other formats, such as `DD/MM/YYYY`, fail sign-up with a 400 |
+| `phoneNumber` is optional at register | If sent, it must be 6–15 characters and not used by another account |
 | Use the **email** OTP screen after register | The sign-up code now goes by email, not SMS |
 
 ## 2. App
