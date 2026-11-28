@@ -104,7 +104,9 @@ The migration is optional, because the fallback keeps legacy mixed-case accounts
 
 ## 4. Minimum age 18 (#5, #6)
 
-The rule applies to every role (consultee and expert). `dob` format is `YYYY-MM-DD` (zod `z.iso.date()`).
+The rule applies to every role (consultee and expert). `dob` is stored as `YYYY-MM-DD` (zod `z.iso.date()`). Input can also be `YYYY/MM/DD`, single-digit month/day, or have a time part (`2000-01-31T00:00:00.000Z`). `normalizeDobInput()` in `user.utils.ts` converts it to `YYYY-MM-DD` before validation, both in `dobSchema` (zod preprocess) and in `update-profile`. `DD/MM/YYYY` is still rejected.
+
+**Registration `phoneNumber` is optional** (fix after app feedback). `POST /users/register` accepts a missing or empty phone. When one is sent, it still has to have 6–15 digits (spaces and dashes are allowed, see section 7) and pass the duplicate check (#12). When it is missing, the user is saved without one (`null`), and an incomplete sign-up being resumed keeps its existing number. The phone can be added and verified later through the phone OTP flow.
 
 | File | Change |
 |---|---|

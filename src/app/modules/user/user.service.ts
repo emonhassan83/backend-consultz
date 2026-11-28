@@ -19,6 +19,7 @@ import {
   getFollowingStatusBatch,
   getCancellationRates,
   getDobError,
+  normalizeDobInput,
   stripProtectedProfileFields,
   getEmailChangeError,
   getAdminEmailChangeError,
@@ -195,7 +196,14 @@ const registerUserIntoDB = async (
   const { password, referralCode, expertRef, ...rest } = payload
   const email = normalizeEmail(payload.email)
   const phoneNumber = normalizePhone(payload.phoneNumber)
-  const userPayload = { ...rest, email, password, phoneNumber }
+  // phoneNumber is optional at sign-up; only set it when one was sent
+  const { phoneNumber: _rawPhone, ...restWithoutPhone } = rest
+  const userPayload = {
+    ...restWithoutPhone,
+    email,
+    password,
+    ...(phoneNumber ? { phoneNumber } : {}),
+  }
   const applyReferralAndReturnUser = async (
     userId: string,
     options?: { replaceExisting?: boolean },
@@ -1274,6 +1282,9 @@ const updateUserInfoFromDB = async (
     // update-profile has no zod schema, so enforce the age rule here (QA #5).
     // Only when dob actually changes, so legacy-format dobs don't block
     // unrelated profile edits.
+    if (payload.dob !== undefined) {
+      payload.dob = normalizeDobInput(payload.dob) as typeof payload.dob
+    }
     if (payload.dob !== undefined && payload.dob !== user.dob) {
       const dobError = getDobError(String(payload.dob))
       if (dobError) {
