@@ -1,0 +1,5 @@
+# Raw benchmark output (summarised in docs/load_test.md)
+results/
+results-before/
+*.out
+*.log

@@ -64,4 +64,4 @@ npm run seed:admin | seed:content | seed:category | seed:points
 
 ## Docs
 
-`docs/` holds the feature specs and API change logs: client QA fix plan and change log, booking notifications, points, payments/refunds/payouts scope (written in Bengali), and planning notes. Use them as the source of truth for intended behavior. Some code comments are also in Bengali.
+`docs/` holds the feature specs and API change logs: client QA fix plan, change log and team handoff, load test report (`load_test.md`), booking notifications, points, payments/refunds/payouts scope (written in Bengali), and planning notes. Use them as the source of truth for intended behavior. Some code comments are also in Bengali.
