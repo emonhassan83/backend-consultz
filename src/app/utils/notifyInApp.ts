@@ -29,7 +29,8 @@ export const notifyUserInApp = async (params: {
 
     // @ts-ignore
     const io = global?.socketio
-    if (io) io.emit(`notification::${receiver}`, doc.toObject())
+    // Only the receiver's own room (joined on connect), not every client
+    if (io) io.to(String(receiver)).emit(`notification::${receiver}`, doc.toObject())
 
     if (fcmToken) {
       try {

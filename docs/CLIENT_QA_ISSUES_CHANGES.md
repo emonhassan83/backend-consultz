@@ -2,7 +2,8 @@
 
 - **Date:** 2026-11-22
 - **Plan:** [CLIENT_QA_ISSUES_FIX_PLAN.md](CLIENT_QA_ISSUES_FIX_PLAN.md)
-- **Status:** Implemented, apart from the open items at the end. Not yet committed or deployed.
+- **Status:** Implemented, apart from the open items at the end. Committed on `main` in `3bf63d0` (follow-up `cddd05d`). No deploy to the QA or production server is recorded; the client's re-test still shows 9 rows failing (28 Nov).
+- **Handoff:** [CLIENT_QA_HANDOFF.md](CLIENT_QA_HANDOFF.md) has the dashboard notes, the deployment checklist and the remaining app contracts.
 
 This log records what has been changed in the backend for the client QA sheet, where, and what is still open. Line numbers drift, so each change names the file and function.
 
@@ -175,6 +176,14 @@ This is live in production today. Ship it as a separate commit as soon as possib
 | `src/app/modules/otp/otp.service.ts` `sendOtpViaDirectPhone` | Also looks up by the normalized number |
 | `src/app/modules/user/user.service.ts` `updateUserInfoFromDB` | `phoneNumber` is dropped from the payload. Before, update-profile could set any number with no check. Phone changes go through the OTP flow (#26, still open). |
 
+- **Stored numbers (28 Nov):** the raw-value fallback only catches a stored number typed the same way again. A number stored as `+44 7700 163907` was not matched by a new `+447700163907`. New `src/app/seeder/migrateNormalizePhones.ts` rewrites stored `phoneNumber` and `pendingPhoneNumber` to the normalized form:
+  ```bash
+  npm run migrate:normalize-phones            # dry run
+  npm run migrate:normalize-phones -- --apply # write
+  ```
+  It only changes the format, so it can be run again safely. It reports, and leaves unchanged, numbers that more than one verified account owns and numbers with no country code. Dry run on the `.env` DB (28 Nov): 15 users with a phone, 0 to update, 1 number shared by two verified accounts. So this DB needs no write; run it on QA's DB.
+- Every endpoint that takes a phone number already normalizes it before the lookup or save: register, `send-otp-via-token-in-phone`, `send-otp-via-direct-phone` and the admin phone edit. update-profile ignores `phoneNumber`.
+- **Validation fix (28 Nov):** the zod rules for register, `send-otp-via-token-in-phone` and `send-otp-via-direct-phone` limited the **raw text** to 6–15 characters. So `+44 7700 163 907` (16 characters) or `0044-7700-163907` got a 400 before normalization ran, and admin phone edit (6–20 characters) accepted `+-----`, which was saved as `+`. All three now use `phoneNumberSchema` (`src/app/utils/phoneSchema.ts`): only digits, spaces, `+ - ( ) .`, and 6–15 digits after normalizing (`getPhoneError` in `normalizePhone.ts`). `adminUpdateUserPhone` runs the same check in the service.
 - **Not done:** a DB unique index on `phoneNumber`. Existing duplicates or nulls would make the index build fail. A partial unique index can follow a data audit.
 - **Frontend:** show the 409 message with a "Log in instead" option.
 
@@ -507,7 +516,7 @@ Example response:
 - On success, tell the admin that the user has to log in again with the new email.
 
 **Phone (added 22 Nov):** `PATCH /api/v1/users/:id/phone` with `{ "phoneNumber": "+447700900123", "reason": "Wrong number at sign-up" }`, admin only.
-- Same pattern as email: `user.service.ts` `adminUpdateUserPhone`, `adminUpdatePhoneValidationSchema` (phone 6–20 characters, reason ≤ 300), and the controller and route.
+- Same pattern as email: `user.service.ts` `adminUpdateUserPhone`, `adminUpdatePhoneValidationSchema` (phone 6–15 digits via the shared `phoneNumberSchema`, reason ≤ 300), and the controller and route.
 - The number is normalized (`normalizePhone`), then set with `isPhoneOtpVerified: true`. Any pending phone change or OTP is cleared.
 - 404 if the user isn't found. 403 for an admin account or a non-admin caller.
 - 400 for an invalid number. 400 if it's the same number and already verified. The same number while it's **unverified** returns 200 and marks it verified.
@@ -580,7 +589,7 @@ Example response:
 
 **Admin dashboard:** on User details, show "Warnings ({warningCount})" with a list: date, reason, source (post link or "Admin"). Add a reason field when choosing Warning in change-status.
 
-**Ops:** same as #18. Production SMTP (`EMAIL`, `APP_PASS`) must be valid.
+**Ops:** same as #18. Production needs the Brevo settings (`BREVO_SMTP_LOGIN`, `BREVO_SMTP_KEY`, `EMAIL_FROM_ADDRESS`; section 25). `EMAIL` / `APP_PASS` are only the fallback.
 
 **Not covered:** auto-suspend after N warnings, removing or expiring warnings.
 
@@ -685,6 +694,10 @@ Outside services are faked in memory by `e2e/harness.ts`: SMTP, FCM, Twilio, Str
 - `npm run lint`: runs again, **0 errors** (654 warnings in older code, mostly `any` and `console`; they don't fail the run). See "Lint" below.
 - **No automated tests in the repo.** The unit tests (70/70) and the E2E run (48/48) passed on 22 Nov and were then removed (section 23). Any later change has to be checked by hand (Postman/curl) or by adding tests back.
 - **Never tested:** real delivery through Brevo/Gmail, FCM, Twilio and Stripe.
+- **28 Nov re-check of the 9 failed rows** (#12, 13, 14, 15, 18, 32, 67, 68, 70): 49 `node:test` cases against the service functions on a throwaway Docker Mongo, with email, socket and push faked. Result: 48 pass, 0 fail, 1 skipped (#13 booking 403, which needs heavy booking fixtures). Details are in [CLIENT_QA_VERIFICATION_RESULTS.md](CLIENT_QA_VERIFICATION_RESULTS.md); the test files were removed afterwards. The only code bug found was the phone validation in section 7, fixed the same day.
+- **Socket rooms (28 Nov):** report alerts (`report.utils.ts` `notifyAdminsOfReport`) and in-app notices (`utils/notifyInApp.ts`, used by the #70 warnings and post moderation) used `io.emit`, which sent them, including reporter names and reasons, to **every** connected socket. They now use `io.to(<receiverId>).emit(...)`. Each socket joins its own userId room on connect (`socket.init.ts`). The event name `notification::<id>` is unchanged, so no client change is needed. The older `notification.service.ts` still broadcasts.
+- **Known, not changed:** `sendOtpInEmail` also issues an OTP to an already verified account (a code-to-inbox login); that's by design.
+- **Load test (28 Nov):** see [load_test.md](load_test.md). Two fixes: `geUserByIdFromDB` no longer uses a transaction (concurrent profile views hit `WriteConflict` and returned 500), and new indexes on users, bookings, follows, profile views and withdrawals.
 
 ## Lint
 
@@ -696,12 +709,15 @@ ESLint 10 no longer reads `.eslintrc.json` / `.eslintignore`, and dropped `--ign
 
 ## Other files
 
-- `package.json`: new `migrate:lowercase-emails`, `check:indexes` and `email:test` scripts. The `test` and `test:e2e` scripts were removed with the test files.
+- `package.json`: new `migrate:lowercase-emails`, `migrate:normalize-phones` (28 Nov), `check:indexes` and `email:test` scripts. The `test` and `test:e2e` scripts were removed with the test files.
 - `.env.example`: rewritten with every key the server reads (Brevo, Stripe, S3/Spaces, Twilio, Agora, Firebase, APNs, VAT lookup), placeholders only.
 
 ## Still open
 
 - **Google/Apple token verification:** not done, by decision (22 Nov). `/auth/google` and `/auth/apple` still trust the email in the body.
+- **Deploy:** nothing records a deploy of `3bf63d0` to the QA server. Follow the checklist in [CLIENT_QA_HANDOFF.md](CLIENT_QA_HANDOFF.md), then ask QA to re-test.
 - **#14 (ops):** run `npm run check:indexes` on QA's DB (see section 9).
+- **#12 (ops):** run `npm run migrate:normalize-phones` on QA's DB (section 7). On the `.env` DB, one number is shared by two verified accounts; decide which account keeps it.
+- **Dashboard screens:** #67, #68 and #70 (handoff section 1). **App screens:** #12, #13, #15, #32 (handoff section 3).
 - **Reporting a user (#68 follow-up):** not built, by decision (22 Nov).
 - **Release together:** the app must send `Authorization` on checkout and confirm-payment (section 24), or payment fails with 401.

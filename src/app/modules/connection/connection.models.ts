@@ -18,6 +18,8 @@ const followSchema: Schema<IFollow> = new Schema(
 );
 
 followSchema.index({ follower: 1, following: 1 }, { unique: true });
+// Follower counts on profiles filter by `following` (load test, 28 Nov)
+followSchema.index({ following: 1, createdAt: -1 });
 
 export const Follow = mongoose.model<IFollow, IFollowModel>(
   'Follow',

@@ -63,7 +63,7 @@ import {
   emailCaseInsensitiveFilter,
   normalizeEmail,
 } from '../../utils/normalizeEmail'
-import { normalizePhone } from '../../utils/normalizePhone'
+import { getPhoneError, normalizePhone } from '../../utils/normalizePhone'
 import { escapeHtml } from '../report/report.helpers'
 import moment from 'moment'
 import config from '../../config'
@@ -900,9 +900,6 @@ const geUserByIdFromDB = async (
   viewedUserId: string,
   viewerRole?: string,
 ) => {
-  const session = await mongoose.startSession()
-  session.startTransaction()
-
   try {
     const isSelf = String(viewerId) === String(viewedUserId)
     const user = await User.findById(viewedUserId)
@@ -918,12 +915,19 @@ const geUserByIdFromDB = async (
     if (!user || user.isDeleted)
       throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
 
+    // Record the view once per viewer. No transaction: the rest of this
+    // function only reads. Concurrent first views of the same pair race on
+    // the unique index; the loser's E11000 means the row exists, which is fine.
     if (viewerId !== viewedUserId) {
-      await ProfileView.findOneAndUpdate(
-        { viewer: viewerId, viewedUser: viewedUserId },
-        { $setOnInsert: { viewedAt: new Date() } },
-        { upsert: true, returnDocument: 'after', session },
-      )
+      try {
+        await ProfileView.updateOne(
+          { viewer: viewerId, viewedUser: viewedUserId },
+          { $setOnInsert: { viewedAt: new Date() } },
+          { upsert: true },
+        )
+      } catch (err: any) {
+        if (err?.code !== 11000) throw err
+      }
     }
 
     // ── Dynamic VAT Rate Fetch (if user is VAT registered) ─────────────────────
@@ -1105,8 +1109,6 @@ const geUserByIdFromDB = async (
       user.hourlyRate || 0,
     )
 
-    await session.commitTransaction()
-
     return {
       ...user,
       ...(isSelf ? { needsOnboarding: getNeedsOnboarding(user) } : {}),
@@ -1134,15 +1136,12 @@ const geUserByIdFromDB = async (
       vatPercentage: vatPercentage || 0,
     }
   } catch (error) {
-    await session.abortTransaction()
-    throw error instanceof AppError
-      ? error
-      : new AppError(
-        httpStatus.INTERNAL_SERVER_ERROR,
-        'Failed to fetch user profile',
-      )
-  } finally {
-    session.endSession()
+    if (error instanceof AppError) throw error
+    console.error('[geUserByIdFromDB] failed', error)
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch user profile',
+    )
   }
 }
 
@@ -2021,10 +2020,11 @@ const adminUpdateUserPhone = async (
     )
   }
 
-  const newPhone = normalizePhone(phoneInput)
-  if (!newPhone) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Please enter a valid phone number.')
+  const phoneError = getPhoneError(phoneInput)
+  if (phoneError) {
+    throw new AppError(httpStatus.BAD_REQUEST, phoneError)
   }
+  const newPhone = normalizePhone(phoneInput)
   const oldPhone = user.phoneNumber || null
   if (oldPhone && normalizePhone(oldPhone) === newPhone && user.isPhoneOtpVerified) {
     throw new AppError(httpStatus.BAD_REQUEST, 'This is already the phone number on the account.')

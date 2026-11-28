@@ -2,6 +2,7 @@ import { Types } from 'mongoose'
 import { z } from 'zod'
 import { DAY_MAP, USER_STATUS } from './user.constant'
 import { getAgeFromDob, getDobError } from './user.utils'
+import { phoneNumberSchema } from '../../utils/phoneSchema'
 
 const objectIdSchema = z.string().refine((val) => Types.ObjectId.isValid(val), {
   message: 'Invalid ObjectId format',
@@ -169,10 +170,7 @@ const createValidationSchema = z.object({
       .min(8, { message: 'Confirm password must be at least 8 characters' })
        .max(20, { message: 'Password cannot be more than 20 characters' }),
     dob: dobSchema,
-    phoneNumber: z
-      .string({ message: 'Phone number is required!' })
-      .min(6, { message: 'Contact number must be at least 6 digits long' })
-      .max(15, { message: 'Contact number must be at most 15 digits long' }),
+    phoneNumber: phoneNumberSchema('Phone number is required!'),
     referralCode: z.string().trim().min(1).optional(),
     expertRef: z.string().trim().min(1).optional(),
   }),
@@ -366,11 +364,7 @@ const adminUpdatePhoneValidationSchema = z.object({
     id: objectIdSchema,
   }),
   body: z.object({
-    phoneNumber: z
-      .string({ message: 'Phone number is required' })
-      .trim()
-      .min(6, { message: 'Phone number must be at least 6 digits long' })
-      .max(20, { message: 'Phone number is too long' }),
+    phoneNumber: phoneNumberSchema(),
     reason: z.string().trim().max(300).optional(),
   }),
 })

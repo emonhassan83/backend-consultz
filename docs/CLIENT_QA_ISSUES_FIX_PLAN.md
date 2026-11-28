@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-22
 - **Source:** client QA sheet (72 rows, tested 18–19 Nov 2026)
-- **Status:** Implemented (22 Nov), except Google/Apple token verification (not done, by decision) and #14 ops. See [CLIENT_QA_ISSUES_CHANGES.md](CLIENT_QA_ISSUES_CHANGES.md).
+- **Status:** Implemented (22 Nov), except Google/Apple token verification (not done, by decision) and #14 ops. See [CLIENT_QA_ISSUES_CHANGES.md](CLIENT_QA_ISSUES_CHANGES.md). The client re-tested and 9 rows are still failing; see "Client re-test" at the end (28 Nov).
 
 ## Context
 
@@ -126,3 +126,24 @@ Frontend/config only, handed off and not in this plan:
   - reset-password without OTP verification gets 403.
   - update-profile with `{role:"admin"}` is ignored.
   - checkout without a token gets 401.
+
+## Client re-test: "Failed Issues" tab (reviewed 28 Nov)
+
+The client sheet now has two new tabs: **Failed Issues** (21 rows, Status `fix` / `failed` / `working`) and **App Dev Action Items** (22 mobile app tasks). On Sheet1, the notes for these rows still have the 18–19 Nov text. There are no new re-test notes, so the sheet doesn't show which build was tested.
+
+**Still `failed` (9):** #12, 13, 14, 15, 18, 32, 67, 68, 70. Every one of them is marked done in the backend (changes log). Likely reasons:
+
+| # | Likely reason | Action |
+|---|---|---|
+| all | The QA server may still run the old build. Commit `3bf63d0` exists, but nothing records a deploy. | Confirm the QA/prod server runs `main` ≥ `3bf63d0`, then ask QA to re-test. |
+| 18, 70 | The email failures need Brevo set on the server. | Set `BREVO_SMTP_LOGIN` / `BREVO_SMTP_KEY`, check for "SMTP ready (brevo…)" in the log, then run `npm run email:test -- <addr>` on the server. |
+| 14 | Ops step still open. | Run `npm run check:indexes` on QA's DB and drop any unique referral index. |
+| 68 | Needs `ADMIN_NOTIFY_EMAIL`, plus a dashboard bell and a `pending_review` label. | Set the env var. Hand off to the dashboard dev. |
+| 67, 68, 70 | Backend endpoints exist, but they need **admin dashboard** screens. The App Dev tab covers only the mobile app and has **no dashboard tasks** (gap). | Write a dashboard handoff: `PATCH /users/:id/email`, `PATCH /users/:id/phone`, the report notification bell, Moderation Status `pending_review`, warning history/count. |
+| 13, 15, 32 | These need the app changes that the App Dev tab lists as "To Fix". They fail until the new app ships. | None in the backend. Re-test after the app release. |
+| 12 | **Backend gap:** `findPhoneOwner` matches only the normalized input and the raw input. Older numbers stored with spaces or dashes (e.g. `+44 7700 163907`) aren't found when the new input is `+447700163907`. | **Done 28 Nov:** `npm run migrate:normalize-phones` (dry run; `-- --apply` to write). The `.env` DB needs no change (0 of 15), so run it on QA's DB. The app must send `+44…`. |
+
+**`working` (2):** #26 (backend done, app screens pending) and #57 (app only).
+**`fix` (10):** #1, 2, 4, 5, 6, 17, 22, 23, 25, 65. The sheet doesn't define what `fix` means (verified fixed, or still to fix?). Ask the client.
+
+**Follow-up (28 Nov):** the changes log header is corrected. [CLIENT_QA_HANDOFF.md](CLIENT_QA_HANDOFF.md) has the dashboard handoff (#67, #68, #70), the DevOps/QA deployment checklist and the remaining app contracts (#12, #13, #15, #32). Still open: deploy to QA, run the two ops scripts there, and the client's answer on what `fix` means.

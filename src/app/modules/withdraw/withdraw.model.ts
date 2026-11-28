@@ -28,6 +28,9 @@ const withdrawSchema = new Schema<TWithdraw>(
   },
 )
 
+// Withdraw totals on profiles filter by user + status (load test, 28 Nov)
+withdrawSchema.index({ user: 1, status: 1 })
+
 export const Withdraw = model<TWithdraw, TWithdrawModel>(
   'Withdraw',
   withdrawSchema,

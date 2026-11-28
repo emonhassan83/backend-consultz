@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { phoneNumberSchema } from '../../utils/phoneSchema'
 
 const verifyOtpZodSchema = z.object({
   body: z.object({
@@ -20,12 +21,7 @@ const resentOtpInEmail = z.object({
 
 const resentOtpInPhone = z.object({
   body: z.object({
-    phoneNumber: z
-      .string({
-        message: 'Phone number is required',
-      })
-      .min(6, { message: 'Contact number must be at least 6 digits long' })
-      .max(15, { message: 'Contact number must be at most 15 digits long' }),
+    phoneNumber: phoneNumberSchema(),
   }),
 })
 

@@ -177,6 +177,12 @@ const bookingsSchema = new Schema<TBookings>(
   },
 )
 
+// Profile counters, booking lists and the every-minute cron jobs filter by
+// party + status, or by status alone (load test, 28 Nov)
+bookingsSchema.index({ consult: 1, status: 1 })
+bookingsSchema.index({ user: 1, status: 1 })
+bookingsSchema.index({ status: 1, startAt: 1 })
+
 export const Booking = model<TBookings, TBookingsModules>(
   'Booking',
   bookingsSchema,

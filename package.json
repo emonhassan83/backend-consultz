@@ -16,6 +16,7 @@
     "seed:category": "ts-node-dev --transpile-only src/app/seeder/seedCategory.ts",
     "seed:points": "ts-node-dev --transpile-only src/app/seeder/seedPointsRules.ts",
     "migrate:lowercase-emails": "ts-node --transpile-only src/app/seeder/migrateLowercaseEmails.ts",
+    "migrate:normalize-phones": "ts-node --transpile-only src/app/seeder/migrateNormalizePhones.ts",
     "check:indexes": "ts-node --transpile-only src/app/seeder/checkUserIndexes.ts"
   },
   "keywords": [],

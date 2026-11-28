@@ -273,6 +273,8 @@ const userSchema = new Schema<TUser, UserModel>(
 // TTL index
 userSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 })
 userSchema.index({ referralCode: 1 })
+// Admin user list: isDeleted + role filter, newest first (load test, 28 Nov)
+userSchema.index({ isDeleted: 1, role: 1, createdAt: -1 })
 
 userSchema.pre('validate', function () {
   if (!this.bookingRules) {

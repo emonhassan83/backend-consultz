@@ -56,7 +56,9 @@ export const notifyAdminsOfReport = async (params: {
       const io = global?.socketio;
       if (io) {
         docs.forEach((doc: any) => {
-          io.emit(`notification::${doc.receiver}`, doc.toObject());
+          // Only the admin's own room (each socket joins its userId room on
+          // connect), not every connected client. Event name is unchanged.
+          io.to(String(doc.receiver)).emit(`notification::${doc.receiver}`, doc.toObject());
         });
       }
 
