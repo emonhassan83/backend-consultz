@@ -1,5 +1,5 @@
 {
   "dependencies": {
-    "autocannon": "^7.15.0"
+    "autocannon": "^9.0.0"
   }
 }
